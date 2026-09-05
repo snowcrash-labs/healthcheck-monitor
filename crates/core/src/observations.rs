@@ -4,7 +4,29 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Data {
-    Quota { region: String, code: String, limit: f64, usage: Option<crate::config::types::MetricQuery> },
+    Certificate {
+        issued: Option<bool>,
+        expires_at: Option<DateTime<Utc>>,
+    },
+    Recovery {
+        last_attempt: Option<DateTime<Utc>>,
+        state: ServiceState,
+        enabled: Option<bool>,
+        last_success: Option<DateTime<Utc>>,
+        retention_days: Option<u32>,
+        point_in_time: Option<bool>,
+        geo_redundant: Option<bool>,
+    },
+    MetricResource {
+        resource_id: String,
+        namespace: String,
+    },
+    Quota {
+        region: String,
+        code: String,
+        limit: f64,
+        usage: Option<crate::config::types::MetricQuery>,
+    },
     Progress {
         state: crate::model::Health,
     },
@@ -32,6 +54,10 @@ pub enum Data {
         expires_at: Option<DateTime<Utc>>,
     },
     Job {
+        #[serde(default)]
+        completed_at: Option<DateTime<Utc>>,
+        #[serde(default)]
+        scheduled_at: Option<DateTime<Utc>>,
         complete: bool,
         failed: bool,
         failed_attempts: u32,
@@ -56,6 +82,12 @@ pub enum Data {
         terminated_at: Option<DateTime<Utc>>,
     },
     Schedule {
+        #[serde(default)]
+        created_at: Option<DateTime<Utc>>,
+        #[serde(default)]
+        starting_deadline_seconds: Option<u64>,
+        #[serde(default)]
+        forbid_overlap: bool,
         schedule: String,
         timezone: String,
         suspended: bool,

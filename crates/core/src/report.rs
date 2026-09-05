@@ -36,7 +36,7 @@ pub fn markdown(snapshot: &Snapshot) -> String {
         *states.entry(format!("{health:?}")).or_insert(0usize) += 1;
     }
     let mut out = format!(
-        "# Health check\n\nObserved: {}\n\nSelected scope: {} checks. This report covers only the selected scope.\n\n| Check | Collection coverage | Observations |\n| --- | --- | --- |\n",
+        "# Health check\n\nObserved: {}\n\nSelected scope: {} checks. This report covers only the selected scope.\n\n| Check | Collection coverage | Observations | Samples |\n| --- | --- | --- | --- |\n",
         snapshot.captured_at.to_rfc3339(),
         snapshot.selected_scope.len()
     );
@@ -60,13 +60,14 @@ pub fn markdown(snapshot: &Snapshot) -> String {
                     .map(|o| format!("{:?}", o.coverage))
                     .collect();
                 out.push_str(&format!(
-                    "| {} | {} | {} |\n",
+                    "| {} | {} | {} | {} |\n",
                     safe(key),
                     coverage.into_iter().collect::<Vec<_>>().join(", "),
-                    result.observations.len()
+                    result.observations.len(),
+                    snapshot.samples.get(key).copied().unwrap_or(0)
                 ));
             }
-            None => out.push_str(&format!("| {} | Missing | 0 |\n", safe(key))),
+            None => out.push_str(&format!("| {} | Missing | 0 | 0 |\n", safe(key))),
         }
     }
     out.push_str("\n| Resource | Rule | Severity | Stale |\n| --- | --- | --- | --- |\n");

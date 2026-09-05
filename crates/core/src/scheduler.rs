@@ -71,6 +71,7 @@ pub async fn drive<C: Collector + 'static>(
     let mut scopes: BTreeMap<String, usize> = BTreeMap::new();
     let mut tasks = JoinSet::new();
     let mut cursor = 0;
+    let mut config_open = true;
     loop {
         let expired = matches!(mode, Mode::Watch { duration: Some(d) } if start.elapsed() >= d);
         if stop.is_cancelled() || expired {
@@ -155,7 +156,7 @@ pub async fn drive<C: Collector + 'static>(
         tokio::select! {
             _ = stop.cancelled() => break,
             _ = tokio::time::sleep(delay) => {},
-            changed = config.changed(), if matches!(mode, Mode::Watch { .. }) => {
+            changed = config.changed(), if config_open && matches!(mode, Mode::Watch { .. }) => {
                 if changed.is_ok() {
                     let effective = config.borrow_and_update().clone();
                     let keys: BTreeSet<_> = effective.jobs.iter().map(|j| &j.key).collect();
@@ -165,6 +166,8 @@ pub async fn drive<C: Collector + 'static>(
                         let cancel = old.map_or_else(|| stop.child_token(), |e| e.cancel.clone());
                         Entry { due: Instant::now(), samples: 0, job, cancel }
                     }).collect();
+                } else {
+                    config_open = false;
                 }
             },
             completed = tasks.join_next(), if !tasks.is_empty() => {
@@ -172,8 +175,12 @@ pub async fn drive<C: Collector + 'static>(
                     running.remove(&job.key);
                     if let Some(count) = scopes.get_mut(&job.scope()) { *count = count.saturating_sub(1); }
                     if scopes.get(&job.scope()) == Some(&0) { scopes.remove(&job.scope()); }
-                    if entries.iter().any(|e| e.job.key == job.key && e.job.revision == job.revision)
-                        && output.send((job, result)).await.is_err() { break; }
+                    if entries.iter().any(|e| e.job.key == job.key && e.job.revision == job.revision) {
+                        tokio::select! {
+                            _ = stop.cancelled() => break,
+                            sent = output.send((job, result)) => if sent.is_err() { break; },
+                        }
+                    }
                 }
             },
         }

@@ -26,6 +26,7 @@ pub(crate) fn fault(
             Health::Degraded
         },
         findings: vec![Finding {
+            check: None,
             id: format!("{}/{}", obs.resource, rule),
             resource: obs.resource.clone(),
             rule: rule.into(),
@@ -53,6 +54,12 @@ pub fn evaluate(
     if age(Some(obs.observed_at), now).is_none_or(|v| v > settings.freshness()) {
         return result(Health::Unknown);
     }
+    let previous = previous.filter(|prior| {
+        prior.resource == obs.resource
+            && prior.expected == obs.expected
+            && prior.observed_at < obs.observed_at
+            && (obs.observed_at - prior.observed_at).num_seconds() <= settings.freshness() as i64
+    });
     let inactive = obs.expected != Expected::Active;
     let error = |rule| fault(obs, rule, Severity::Error, Confidence::Direct);
     let warning = |rule| fault(obs, rule, Severity::Warning, Confidence::Direct);
@@ -85,7 +92,9 @@ pub fn evaluate(
                     error("endpoint-unreachable")
                 };
             }
-            if expires_at.is_some_and(|t| (t - now).num_days() < 14) {
+            if expires_at
+                .is_some_and(|t| (t - now).num_seconds() < settings.certificate_warning.0 as i64)
+            {
                 return warning("certificate-expiring");
             }
             if settings
@@ -155,7 +164,7 @@ pub fn evaluate(
             restarts,
             crash_loop,
             created_at,
-            terminated_at,
+            ..
         } => {
             if inactive {
                 return result(Health::ExpectedInactive);
@@ -176,15 +185,9 @@ pub fn evaluate(
                     },
                 ..
             }) = previous
-            {
-                if uid == old_uid
-                    && container == old_container
-                    && restarts.saturating_sub(*old) >= 3
-                {
-                    return warning("container-restarting");
-                }
-            } else if *restarts >= 3
-                && age(*terminated_at, now).is_some_and(|v| v <= settings.metric_window.0)
+                && uid == old_uid
+                && container == old_container
+                && restarts.saturating_sub(*old) >= 3
             {
                 return warning("container-restarting");
             }
@@ -192,27 +195,47 @@ pub fn evaluate(
                 return result(Health::Unknown);
             }
         }
-        Data::Schedule {
-            suspended,
-            active,
-            last_schedule,
+        Data::Schedule { .. } => return crate::schedule_policy::evaluate(obs, settings, now),
+        Data::Certificate { issued, expires_at } => {
+            if inactive {
+                return result(Health::ExpectedInactive);
+            }
+            if *issued == Some(false) || expires_at.is_some_and(|at| at <= now) {
+                return error("certificate-invalid");
+            }
+            if expires_at
+                .is_some_and(|at| (at - now).num_seconds() < settings.certificate_warning.0 as i64)
+            {
+                return warning("certificate-expiring");
+            }
+            if issued.is_none() || expires_at.is_none() {
+                return result(Health::Unknown);
+            }
+        }
+        Data::Recovery {
+            state,
+            enabled,
             last_success,
             ..
         } => {
-            if *suspended || inactive {
+            if inactive {
                 return result(Health::ExpectedInactive);
             }
-            if *active > 0 {
-                return result(Health::Unknown);
+            if *enabled == Some(false) {
+                return warning("backup-disabled");
             }
-            if last_schedule.is_none() {
-                return result(Health::Unknown);
+            if *state == ServiceState::Failed {
+                return warning("backup-failed");
             }
-            if last_schedule > last_success
-                && age(*last_schedule, now).is_some_and(|v| v > settings.rollout_grace.0)
-            {
-                return warning("latest-schedule-not-successful");
+            if let Some(limit) = settings.recovery_age_error {
+                if last_success.is_some_and(|at| (now - at).num_seconds() > limit.0 as i64) {
+                    return error("recovery-point-too-old");
+                }
+                if last_success.is_some() {
+                    return result(Health::Healthy);
+                }
             }
+            return result(Health::Unknown);
         }
         Data::Queue { .. } => return crate::queue_policy::evaluate(obs, previous, settings),
         Data::Service { .. } | Data::Metric { .. } => {
@@ -248,7 +271,9 @@ pub fn evaluate(
             }
             return result(Health::Unknown);
         }
-        Data::Quota { .. } | Data::Inventory { .. }
+        Data::MetricResource { .. }
+        | Data::Quota { .. }
+        | Data::Inventory { .. }
         | Data::Scaler { .. }
         | Data::Owner { .. }
         | Data::AdvertisedEndpoint { .. } => return result(Health::Unknown),

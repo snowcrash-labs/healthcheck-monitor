@@ -172,10 +172,15 @@ fn workload_known(snapshot: &Snapshot, job: &Job, selector: &str, now: DateTime<
         .results
         .values()
         .filter(|r| r.target == job.target.name)
-        .flat_map(|r| &r.observations)
-        .any(|o| {
-            o.resource.ends_with(&format!("/{selector}"))
-                && matches!(o.data, Data::Workload { .. })
-                && (now - o.observed_at).num_seconds() <= job.settings.freshness() as i64
+        .any(|r| {
+            r.observations.iter().any(|o| {
+                o.resource.ends_with(&format!("/{selector}"))
+                    && matches!(o.data, Data::Workload { .. })
+                    && r.operations
+                        .iter()
+                        .any(|op| op.id == o.operation && op.coverage == Coverage::Complete)
+                    && o.observed_at <= now
+                    && (now - o.observed_at).num_seconds() <= job.settings.freshness() as i64
+            })
         })
 }

@@ -120,6 +120,8 @@ pub struct Observation {
 pub use crate::observations::{Data, LogClass, ServiceState};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Finding {
+    #[serde(default)]
+    pub check: Option<Check>,
     pub id: String,
     pub resource: String,
     pub rule: String,
@@ -185,6 +187,8 @@ pub struct Snapshot {
     pub revision: String,
     pub captured_at: DateTime<Utc>,
     pub selected_scope: Vec<String>,
+    #[serde(default)]
+    pub samples: BTreeMap<String, u32>,
     #[serde(default)]
     pub selectors: BTreeMap<String, Vec<String>>,
     #[serde(default)]

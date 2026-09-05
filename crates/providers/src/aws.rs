@@ -36,6 +36,9 @@ pub fn endpoints(job: &Job) -> Vec<Endpoint> {
     }
     for region in &job.target.regions {
         for (name, service, prefix, action, items) in JSON_APIS {
+            if *name == "health" && job.target.regions.first() != Some(region) {
+                continue;
+            }
             if job.check == Check::Edge {
                 continue;
             }
@@ -52,9 +55,16 @@ pub fn endpoints(job: &Job) -> Vec<Endpoint> {
                 format!("https://{service}.{region}.amazonaws.com/"),
                 items,
             );
+            if *name == "health" {
+                endpoint.url = "https://health.us-east-1.amazonaws.com/".into();
+            }
             endpoint.aws = Some((
                 (*service).into(),
-                region.clone(),
+                if *name == "health" {
+                    "us-east-1".into()
+                } else {
+                    region.clone()
+                },
                 format!("{prefix}.{action}"),
             ));
             endpoint.body = Some(match *name {
@@ -90,6 +100,12 @@ pub fn endpoints(job: &Job) -> Vec<Endpoint> {
             ("backup", "backup", "/backup-vaults/", "/BackupVaultList"),
             ("acm", "acm", "/", "/CertificateSummaryList"),
         ] {
+            if matches!(job.check, Check::Alerts | Check::Edge | Check::Slo) {
+                continue;
+            }
+            if job.check == Check::Releases && name != "lambda" {
+                continue;
+            }
             if name == "acm" {
                 continue;
             }
@@ -98,6 +114,12 @@ pub fn endpoints(job: &Job) -> Vec<Endpoint> {
                 format!("https://{service}.{region}.amazonaws.com{path}"),
                 items,
             );
+            if name == "s3" {
+                endpoint.url = format!(
+                    "https://s3.{region}.amazonaws.com/?bucket-region={region}&max-buckets={}",
+                    job.settings.page_size
+                );
+            }
             endpoint.aws = Some((service.into(), region.clone(), "".into()));
             out.push(endpoint);
         }
@@ -135,6 +157,11 @@ pub async fn collect(
         return crate::metrics::aws(auth, job, cancel).await;
     }
     let mut result = common::collect_cached(http, auth, job, endpoints(job), cancel, cache).await;
+    if job.check == Check::Alerts {
+        let alarms = crate::aws_alarms::collect(auth, job, cancel).await;
+        result.operations.extend(alarms.operations);
+        result.observations.extend(alarms.observations);
+    }
     crate::quotas::evaluate(auth, job, &mut result, cancel).await;
     result
 }

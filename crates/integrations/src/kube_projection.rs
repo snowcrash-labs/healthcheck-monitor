@@ -20,16 +20,17 @@ pub fn project(job: &Job, kind: &str, value: &Value) -> Vec<Observation> {
     let Some(name) = text(value, &["/metadata/name"]) else {
         return vec![];
     };
+    let namespace = text(value, &["/metadata/namespace"]).unwrap_or("_cluster");
+    let identity = format!("{kind}/{namespace}/{name}");
     if !job.target.resources.is_empty()
         && !job
             .target
             .resources
             .iter()
-            .any(|selector| name.contains(selector))
+            .any(|selector| identity.contains(selector))
     {
         return vec![];
     }
-    let namespace = text(value, &["/metadata/namespace"]).unwrap_or("_cluster");
     let name = format!("{namespace}/{name}");
     let created_at = timestamp(value, &["/metadata/creationTimestamp"]);
     let mut output = Vec::new();
@@ -37,6 +38,11 @@ pub fn project(job: &Job, kind: &str, value: &Value) -> Vec<Observation> {
     let num = |path| number(value, &[path]).unwrap_or(0.0) as u32;
     let data = match kind {
         "jobs" => Data::Job {
+            completed_at: timestamp(value, &["/status/completionTime"]),
+            scheduled_at: timestamp(
+                value,
+                &["/metadata/annotations/batch.kubernetes.io~1cronjob-scheduled-timestamp"],
+            ),
             complete: condition(value, "Complete") == Some(true),
             failed: condition(value, "Failed") == Some(true),
             failed_attempts: num("/status/failed"),
@@ -45,8 +51,15 @@ pub fn project(job: &Job, kind: &str, value: &Value) -> Vec<Observation> {
             created_at,
         },
         "cronjobs" => Data::Schedule {
+            created_at,
+            starting_deadline_seconds: number(value, &["/spec/startingDeadlineSeconds"])
+                .map(|value| value as u64),
+            forbid_overlap: text(value, &["/spec/concurrencyPolicy"]) == Some("Forbid"),
             schedule: text(value, &["/spec/schedule"]).unwrap_or("").into(),
-            timezone: text(value, &["/spec/timeZone"]).unwrap_or("UTC").into(),
+            timezone: text(value, &["/spec/timeZone"])
+                .or(job.target.timezone.as_deref())
+                .unwrap_or("")
+                .into(),
             suspended: boolean(value, &["/spec/suspend"]).unwrap_or(false),
             active: value
                 .pointer("/status/active")

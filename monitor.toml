@@ -19,10 +19,10 @@ checks = ["preflight", "edge", "kubernetes", "queues"]
 samples = 1
 
 [profiles.full]
-checks = ["preflight", "discovery", "inventory", "kubernetes", "edge", "managed", "queues", "releases", "github", "metrics", "logs", "alerts", "slo"]
+checks = ["preflight", "discovery", "inventory", "kubernetes", "edge", "managed", "queues", "releases", "github", "metrics", "logs", "alerts", "slo", "flows"]
 
 [profiles.deep]
-checks = ["preflight", "discovery", "inventory", "kubernetes", "edge", "managed", "queues", "releases", "github", "metrics", "logs", "alerts", "slo"]
+checks = ["preflight", "discovery", "inventory", "kubernetes", "edge", "managed", "queues", "releases", "github", "metrics", "logs", "alerts", "slo", "flows"]
 [profiles.deep.settings]
 log_window = "24h"
 log_entries = 5000

@@ -89,6 +89,7 @@ pub async fn fetch<S: Source>(
                         "/NextToken",
                         "/nextLink",
                         "/NextMarker",
+                        "/ContinuationToken",
                         "/$skipToken",
                         "/DescribeDBInstancesResult/Marker",
                         "/DescribeDBClustersResult/Marker",
@@ -149,7 +150,9 @@ pub async fn fetch<S: Source>(
                         outcome = Err(Error::Malformed);
                         break;
                     };
-                    let field = if payload.get("NextMarker").is_some() {
+                    let field = if payload.get("ContinuationToken").is_some() {
+                        "continuation-token"
+                    } else if payload.get("NextMarker").is_some() {
                         "Marker"
                     } else if job.target.provider == Provider::Gcp {
                         "pageToken"

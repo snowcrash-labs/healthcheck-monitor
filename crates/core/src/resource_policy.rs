@@ -47,8 +47,8 @@ pub(crate) fn evaluate(obs: &Observation, settings: &Settings) -> Evaluation {
                 if let Some(capacity) = capacity.filter(|c| *c > 0.0 && c.is_finite()) {
                     (
                         *value / capacity * 100.0,
-                        Some(settings.capacity_warning),
-                        Some(settings.capacity_error),
+                        warn.or(Some(settings.capacity_warning)),
+                        err.or(Some(settings.capacity_error)),
                     )
                 } else {
                     (*value, *warn, *err)

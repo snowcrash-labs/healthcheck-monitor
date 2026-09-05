@@ -82,6 +82,13 @@ impl Config {
         }
         let mut names = BTreeSet::new();
         for target in &self.targets {
+            if target
+                .timezone
+                .as_ref()
+                .is_some_and(|zone| zone.parse::<chrono_tz::Tz>().is_err())
+            {
+                return Err(Error::Config("invalid controller timezone".into()));
+            }
             if target.expectations.len() > 128
                 || target.expectations.keys().any(|key| !identifier(key))
             {
@@ -120,6 +127,7 @@ impl Config {
                 }
             }
             if !identifier(&target.name)
+                || target.name.contains(['/', ':', '@'])
                 || !identifier(&target.scope)
                 || !names.insert(&target.name)
             {
@@ -181,9 +189,15 @@ impl Config {
             for metric in &target.metrics {
                 if !identifier(&metric.name)
                     || !identifier(&metric.namespace)
-                    || !identifier(&metric.metric)
+                    || metric.metric.is_empty()
+                    || metric.metric.len() > 256
+                    || metric.metric.contains(',')
+                    || metric.metric.chars().any(char::is_control)
                     || !identifier(&metric.resource)
                     || metric.dimensions.len() > 30
+                    || metric.dimensions.iter().any(|(key, value)| {
+                        !identifier(key) || value.len() > 512 || value.chars().any(char::is_control)
+                    })
                 {
                     return Err(Error::Config("invalid metric identity".into()));
                 }

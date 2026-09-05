@@ -34,6 +34,11 @@ pub fn project(job: &Job, endpoint: &Endpoint, value: &Value) -> Vec<Observation
     result
 }
 fn project_data(job: &Job, endpoint: &Endpoint, value: &Value) -> Vec<Observation> {
+    if job.target.provider == Provider::Aws
+        && let Some(observations) = crate::aws_projection::project(job, endpoint, value)
+    {
+        return observations;
+    }
     if endpoint.id.starts_with("quotas/") && job.target.provider == Provider::Aws {
         return crate::quotas::project(job, endpoint, value);
     }
@@ -72,6 +77,7 @@ fn project_data(job: &Job, endpoint: &Endpoint, value: &Value) -> Vec<Observatio
             "/CertificateArn",
             "/BackupVaultName",
             "/ResourceArn",
+            "/VersionId",
         ],
     )
     .or_else(|| value.as_str())
@@ -96,10 +102,7 @@ fn project_data(job: &Job, endpoint: &Endpoint, value: &Value) -> Vec<Observatio
         })];
     }
     if family == "resource-graph" {
-        return vec![obs(Data::Inventory {
-            family: projection::identity(text(value, &["/type"]).unwrap_or("unknown")),
-            supported: false,
-        })];
+        return crate::azure_projection::graph(job, endpoint, value);
     }
     if let Some(instances) = value
         .pointer("/instancesSet/item")

@@ -112,10 +112,10 @@ pub trait Source: Send + Sync {
     ) -> impl std::future::Future<Output = Result<Value, Error>> + Send;
 }
 
-struct NativeSource<'a> {
-    http: &'a Http,
-    auth: &'a Auth,
-    cache: Option<&'a crate::inventory_cache::InventoryCache>,
+pub(crate) struct NativeSource<'a> {
+    pub http: &'a Http,
+    pub auth: &'a Auth,
+    pub cache: Option<&'a crate::inventory_cache::InventoryCache>,
 }
 impl Source for NativeSource<'_> {
     fn cache(&self) -> Option<&crate::inventory_cache::InventoryCache> {

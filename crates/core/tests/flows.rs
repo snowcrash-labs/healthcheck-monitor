@@ -186,3 +186,35 @@ fn counter_reset_is_not_a_stalled_stage() -> Result<(), Box<dyn std::error::Erro
     );
     Ok(())
 }
+
+#[test]
+fn automatic_flow_evaluation_keeps_its_own_freshness_limit()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut metric_job = job()?;
+    metric_job.check = Check::Metrics;
+    metric_job.key = "dev/Metrics".into();
+    metric_job.settings.interval = monitor_core::config::duration::Span(3600);
+    let now = Utc::now();
+    let mut monitoring = State::new(metric_job.revision.clone(), vec![]);
+    signals(
+        &mut monitoring.snapshot,
+        &metric_job,
+        now - Duration::seconds(200),
+        10.0,
+        Some(12.0),
+    );
+    let result = monitoring
+        .snapshot
+        .results
+        .remove("dev/Metrics")
+        .ok_or("missing result")?;
+    monitoring.apply(&metric_job, result, now);
+    let result = monitoring
+        .snapshot
+        .results
+        .get("dev/Flows")
+        .ok_or("missing flow")?;
+    assert_eq!(state(result), Some(Health::Unknown));
+    assert!(!result.complete());
+    Ok(())
+}

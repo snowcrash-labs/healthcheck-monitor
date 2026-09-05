@@ -170,3 +170,97 @@ fn structural_diff_ignores_timestamp_changes() -> Result<(), Box<dyn std::error:
     assert!(monitor_core::report::diff(&old, &state.snapshot).is_empty());
     Ok(())
 }
+
+#[test]
+fn cached_inventory_and_reload_preserve_pending_removal() -> Result<(), Box<dyn std::error::Error>>
+{
+    let mut job = job()?;
+    job.check = Check::Inventory;
+    let at = Utc::now();
+    let mut state = State::new(job.revision.clone(), vec![job.key.clone()]);
+    state.apply(&job, result(&job, false, at, Coverage::Complete), at);
+    let later = at + Duration::seconds(1);
+    let mut empty = result(&job, true, later, Coverage::Complete);
+    empty.observations.clear();
+    state.apply(&job, empty.clone(), later);
+    state.retain_scope(&[job.clone()]);
+    state.apply(&job, empty.clone(), later + Duration::seconds(1));
+    assert_eq!(state.snapshot.findings.len(), 1);
+    let restored = serde_json::from_slice(&serde_json::to_vec(&state.snapshot)?)?;
+    state = State { snapshot: restored };
+    empty.operations[0].observed_at = later + Duration::seconds(2);
+    let transitions = state.apply(&job, empty, later + Duration::seconds(2));
+    assert!(state.snapshot.findings.is_empty());
+    assert!(
+        transitions
+            .iter()
+            .any(|t| t.kind == TransitionKind::Removed)
+    );
+    let transitions = state.apply(&job, result(&job, false, later, Coverage::Complete), later);
+    assert!(
+        transitions
+            .iter()
+            .any(|t| t.kind == TransitionKind::Reappeared)
+    );
+    Ok(())
+}
+
+#[test]
+fn single_run_does_not_infer_persistence_from_saved_queue_sample()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut job = job()?;
+    job.check = Check::Queues;
+    let at = Utc::now();
+    let mut r = result(&job, true, at, Coverage::Complete);
+    r.observations[0].data = Data::Queue {
+        backlog: 20.0,
+        activation: 0.0,
+        ready: 0,
+        desired: 1,
+        crash_loop: false,
+        scaler_ready: true,
+        age_seconds: None,
+        dead_letters: None,
+    };
+    let mut state = State::new(job.revision.clone(), vec![job.key.clone()]);
+    state.apply(&job, r.clone(), at);
+    state.begin_run();
+    let later = at + Duration::seconds(30);
+    r.observations[0].observed_at = later;
+    state.apply(&job, r, later);
+    assert!(state.snapshot.findings.is_empty());
+    assert_eq!(
+        state.snapshot.health.values().next(),
+        Some(&Health::Unknown)
+    );
+    assert_eq!(state.snapshot.samples.get(&job.key), Some(&1));
+    Ok(())
+}
+
+#[test]
+fn unrelated_inventory_cannot_confirm_another_checks_removal()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut inventory = job()?;
+    inventory.check = Check::Inventory;
+    let mut kube = inventory.clone();
+    kube.check = Check::Kubernetes;
+    kube.key = "dev/Kubernetes".into();
+    let at = Utc::now();
+    let mut state = State::new(
+        inventory.revision.clone(),
+        vec![inventory.key.clone(), kube.key.clone()],
+    );
+    state.apply(
+        &inventory,
+        result(&inventory, false, at, Coverage::Complete),
+        at,
+    );
+    for second in 1..=3 {
+        let at = at + Duration::seconds(second);
+        let mut empty = result(&kube, true, at, Coverage::Complete);
+        empty.observations.clear();
+        state.apply(&kube, empty, at);
+    }
+    assert_eq!(state.snapshot.findings.len(), 1);
+    Ok(())
+}

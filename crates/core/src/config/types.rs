@@ -57,6 +57,7 @@ pub struct Target {
     #[serde(default)]
     pub regions: Vec<String>,
     pub context: Option<String>,
+    pub timezone: Option<String>,
     #[serde(default)]
     pub expected: Expected,
     #[serde(default)]

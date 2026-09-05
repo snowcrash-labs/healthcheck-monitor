@@ -43,6 +43,9 @@ pub async fn monitor(config_path: &Path, options: Options, mode: Mode) -> Result
         ),
     };
     state.retain_scope(&effective.jobs);
+    if matches!(mode, Mode::Once) {
+        state.begin_run();
+    }
     let router = Arc::new(Router::new(config, settings.subprocesses));
     let stop = CancellationToken::new();
     let (updates, receiver) = watch::channel(effective.clone());

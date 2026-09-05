@@ -6,6 +6,8 @@ license.workspace = true
 
 [dependencies]
 chrono.workspace = true
+chrono-tz = { version = "0.10.4", default-features = false, features = ["std"] }
+croner = { version = "4.0.0", default-features = false, features = ["chrono"] }
 futures.workspace = true
 humantime.workspace = true
 serde.workspace = true

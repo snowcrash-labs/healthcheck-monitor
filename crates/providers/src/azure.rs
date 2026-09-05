@@ -21,15 +21,7 @@ pub fn endpoints(job: &Job) -> Vec<Endpoint> {
     }
     let mut out = Vec::new();
     if job.check == Check::Inventory {
-        let mut graph = Endpoint::get(
-            "resource-graph",
-            "https://management.azure.com/providers/Microsoft.ResourceGraph/resources?api-version=2024-04-01",
-            "/data",
-        );
-        graph.body = Some(
-            serde_json::json!({"subscriptions":[job.target.scope],"query":"Resources | project id, name, type, location, state=tostring(properties.provisioningState)","options":{"resultFormat":"objectArray","$top":job.settings.page_size}}),
-        );
-        out.push(graph);
+        out.push(graph(job));
     }
     for (name, namespace, api) in CATALOG {
         if job.check == Check::Edge
@@ -73,9 +65,29 @@ pub async fn collect(
         return crate::cloud_logs::azure(http, auth, job, cancel).await;
     }
     if job.check == Check::Metrics || job.check == Check::Queues {
-        return crate::metrics::azure(http, auth, job, cancel).await;
+        return crate::azure_metrics::collect_from(
+            &common::NativeSource {
+                http,
+                auth,
+                cache: Some(cache),
+            },
+            job,
+            cancel,
+        )
+        .await;
     }
     common::collect_cached(http, auth, job, endpoints(job), cancel, cache).await
+}
+pub fn graph(job: &Job) -> Endpoint {
+    let mut graph = Endpoint::get(
+        "resource-graph",
+        "https://management.azure.com/providers/Microsoft.ResourceGraph/resources?api-version=2024-04-01",
+        "/data",
+    );
+    graph.body = Some(
+        serde_json::json!({"subscriptions":[job.target.scope],"query":"Resources | project id, name, type, location, state=tostring(properties.provisioningState)","options":{"resultFormat":"objectArray","$top":job.settings.page_size}}),
+    );
+    graph
 }
 const CATALOG: &[(&str, &str, &str)] = &[
     (

@@ -49,7 +49,9 @@ pub fn project(
     let continuous = points
         .windows(2)
         .all(|pair| (pair[1].0 - pair[0].0).num_seconds() <= 120);
-    if !value.is_finite() { return Err(Error::Malformed); }
+    if !value.is_finite() {
+        return Err(Error::Malformed);
+    }
     let window_seconds = if continuous && matches!(query.aggregation, Aggregation::Minimum) {
         (newest - oldest).num_seconds().max(0) as u64
     } else {

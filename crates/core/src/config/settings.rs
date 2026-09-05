@@ -37,6 +37,8 @@ pub struct Settings {
     pub capacity_warning: f64,
     pub capacity_error: f64,
     pub capacity_sustain: Span,
+    pub certificate_warning: Span,
+    pub recovery_age_error: Option<Span>,
     pub recover_confirmations: u32,
     pub removal_confirmations: u32,
     pub stale_after: Option<Span>,
@@ -81,6 +83,8 @@ impl Default for Settings {
             capacity_warning: 80.0,
             capacity_error: 90.0,
             capacity_sustain: Span(600),
+            certificate_warning: Span(14 * 86400),
+            recovery_age_error: None,
             recover_confirmations: 2,
             removal_confirmations: 2,
             stale_after: None,
@@ -95,6 +99,12 @@ pub use super::patch::SettingsPatch;
 impl Settings {
     /// Apply only explicitly provided values.
     pub fn overlay(&mut self, patch: &SettingsPatch) {
+        if let Some(value) = patch.certificate_warning {
+            self.certificate_warning = value;
+        }
+        if let Some(value) = patch.recovery_age_error {
+            self.recovery_age_error = value;
+        }
         if let Some(value) = patch.jitter_percent {
             self.jitter_percent = value;
         }

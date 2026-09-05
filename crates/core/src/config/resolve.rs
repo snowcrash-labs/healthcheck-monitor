@@ -24,6 +24,7 @@ pub struct Job {
     pub settings: Settings,
     pub revision: String,
     pub flows_enabled: bool,
+    pub flow_settings: Option<Settings>,
     pub severity: std::collections::BTreeMap<String, crate::model::Severity>,
 }
 impl Job {
@@ -172,9 +173,19 @@ impl Config {
                     settings,
                     revision: revision.clone(),
                     flows_enabled,
+                    flow_settings: None,
                     severity: self.severity.clone(),
                 });
             }
+        }
+        let flow_settings: std::collections::BTreeMap<_, _> = jobs
+            .iter()
+            .filter(|job| job.check == Check::Flows)
+            .map(|job| (job.target.name.clone(), job.settings.clone()))
+            .collect();
+        for job in &mut jobs {
+            job.flow_settings = flow_settings.get(&job.target.name).cloned();
+            job.flows_enabled = job.flow_settings.is_some();
         }
         if jobs.is_empty() || jobs.len() > 4096 {
             return Err(Error::Config("select between 1 and 4096 checks".into()));

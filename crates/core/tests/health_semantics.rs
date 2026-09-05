@@ -92,6 +92,8 @@ fn draining_nodes_are_expected() {
 fn historical_failed_job_does_not_dominate_current_health() {
     assert_ne!(
         health(Data::Job {
+            completed_at: None,
+            scheduled_at: None,
             complete: false,
             failed: true,
             failed_attempts: 1,
@@ -106,6 +108,8 @@ fn historical_failed_job_does_not_dominate_current_health() {
 fn partial_success_without_terminal_condition_is_unknown() {
     assert_eq!(
         health(Data::Job {
+            completed_at: None,
+            scheduled_at: None,
             complete: false,
             failed: false,
             failed_attempts: 1,
@@ -133,7 +137,8 @@ fn old_restart_counter_does_not_imply_current_failure() {
 }
 #[test]
 fn restart_delta_compares_same_pod_and_container() {
-    let old = obs(pod("a", 1));
+    let mut old = obs(pod("a", 1));
+    old.observed_at -= Duration::seconds(1);
     let new = obs(pod("a", 5));
     assert_eq!(
         evaluate(&new, Some(&old), &Settings::default(), Utc::now()).health,
@@ -149,6 +154,9 @@ fn restart_delta_compares_same_pod_and_container() {
 fn cronjob_latest_schedule_needs_success() {
     assert_eq!(
         health(Data::Schedule {
+            created_at: None,
+            starting_deadline_seconds: None,
+            forbid_overlap: false,
             schedule: "0 * * * *".into(),
             timezone: "UTC".into(),
             suspended: false,
@@ -163,6 +171,9 @@ fn cronjob_latest_schedule_needs_success() {
 fn suspended_cronjobs_are_expected_inactive() {
     assert_eq!(
         health(Data::Schedule {
+            created_at: None,
+            starting_deadline_seconds: None,
+            forbid_overlap: false,
             schedule: "0 * * * *".into(),
             timezone: "UTC".into(),
             suspended: true,
@@ -199,7 +210,8 @@ fn single_queue_observation_cannot_prove_persistence() {
 }
 #[test]
 fn persistent_unready_worker_stays_warning_without_crash() {
-    let old = obs(queue(2.0, 0, false));
+    let mut old = obs(queue(2.0, 0, false));
+    old.observed_at -= Duration::seconds(1);
     let new = obs(queue(2.0, 0, false));
     assert_eq!(
         evaluate(&new, Some(&old), &Settings::default(), Utc::now()).health,

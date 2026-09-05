@@ -21,8 +21,7 @@ pub fn allowed(request: &Request) -> bool {
             let query = request.url().query().unwrap_or("").to_ascii_lowercase();
             !query.contains("alt=media")
                 && !path.contains("/objects/")
-                && !path.contains("/secrets/")
-                || path.ends_with("/versions")
+                && (!path.contains("/secrets/") || path.ends_with("/versions"))
         }
         reqwest::Method::POST => {
             if request

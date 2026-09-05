@@ -14,6 +14,7 @@ impl State {
                 revision,
                 captured_at: Utc::now(),
                 selected_scope: scope,
+                samples: BTreeMap::new(),
                 selectors: BTreeMap::new(),
                 freshness: BTreeMap::new(),
                 results: BTreeMap::new(),
@@ -33,6 +34,8 @@ impl State {
         mut result: CheckResult,
         now: DateTime<Utc>,
     ) -> Vec<Transition> {
+        let samples = self.snapshot.samples.entry(job.key.clone()).or_default();
+        *samples = samples.saturating_add(1);
         if job.check == Check::Flows {
             result = crate::flows::evaluate(&mut self.snapshot, job, now);
         }
@@ -54,6 +57,8 @@ impl State {
             job.settings.max_assets,
         );
         crate::provenance::mark_retries(&mut result.observations);
+        crate::schedule_policy::correlate(&mut result);
+        crate::recovery::consolidate(&mut result.observations);
         for observation in &result.observations {
             if matches!(
                 observation.data,
@@ -100,14 +105,19 @@ impl State {
         }
         for observation in &result.observations {
             let prior = old.and_then(|r| {
-                r.observations
-                    .iter()
-                    .find(|o| o.resource == observation.resource)
+                r.observations.iter().find(|o| {
+                    o.resource == observation.resource
+                        && r.operations
+                            .iter()
+                            .any(|op| op.id == o.operation && op.coverage == Coverage::Complete)
+                })
             });
             let evaluation = evaluate(observation, prior, &job.settings, now);
             if !matches!(
                 observation.data,
-                Data::Quota { .. } | Data::Owner { .. }
+                Data::MetricResource { .. }
+                    | Data::Quota { .. }
+                    | Data::Owner { .. }
                     | Data::Inventory { .. }
                     | Data::Identity { .. }
                     | Data::Scaler { .. }
@@ -133,6 +143,7 @@ impl State {
                 ));
             }
             for mut finding in evaluation.findings {
+                finding.check = Some(job.check);
                 finding.valid_until = finding
                     .observed_at
                     .checked_add_signed(chrono::Duration::seconds(job.settings.freshness() as i64));
@@ -255,19 +266,7 @@ impl State {
                 },
             );
         }
-        while self.snapshot.retired.len() > job.settings.max_findings {
-            let oldest = self
-                .snapshot
-                .retired
-                .iter()
-                .min_by_key(|(_, transition)| transition.at)
-                .map(|(key, _)| key.clone());
-            if let Some(oldest) = oldest {
-                self.snapshot.retired.remove(&oldest);
-            } else {
-                break;
-            }
-        }
+        self.trim_retired(job.settings.max_findings);
         self.snapshot.results.insert(job.key.clone(), result);
         let observed: BTreeSet<_> = self
             .snapshot
@@ -283,11 +282,14 @@ impl State {
         self.snapshot.revision = job.revision.clone();
         transitions.extend(self.expire(job.settings.freshness(), now));
         if job.flows_enabled && job.check != Check::Flows {
-            let result = crate::flows::evaluate(&mut self.snapshot, job, now);
             let mut flow_job = job.clone();
+            if let Some(settings) = &job.flow_settings {
+                flow_job.settings = settings.clone();
+            }
             flow_job.key = format!("{}/Flows", job.target.name);
             flow_job.check = Check::Flows;
             flow_job.flows_enabled = false;
+            let result = crate::flows::evaluate(&mut self.snapshot, &flow_job, now);
             transitions.extend(self.apply(&flow_job, result, now));
         }
         transitions

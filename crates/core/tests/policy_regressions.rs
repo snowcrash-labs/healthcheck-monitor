@@ -51,6 +51,8 @@ fn endpoint_dns_tls_and_connection_failures_reach_policy() {
 #[test]
 fn successful_job_with_failed_attempts_is_recovered() {
     let obs = observation(Data::Job {
+        completed_at: None,
+        scheduled_at: None,
         complete: true,
         failed: false,
         failed_attempts: 2,
@@ -66,6 +68,8 @@ fn successful_job_with_failed_attempts_is_recovered() {
 #[test]
 fn partial_job_success_is_not_completion() {
     let obs = observation(Data::Job {
+        completed_at: None,
+        scheduled_at: None,
         complete: false,
         failed: false,
         failed_attempts: 1,
@@ -81,6 +85,8 @@ fn partial_job_success_is_not_completion() {
 #[test]
 fn contradictory_job_conditions_are_invalid_evidence() {
     let obs = observation(Data::Job {
+        completed_at: None,
+        scheduled_at: None,
         complete: true,
         failed: true,
         failed_attempts: 1,

@@ -9,10 +9,13 @@ pub fn text<'a>(value: &'a Value, paths: &[&str]) -> Option<&'a str> {
 }
 pub fn number(value: &Value, paths: &[&str]) -> Option<f64> {
     paths.iter().find_map(|p| {
-        value.pointer(p).and_then(|v| {
-            v.as_f64()
-                .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
-        }).filter(|value| value.is_finite())
+        value
+            .pointer(p)
+            .and_then(|v| {
+                v.as_f64()
+                    .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
+            })
+            .filter(|value| value.is_finite())
     })
 }
 pub fn boolean(value: &Value, paths: &[&str]) -> Option<bool> {
@@ -86,25 +89,32 @@ pub fn observation(job: &Job, operation: &str, name: &str, data: Data) -> Observ
     }
 }
 pub fn service(job: &Job, operation: &str, value: &Value) -> Option<Observation> {
-    let name = text(
-        value,
-        &[
-            "/name",
-            "/id",
-            "/arn",
-            "/Arn",
-            "/DBInstanceIdentifier",
-            "/CacheClusterId",
-            "/TableName",
-            "/FunctionName",
-            "/RepositoryName",
-            "/QueueUrl",
-            "/InstanceId",
-            "/AutoScalingGroupName",
-            "/VolumeId",
-            "/LoadBalancerArn",
-        ],
-    )?;
+    let name = if job.target.provider == Provider::Azure {
+        text(value, &["/id"])
+    } else {
+        None
+    }
+    .or_else(|| {
+        text(
+            value,
+            &[
+                "/name",
+                "/id",
+                "/arn",
+                "/Arn",
+                "/DBInstanceIdentifier",
+                "/CacheClusterId",
+                "/TableName",
+                "/FunctionName",
+                "/RepositoryName",
+                "/QueueUrl",
+                "/InstanceId",
+                "/AutoScalingGroupName",
+                "/VolumeId",
+                "/LoadBalancerArn",
+            ],
+        )
+    })?;
     if !job.target.resources.is_empty() && !job.target.resources.iter().any(|s| name.contains(s)) {
         return None;
     }
