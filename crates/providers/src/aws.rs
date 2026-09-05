@@ -147,6 +147,9 @@ pub async fn collect(
     cancel: &CancellationToken,
     cache: &crate::inventory_cache::InventoryCache,
 ) -> CheckResult {
+    if job.check == Check::Slo {
+        return crate::aws_slo::collect(auth, job, cancel).await;
+    }
     if job.check == Check::Logs {
         return crate::cloud_logs::aws(http, auth, job, cancel).await;
     }

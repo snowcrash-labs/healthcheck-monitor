@@ -5,6 +5,10 @@ use serde::{Deserialize, Serialize};
 #[serde(deny_unknown_fields)]
 pub struct SettingsPatch {
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub slo_burn_window: Option<Span>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub slo_burn_rate_error: Option<Option<f64>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub log_dedup_entries: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub log_overlap: Option<Span>,

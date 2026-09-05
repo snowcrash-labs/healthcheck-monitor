@@ -15,6 +15,7 @@ pub mod report;
 mod resource_policy;
 pub mod schedule_policy;
 pub mod scheduler;
+mod slo_policy;
 pub mod state;
 mod state_lifecycle;
 pub mod storage;

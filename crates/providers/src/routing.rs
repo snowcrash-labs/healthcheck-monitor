@@ -176,6 +176,34 @@ impl Router {
             return Ok(result);
         }
         let auth = self.auth(job, &scope).await?;
+        if job.check == Check::Slo && !job.target.slo_goals.is_empty() {
+            let mut metrics = job.clone();
+            metrics
+                .target
+                .metrics
+                .retain(|query| job.target.slo_goals.contains_key(&query.name));
+            let source = crate::common::NativeSource {
+                http: &scope.http,
+                auth: &auth,
+                cache: Some(&scope.inventory),
+                dedupe: None,
+            };
+            let mut result = match job.target.provider {
+                Provider::Gcp => crate::metrics::gcp(&scope.http, &auth, &metrics, cancel).await,
+                Provider::Aws => crate::aws_metrics::aws(&auth, &metrics, cancel).await,
+                Provider::Azure => {
+                    crate::azure_metrics::collect_from(&source, &metrics, cancel).await
+                }
+                _ => CheckResult::failure(
+                    job.target.name.clone(),
+                    job.check,
+                    job.revision.clone(),
+                    Coverage::Unsupported,
+                ),
+            };
+            crate::slo_projection::configured(job, &mut result);
+            return Ok(result);
+        }
         if job.check == Check::Logs {
             let dedupe = self.log_dedupe(job, &scope).await;
             let source = crate::common::NativeSource {

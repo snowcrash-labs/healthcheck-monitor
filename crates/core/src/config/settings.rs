@@ -30,6 +30,8 @@ pub struct Settings {
     pub runtime_window: Span,
     pub runtime_entries: usize,
     pub metric_window: Span,
+    pub slo_burn_window: Span,
+    pub slo_burn_rate_error: Option<f64>,
     pub history_interval: Span,
     pub history_age: Span,
     pub history_count: usize,
@@ -78,6 +80,8 @@ impl Default for Settings {
             runtime_window: Span(86400),
             runtime_entries: 250,
             metric_window: Span(900),
+            slo_burn_window: Span(3600),
+            slo_burn_rate_error: None,
             history_interval: Span(300),
             history_age: Span(86400),
             history_count: 288,
@@ -103,6 +107,12 @@ pub use super::patch::SettingsPatch;
 impl Settings {
     /// Apply only explicitly provided values.
     pub fn overlay(&mut self, patch: &SettingsPatch) {
+        if let Some(value) = patch.slo_burn_window {
+            self.slo_burn_window = value;
+        }
+        if let Some(value) = patch.slo_burn_rate_error {
+            self.slo_burn_rate_error = value;
+        }
         if let Some(value) = patch.log_dedup_entries {
             self.log_dedup_entries = value;
         }

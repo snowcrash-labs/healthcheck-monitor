@@ -4,6 +4,18 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Data {
+    SloDefinition {
+        name: String,
+        goal: Option<f64>,
+        period_seconds: Option<u64>,
+    },
+    Slo {
+        goal: f64,
+        compliance: Option<f64>,
+        budget: Option<f64>,
+        burn_rate: Option<f64>,
+        period_seconds: Option<u64>,
+    },
     LogWorkspace {
         workspace_id: String,
         resource_id: String,

@@ -64,6 +64,7 @@ pub fn evaluate(
     let error = |rule| fault(obs, rule, Severity::Error, Confidence::Direct);
     let warning = |rule| fault(obs, rule, Severity::Warning, Confidence::Direct);
     match &obs.data {
+        Data::Slo { .. } => return crate::slo_policy::evaluate(obs, settings),
         Data::Progress {
             state: Health::Unhealthy,
         } => return fault(obs, "flow-stalled", Severity::Error, Confidence::Correlated),
@@ -277,7 +278,8 @@ pub fn evaluate(
             }
             return result(Health::Unknown);
         }
-        Data::LogWorkspace { .. }
+        Data::SloDefinition { .. }
+        | Data::LogWorkspace { .. }
         | Data::LogWindow { .. }
         | Data::MetricResource { .. }
         | Data::Quota { .. }

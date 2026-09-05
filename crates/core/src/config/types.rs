@@ -78,6 +78,8 @@ pub struct Target {
     pub watched_secrets: Vec<String>,
     #[serde(default)]
     pub metrics: Vec<MetricQuery>,
+    #[serde(default)]
+    pub slo_goals: BTreeMap<String, f64>,
     pub nats_url: Option<Url>,
     pub nats_fallback: Option<NatsFallback>,
     #[serde(default)]

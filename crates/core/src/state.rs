@@ -110,7 +110,8 @@ impl State {
             };
             if !matches!(
                 observation.data,
-                Data::LogWorkspace { .. }
+                Data::SloDefinition { .. }
+                    | Data::LogWorkspace { .. }
                     | Data::LogWindow { .. }
                     | Data::MetricResource { .. }
                     | Data::Quota { .. }

@@ -206,6 +206,7 @@ impl Config {
 pub fn applicable(target: &Target, check: Check) -> bool {
     use crate::model::Provider;
     match check {
+        Check::Slo if target.provider == Provider::Azure => !target.slo_goals.is_empty(),
         Check::Flows => !target.flows.is_empty(),
         Check::Preflight => true,
         Check::Kubernetes => target.context.is_some() || target.provider == Provider::Kubernetes,

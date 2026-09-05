@@ -48,3 +48,5 @@ Linux and macOS development checks are defined in the repository workflow. Local
 - [CloudWatch alarm families and pagination](https://docs.aws.amazon.com/AmazonCloudWatch/latest/APIReference/API_DescribeAlarms.html).
 - [Kubernetes CronJob timezone and scheduling semantics](https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/).
 - [S3 regional bucket inventory](https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListBuckets.html).
+- [GCP SLO telemetry selectors](https://docs.cloud.google.com/stackdriver/docs/solutions/slo-monitoring/api/timeseries-selectors).
+- [AWS SLO budget reports](https://docs.aws.amazon.com/applicationsignals/latest/APIReference/API_BatchGetServiceLevelObjectiveBudgetReport.html).

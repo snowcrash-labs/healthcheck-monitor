@@ -304,6 +304,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "aws-sdk-applicationsignals"
+version = "1.91.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a191b94b7762d21d1406655c32ed7cceec162264e694a06d776859e99d5c6eba"
+dependencies = [
+ "arc-swap",
+ "aws-credential-types",
+ "aws-runtime",
+ "aws-smithy-async",
+ "aws-smithy-http",
+ "aws-smithy-json",
+ "aws-smithy-observability",
+ "aws-smithy-runtime",
+ "aws-smithy-runtime-api",
+ "aws-smithy-schema",
+ "aws-smithy-types",
+ "aws-types",
+ "bytes",
+ "fastrand",
+ "http 0.2.12",
+ "http 1.5.0",
+ "regex-lite",
+ "tracing",
+]
+
+[[package]]
 name = "aws-sdk-cloudwatch"
 version = "1.128.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2853,6 +2879,7 @@ version = "0.1.0"
 dependencies = [
  "aws-config",
  "aws-credential-types",
+ "aws-sdk-applicationsignals",
  "aws-sdk-cloudwatch",
  "aws-sdk-sts",
  "aws-sigv4",

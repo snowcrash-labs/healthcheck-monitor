@@ -5,6 +5,9 @@ use std::collections::BTreeSet;
 impl Settings {
     pub fn validate(&self) -> Result<(), Error> {
         let invalid = self.jitter_percent > 50
+            || self
+                .slo_burn_rate_error
+                .is_some_and(|value| !value.is_finite() || value <= 0.0)
             || self.log_dedup_entries == 0
             || self.log_dedup_entries > 200000
             || self.log_overlap > self.log_window
@@ -86,6 +89,19 @@ impl Config {
         }
         let mut names = BTreeSet::new();
         for target in &self.targets {
+            if target.slo_goals.len() > 128
+                || target.slo_goals.iter().any(|(name, goal)| {
+                    !goal.is_finite()
+                        || *goal <= 0.0
+                        || *goal > 1.0
+                        || !target.metrics.iter().any(|metric| {
+                            metric.name == *name
+                                && matches!(metric.aggregation, super::types::Aggregation::Latest)
+                        })
+                })
+            {
+                return Err(Error::Config("SLO goals need a fraction in (0,1] and a named latest-aggregation compliance metric".into()));
+            }
             if target
                 .timezone
                 .as_ref()

@@ -18,6 +18,9 @@ pub fn project(job: &Job, endpoint: &Endpoint, value: &Value) -> Vec<Observation
     result
 }
 fn project_data(job: &Job, endpoint: &Endpoint, value: &Value) -> Vec<Observation> {
+    if endpoint.id.starts_with("slo-objectives/") {
+        return crate::slo_projection::gcp(job, endpoint, value);
+    }
     if endpoint.id == "log-workspaces" {
         return crate::azure_projection::workspace(job, endpoint, value);
     }

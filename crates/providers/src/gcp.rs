@@ -106,6 +106,19 @@ pub async fn collect(
     cancel: &CancellationToken,
     cache: &crate::inventory_cache::InventoryCache,
 ) -> CheckResult {
+    if job.check == Check::Slo {
+        return crate::gcp_slo::collect_from(
+            &common::NativeSource {
+                http,
+                auth,
+                cache: Some(cache),
+                dedupe: None,
+            },
+            job,
+            cancel,
+        )
+        .await;
+    }
     if job.check == Check::Metrics || job.check == Check::Queues {
         let mut job = job.clone();
         if job.target.metrics.is_empty() {

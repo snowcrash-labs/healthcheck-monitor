@@ -94,6 +94,21 @@ async fn cloudwatch_batches_use_read_only_sdk_requests() -> Result<(), Box<dyn s
         let _ = clients.sts.get_caller_identity().send().await;
     }
     assert_eq!(calls.load(Ordering::SeqCst), 3);
+    if let crate::auth::Auth::Aws(clients) = &auth {
+        let client = clients.signals("us-east-1").await?;
+        let _ = client
+            .list_service_level_objectives()
+            .include_linked_accounts(false)
+            .send()
+            .await;
+        let _ = client
+            .batch_get_service_level_objective_budget_report()
+            .slo_ids("example")
+            .timestamp(aws_smithy_types::DateTime::from_secs(1800000000))
+            .send()
+            .await;
+    }
+    assert_eq!(calls.load(Ordering::SeqCst), 5);
     assert!(allowed.load(Ordering::SeqCst));
     Ok(())
 }
