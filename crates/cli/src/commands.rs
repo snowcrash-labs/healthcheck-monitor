@@ -18,16 +18,16 @@ pub async fn execute(cli: Cli) -> Result<u8, Error> {
         }
         Command::Report { snapshot } => {
             let snapshot = storage::read(&snapshot, 128 * 1024 * 1024)?;
-            print!("{}", monitor_core::report::markdown(&snapshot));
+            output(&monitor_core::report::markdown(&snapshot))?;
             Ok(0)
         }
         Command::Diff { older, newer } => {
             let old = storage::read(&older, 128 * 1024 * 1024)?;
             let new = storage::read(&newer, 128 * 1024 * 1024)?;
-            println!(
-                "{}",
+            output(&format!(
+                "{}\n",
                 serde_json::to_string_pretty(&monitor_core::report::diff(&old, &new))?
-            );
+            ))?;
             Ok(0)
         }
         Command::Config {
@@ -40,7 +40,7 @@ pub async fn execute(cli: Cli) -> Result<u8, Error> {
             let config = crate::runtime::load(&cli.config)?;
             let effective = config.resolve(&selection.selection())?;
             if show_effective {
-                println!("{}", serde_json::to_string_pretty(&effective)?);
+                output(&format!("{}\n", serde_json::to_string_pretty(&effective)?))?;
             } else {
                 tracing::info!(checks = effective.jobs.len(), revision = %effective.revision, "Configuration valid");
             }
@@ -83,4 +83,9 @@ pub async fn execute(cli: Cli) -> Result<u8, Error> {
             Ok(0)
         }
     }
+}
+fn output(text: &str) -> Result<(), Error> {
+    use std::io::Write;
+    std::io::stdout().lock().write_all(text.as_bytes())?;
+    Ok(())
 }

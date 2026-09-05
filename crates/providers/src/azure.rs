@@ -23,6 +23,13 @@ pub fn endpoints(job: &Job) -> Vec<Endpoint> {
     if matches!(job.check, Check::Inventory | Check::Managed) {
         for region in &job.target.regions {
             out.push(Endpoint::get(format!("quotas/{region}"),format!("{root}/providers/Microsoft.Compute/locations/{region}/usages?api-version=2024-11-01"),"/value"));
+            for (namespace, version) in [
+                ("Microsoft.Network", "2025-05-01"),
+                ("Microsoft.Storage", "2025-06-01"),
+                ("Microsoft.Sql", "2023-08-01"),
+            ] {
+                out.push(Endpoint::get(format!("quotas/{region}/{namespace}"),format!("{root}/providers/{namespace}/locations/{region}/usages?api-version={version}"),"/value"));
+            }
         }
     }
     if job.check == Check::Inventory {
@@ -92,6 +99,11 @@ pub async fn collect(
         dedupe: None,
     };
     let mut result = common::collect_from(&source, job, endpoints(job), cancel).await;
+    if job.check == Check::Inventory && !job.artifact_only {
+        let activity = crate::azure_activity::collect(&source, job, cancel).await;
+        result.operations.extend(activity.operations);
+        result.observations.extend(activity.observations);
+    }
     if matches!(job.check, Check::Inventory | Check::Releases) {
         crate::azure_registry::enrich(&source, job, &mut result, cancel).await;
     }

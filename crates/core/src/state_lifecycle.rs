@@ -61,18 +61,19 @@ impl State {
     }
 
     pub(crate) fn trim_retired(&mut self, limit: usize) {
-        while self.snapshot.retired.len() > limit {
-            let oldest = self
-                .snapshot
-                .retired
-                .iter()
-                .min_by_key(|(_, transition)| transition.at)
-                .map(|(key, _)| key.clone());
-            if let Some(oldest) = oldest {
-                self.snapshot.retired.remove(&oldest);
-            } else {
-                break;
-            }
+        let excess = self.snapshot.retired.len().saturating_sub(limit);
+        if excess == 0 {
+            return;
+        }
+        let mut oldest: Vec<_> = self
+            .snapshot
+            .retired
+            .iter()
+            .map(|(key, transition)| (transition.at, key.clone()))
+            .collect();
+        oldest.sort_unstable();
+        for (_, key) in oldest.into_iter().take(excess) {
+            self.snapshot.retired.remove(&key);
         }
     }
 

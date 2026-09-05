@@ -64,6 +64,7 @@ pub async fn monitor(config_path: &Path, options: Options, mode: Mode) -> Result
         router.restore_logs(&state.snapshot).await;
     }
     let stop = CancellationToken::new();
+    tracing::info!(process_id=std::process::id(),revision=%effective.revision,checks=effective.jobs.len(),"Monitoring started");
     let expiry = match mode {
         Mode::Watch {
             duration: Some(duration),

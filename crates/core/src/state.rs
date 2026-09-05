@@ -55,7 +55,7 @@ impl State {
         crate::bounds::validate_source(&mut result, job.settings.freshness(), now);
         let old = self.snapshot.results.get(&job.key);
         let mut current = BTreeSet::new();
-        let mut evaluated = BTreeSet::new();
+        let mut index = crate::evaluation_index::Index::new(old, &result);
         let remaining = job.settings.max_assets.saturating_sub(
             self.snapshot
                 .results
@@ -73,18 +73,8 @@ impl State {
             }
         }
         for observation in &result.observations {
-            let prior = old.and_then(|r| {
-                r.observations.iter().find(|o| {
-                    o.resource == observation.resource
-                        && r.operations
-                            .iter()
-                            .any(|op| op.id == o.operation && op.coverage == Coverage::Complete)
-                })
-            });
-            let complete = result
-                .operations
-                .iter()
-                .any(|op| op.id == observation.operation && op.coverage == Coverage::Complete);
+            let prior = index.prior(observation);
+            let complete = index.complete(observation);
             let assess = job.assess_health
                 && (job.check != Check::Releases
                     || matches!(
@@ -120,21 +110,7 @@ impl State {
                     .health
                     .insert(observation.resource.clone(), health);
             }
-            if result
-                .operations
-                .iter()
-                .any(|o| o.id == observation.operation && o.coverage == Coverage::Complete)
-                && matches!(
-                    evaluation.health,
-                    Health::Healthy | Health::ExpectedInactive
-                )
-            {
-                evaluated.insert((
-                    observation.resource.clone(),
-                    observation.operation.clone(),
-                    observation.observed_at,
-                ));
-            }
+            index.record_clear(observation, evaluation.health);
             for mut finding in evaluation.findings {
                 finding.check = Some(job.check);
                 finding.valid_until = finding
@@ -177,6 +153,7 @@ impl State {
                 self.snapshot.findings.insert(finding.id.clone(), finding);
             }
         }
+        index.reconcile(&result, &mut self.snapshot.health);
         let old_resources: BTreeSet<_> = old
             .into_iter()
             .flat_map(|r| &r.observations)
@@ -192,13 +169,9 @@ impl State {
             if current.contains(id) {
                 continue;
             }
-            if let Some((_, _, at)) = evaluated.iter().find(|(resource, op, at)| {
-                resource == &finding.resource
-                    && finding.evidence.contains(op)
-                    && *at > finding.observed_at
-            }) {
+            if let Some(at) = index.clear(finding) {
                 finding.clear_count = finding.clear_count.saturating_add(1);
-                finding.observed_at = *at;
+                finding.observed_at = at;
                 finding.valid_until = at
                     .checked_add_signed(chrono::Duration::seconds(job.settings.freshness() as i64));
                 finding.stale = false;
@@ -211,7 +184,7 @@ impl State {
                     removed.push((id.clone(), TransitionKind::Recovered));
                 }
             } else if matches!(job.check, Check::Inventory | Check::Kubernetes)
-                && result.complete()
+                && index.can_remove(finding)
                 && (old_resources.contains(&finding.resource)
                     || self.snapshot.confirmations.contains_key(&confirmation_key))
                 && !new_resources.contains(&finding.resource)

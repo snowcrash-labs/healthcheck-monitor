@@ -28,7 +28,8 @@ impl HttpConnector for Recorder {
         }) {
             self.allowed.store(false, Ordering::SeqCst);
         }
-        let metrics = request.uri().contains("/GetMetricData");
+        let metrics =
+            request.uri().contains("/GetMetricData") || request.uri().contains("/ListMetrics");
         HttpConnectorFuture::new(async move {
             let status =
                 aws_smithy_runtime_api::http::StatusCode::try_from(if metrics { 200 } else { 400 })
@@ -136,6 +137,20 @@ async fn cloudwatch_batches_use_read_only_sdk_requests() -> Result<(), Box<dyn s
             .await;
     }
     assert_eq!(calls.load(Ordering::SeqCst), 5);
+    if let crate::auth::Auth::Aws(clients) = &auth {
+        let client = clients.cloudwatch("us-east-1").await?;
+        let expected = std::collections::BTreeSet::from(["AWS/SQS".into()]);
+        let (queries, operations) =
+            crate::aws_metric_discovery::discover(&client, &job, "us-east-1", Some(&expected))
+                .await;
+        assert!(queries.is_empty());
+        assert_eq!(operations.len(), 1);
+        assert_eq!(
+            operations[0].coverage,
+            monitor_core::model::Coverage::Missing
+        );
+    }
+    assert_eq!(calls.load(Ordering::SeqCst), 6);
     assert!(allowed.load(Ordering::SeqCst));
     Ok(())
 }

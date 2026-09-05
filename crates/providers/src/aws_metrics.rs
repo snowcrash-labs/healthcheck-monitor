@@ -5,12 +5,23 @@ use monitor_core::{config::resolve::Job, model::*};
 use monitor_integrations::{projection::operation, transport::Error};
 use tokio_util::sync::CancellationToken;
 pub async fn aws(auth: &Auth, job: &Job, cancel: &CancellationToken) -> CheckResult {
+    with_namespaces(auth, job, cancel, None).await
+}
+pub async fn with_namespaces(
+    auth: &Auth,
+    job: &Job,
+    cancel: &CancellationToken,
+    expected: Option<&crate::aws_metric_inventory::Namespaces>,
+) -> CheckResult {
     let mut result = empty(job);
     let Auth::Aws(clients) = auth else {
         return result;
     };
     result.operations.clear();
     for region in &crate::aws_metric_plan::regions(job) {
+        if expected.is_some_and(|expected| !expected.contains_key(region)) {
+            continue;
+        }
         let client = match clients.cloudwatch(region).await {
             Ok(client) => client,
             Err(error) => {
@@ -21,8 +32,13 @@ pub async fn aws(auth: &Auth, job: &Job, cancel: &CancellationToken) -> CheckRes
             }
         };
         let queries = if job.target.metrics.is_empty() {
-            let (queries, operations) =
-                crate::aws_metric_discovery::discover(&client, job, region).await;
+            let (queries, operations) = crate::aws_metric_discovery::discover(
+                &client,
+                job,
+                region,
+                expected.and_then(|expected| expected.get(region)),
+            )
+            .await;
             result.operations.extend(operations);
             queries
         } else {
@@ -51,7 +67,7 @@ pub async fn aws(auth: &Auth, job: &Job, cancel: &CancellationToken) -> CheckRes
             }
         }
     }
-    if result.operations.is_empty() {
+    if result.operations.is_empty() && expected.is_none() {
         result.operations.push(operation(
             "cloudwatch-metrics",
             Err(&Error::Missing),

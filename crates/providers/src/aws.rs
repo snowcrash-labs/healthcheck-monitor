@@ -157,6 +157,22 @@ pub async fn collect(
         return identity(auth, job).await;
     }
     if job.check == Check::Metrics || job.check == Check::Queues {
+        if job.target.metrics.is_empty() {
+            let source = common::NativeSource {
+                dedupe: None,
+                http,
+                auth,
+                cache: Some(cache),
+            };
+            let (namespaces, mut result) =
+                crate::aws_metric_inventory::register(&source, job, cancel).await;
+            let metrics =
+                crate::aws_metrics::with_namespaces(auth, job, cancel, Some(&namespaces)).await;
+            result.observations.extend(metrics.observations);
+            result.operations.extend(metrics.operations);
+            result.finished_at = chrono::Utc::now();
+            return result;
+        }
         return crate::metrics::aws(auth, job, cancel).await;
     }
     let mut result = common::collect_cached(http, auth, job, endpoints(job), cancel, cache).await;

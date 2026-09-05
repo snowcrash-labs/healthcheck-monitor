@@ -4,6 +4,11 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Data {
+    Activity {
+        operation: String,
+        state: ServiceState,
+        event_at: Option<DateTime<Utc>>,
+    },
     NetworkPolicy {
         direction: Option<String>,
         allows_public: Option<bool>,
@@ -262,7 +267,8 @@ impl Data {
     pub fn is_health_evidence(&self) -> bool {
         !matches!(
             self,
-            Self::NetworkPolicy { .. }
+            Self::Activity { .. }
+                | Self::NetworkPolicy { .. }
                 | Self::KeyMetadata { .. }
                 | Self::Maintenance { .. }
                 | Self::Registry { .. }

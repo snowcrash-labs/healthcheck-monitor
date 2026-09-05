@@ -201,11 +201,16 @@ impl Config {
             }
             if let Some(url) = &target.nats_url
                 && (!matches!(url.scheme(), "tls" | "nats")
+                    || url.host_str().is_none()
+                    || url.query().is_some()
+                    || url.fragment().is_some()
+                    || !matches!(url.path(), "" | "/")
                     || !url.username().is_empty()
                     || url.password().is_some())
             {
                 return Err(Error::Config(
-                    "NATS URL must not contain credentials".into(),
+                    "NATS URL needs a server host without credentials, path, query or fragment"
+                        .into(),
                 ));
             }
             for metric in &target.metrics {

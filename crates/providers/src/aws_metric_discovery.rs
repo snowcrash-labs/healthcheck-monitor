@@ -10,13 +10,15 @@ pub async fn discover(
     client: &aws_sdk_cloudwatch::Client,
     job: &Job,
     region: &str,
+    expected: Option<&std::collections::BTreeSet<String>>,
 ) -> (Vec<MetricQuery>, Vec<Operation>) {
     let mut metrics = Vec::new();
     let mut operations = Vec::new();
     let namespaces: Vec<_> = crate::metric_catalog::AWS_NAMESPACES
         .iter()
         .filter(|namespace| {
-            crate::aws_metric_plan::namespace_in_region(job, namespace, region)
+            expected.is_none_or(|expected| expected.contains(**namespace))
+                && crate::aws_metric_plan::namespace_in_region(job, namespace, region)
                 && (job.check != Check::Queues
                     || matches!(**namespace, "AWS/SQS" | "AWS/SNS" | "AWS/Events"))
         })
@@ -110,6 +112,9 @@ pub async fn discover(
                     break;
                 }
             }
+        }
+        if count == 0 && coverage.is_ok() && expected.is_some() {
+            coverage = Err(Error::Missing);
         }
         operations.push(operation(
             &format!("metric-discovery/{region}/{namespace}"),

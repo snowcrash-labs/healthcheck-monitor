@@ -32,6 +32,9 @@ pub fn project(job: &Job, endpoint: &Endpoint, value: &Value) -> Vec<Observation
     result
 }
 fn project_data(job: &Job, endpoint: &Endpoint, value: &Value) -> Vec<Observation> {
+    if endpoint.id == "activity" {
+        return crate::azure_activity::project(job, endpoint, value);
+    }
     if endpoint.id.starts_with("pipeline-executions/") {
         return crate::aws_pipeline::project(job, endpoint, value);
     }

@@ -12,7 +12,8 @@ pub async fn collect<S: Source>(source: &S, job: &Job, cancel: &CancellationToke
         .into_iter()
         .filter(|endpoint| {
             if job.check == Check::Queues {
-                return endpoint.id.starts_with("pubsub-subscriptions/");
+                return endpoint.id.starts_with("pubsub-subscriptions/")
+                    || endpoint.id.starts_with("pubsub-topics/");
             }
             matches!(
                 endpoint.id.split('/').next(),
@@ -20,8 +21,10 @@ pub async fn collect<S: Source>(source: &S, job: &Job, cancel: &CancellationToke
                     "clusters"
                         | "sql"
                         | "redis"
+                        | "redis-clusters"
                         | "valkey"
                         | "pubsub-subscriptions"
+                        | "pubsub-topics"
                         | "cloud-run"
                         | "buckets"
                         | "instances"
@@ -39,14 +42,18 @@ pub async fn collect<S: Source>(source: &S, job: &Job, cancel: &CancellationToke
                 "k8s_node" | "k8s_container" => "clusters",
                 "cloudsql_database" => "sql",
                 "redis_instance" => "redis",
+                "redis.googleapis.com/Cluster" => "redis-clusters",
                 "memorystore.googleapis.com/Instance" => "valkey",
                 "pubsub_subscription" => "pubsub-subscriptions",
+                "pubsub_topic" => "pubsub-topics",
                 "cloud_run_revision" => "cloud-run",
                 "gcs_bucket" => "buckets",
                 "gce_instance" => "instances",
                 _ => return false,
             };
-            if job.check == Check::Queues && family != "pubsub-subscriptions" {
+            if job.check == Check::Queues
+                && !matches!(family, "pubsub-subscriptions" | "pubsub-topics")
+            {
                 return false;
             }
             result.operations.iter().any(|operation| {
@@ -57,6 +64,9 @@ pub async fn collect<S: Source>(source: &S, job: &Job, cancel: &CancellationToke
         .map(|mut query| {
             if query.name == "pubsub-age" {
                 query.error = job.settings.queue_age_error;
+            }
+            if query.name == "run-latency-ms" {
+                query.error = job.settings.latency_error_ms;
             }
             query
         })

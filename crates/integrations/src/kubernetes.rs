@@ -110,8 +110,20 @@ impl Kubernetes {
                                 break;
                             }
                             let projected = super::kube_projection::project(job, kind, item);
-                            count += projected.len();
-                            result.observations.extend(projected);
+                            let available = job
+                                .settings
+                                .max_assets
+                                .saturating_sub(result.observations.len());
+                            if projected.len() > available {
+                                outcome = Err(Error::Limit);
+                            }
+                            count += projected.len().min(available);
+                            result
+                                .observations
+                                .extend(projected.into_iter().take(available));
+                            if outcome.is_err() {
+                                break;
+                            }
                         }
                         if outcome.is_err() {
                             break;

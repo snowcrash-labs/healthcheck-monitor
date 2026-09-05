@@ -29,3 +29,18 @@ fn credential_files_and_discovery_profiles_are_explicit() {
     assert!(Config::parse(&config("[credentials.google]\nprovider='gcp'\ncredential_file='/tmp/credentials.json'\n[[discovery]]\nprovider='gcp'\nscope='organizations/123'\ncredential='google'")).is_ok());
     assert!(Config::parse(&config("[credentials.azure]\nprovider='azure'\n[[discovery]]\nprovider='gcp'\nscope='organizations/123'\ncredential='azure'")).is_err());
 }
+#[test]
+fn nats_credentials_cannot_be_embedded_in_urls() {
+    for url in [
+        "tls://server:4222?token=private",
+        "tls://server:4222/#private",
+        "tls://server:4222/private",
+        "tls:server",
+        "nats://user:password@server:4222",
+    ] {
+        let text = format!(
+            "version=1\n[[targets]]\nname='nats'\nprovider='nats'\nscope='nats'\nnats_url='{url}'"
+        );
+        assert!(monitor_core::config::types::Config::parse(&text).is_err());
+    }
+}

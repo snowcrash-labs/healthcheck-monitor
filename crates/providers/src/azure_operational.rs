@@ -109,8 +109,8 @@ pub fn project(job: &Job, endpoint: &Endpoint, value: &Value) -> Option<Vec<Obse
         }
         "quotas" => Data::Metric {
             name: text(value, &["/name/value"]).unwrap_or("quota").into(),
-            value: number(value, &["/currentValue"])?,
-            capacity: number(value, &["/limit"]).filter(|limit| *limit > 0.0),
+            value: number(value, &["/currentValue", "/properties/currentValue"])?,
+            capacity: number(value, &["/limit", "/properties/limit"]).filter(|limit| *limit > 0.0),
             warning: None,
             error: None,
             window_seconds: 0,

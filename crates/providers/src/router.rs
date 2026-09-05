@@ -20,6 +20,7 @@ use tokio::sync::{Mutex, RwLock};
 use tokio_util::sync::CancellationToken;
 
 pub(crate) struct Scope {
+    revision: String,
     log_dedupe: Mutex<Option<Arc<monitor_integrations::log_dedup::Dedupe>>>,
     pub(crate) inventory: crate::inventory_cache::InventoryCache,
     pub(crate) http: Http,
@@ -95,6 +96,7 @@ impl Router {
             return Err(Error::Limit);
         }
         let scope = Arc::new(Scope {
+            revision: job.revision.clone(),
             log_dedupe: Mutex::new(None),
             inventory: crate::inventory_cache::InventoryCache::new(
                 job.settings.ready_queue,
@@ -236,6 +238,7 @@ impl Collector for Router {
                 .scopes
                 .read_async(&job.target.name, |_, scope| scope.clone())
                 .await
+            && scope.revision == job.revision
         {
             if job.check == Check::Kubernetes
                 || job.kube_only
@@ -247,7 +250,9 @@ impl Collector for Router {
                 scope.inventory.tokens.clear().await;
             }
         }
-        if job.continuous
+        let revision = self.revision.read().await;
+        if *revision == job.revision
+            && job.continuous
             && job.check == Check::Logs
             && crate::log_cursor::complete(&result)
             && let Some(end) = selected.log_end

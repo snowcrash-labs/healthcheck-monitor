@@ -159,6 +159,15 @@ pub trait Source: Send + Sync {
         cancel: &CancellationToken,
     ) -> impl std::future::Future<Output = Result<Value, Error>> + Send;
 }
+pub(crate) fn cache_key(job: &Job, endpoint: &Endpoint) -> String {
+    sha2::Sha256::digest(format!(
+        "{}:{}:{}:{:?}",
+        job.revision, endpoint.id, endpoint.url, endpoint.body
+    ))
+    .iter()
+    .map(|byte| format!("{byte:02x}"))
+    .collect()
+}
 
 pub(crate) struct NativeSource<'a> {
     pub dedupe: Option<&'a monitor_integrations::log_dedup::Dedupe>,
@@ -201,13 +210,7 @@ pub async fn collect_from<S: Source>(
     let mut pending: VecDeque<_> = endpoints.into();
     let mut visited = BTreeSet::new();
     while let Some(endpoint) = pending.pop_front() {
-        let key: String = sha2::Sha256::digest(format!(
-            "{}:{}:{}:{:?}",
-            job.revision, endpoint.id, endpoint.url, endpoint.body
-        ))
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect();
+        let key = cache_key(job, &endpoint);
         if !visited.insert(key.clone()) {
             continue;
         }

@@ -2,7 +2,11 @@
 use crate::{config::resolve::Job, model::*};
 use std::collections::BTreeSet;
 pub fn retain(job: &Job, snapshot: &Snapshot, result: &mut CheckResult) {
-    if result.complete() {
+    if result
+        .operations
+        .iter()
+        .all(|operation| operation.coverage == Coverage::Complete)
+    {
         return;
     }
     let Some(previous) = snapshot.results.get(&job.key) else {

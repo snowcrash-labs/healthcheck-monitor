@@ -1,22 +1,77 @@
 //! Automatic metric presets; business thresholds remain operator supplied.
-use monitor_core::config::types::MetricQuery;
+use monitor_core::config::types::{Aggregation, MetricQuery};
 use std::collections::BTreeMap;
 pub fn gcp() -> Vec<MetricQuery> {
     GCP.iter()
         .map(|(name, namespace, metric, capacity)| MetricQuery {
-            aggregation: Default::default(),
+            aggregation: if capacity.is_some() {
+                Aggregation::Minimum
+            } else if matches!(
+                *name,
+                "pubsub-delivery"
+                    | "pubsub-dead-letters"
+                    | "pubsub-published"
+                    | "run-requests"
+                    | "storage-requests"
+            ) {
+                Aggregation::Sum
+            } else {
+                Aggregation::Latest
+            },
             name: (*name).into(),
             namespace: (*namespace).into(),
             metric: (*metric).into(),
             resource: (*name).into(),
             dimensions: BTreeMap::new(),
             capacity: *capacity,
-            warning: None,
+            warning: (*name == "pubsub-dead-letters").then_some(1.0),
             error: None,
         })
         .collect()
 }
 const GCP: &[(&str, &str, &str, Option<f64>)] = &[
+    (
+        "redis-cluster-memory",
+        "redis.googleapis.com/Cluster",
+        "redis.googleapis.com/cluster/memory/maximum_utilization",
+        Some(1.0),
+    ),
+    (
+        "redis-cluster-cpu",
+        "redis.googleapis.com/Cluster",
+        "redis.googleapis.com/cluster/cpu/maximum_utilization",
+        Some(1.0),
+    ),
+    (
+        "redis-cluster-headroom",
+        "redis.googleapis.com/Cluster",
+        "redis.googleapis.com/cluster/memory/size",
+        None,
+    ),
+    (
+        "redis-cluster-replication-lag",
+        "redis.googleapis.com/Cluster",
+        "redis.googleapis.com/cluster/replication/maximum_ack_lag",
+        None,
+    ),
+    (
+        "pubsub-published",
+        "pubsub_topic",
+        "pubsub.googleapis.com/topic/send_message_operation_count",
+        None,
+    ),
+    (
+        "pubsub-dead-letters",
+        "pubsub_subscription",
+        "pubsub.googleapis.com/subscription/dead_letter_message_count",
+        None,
+    ),
+    (
+        "run-latency-ms",
+        "cloud_run_revision",
+        "run.googleapis.com/request_latencies",
+        None,
+    ),
     (
         "valkey-memory",
         "memorystore.googleapis.com/Instance",

@@ -111,3 +111,85 @@ fn valkey_and_redis_clusters_use_separate_apis_and_global_metadata_ids_are_stabl
     );
     Ok(())
 }
+#[test]
+fn queue_gauges_keep_the_latest_value_while_capacity_uses_a_sustained_minimum()
+-> Result<(), Box<dyn std::error::Error>> {
+    use monitor_core::config::types::Aggregation;
+    let queries = monitor_providers::metric_catalog::gcp();
+    let queue = queries
+        .iter()
+        .find(|query| query.name == "pubsub-backlog")
+        .ok_or("missing backlog")?;
+    let capacity = queries
+        .iter()
+        .find(|query| query.name == "redis-cluster-memory")
+        .ok_or("missing cluster memory")?;
+    assert!(matches!(queue.aggregation, Aggregation::Latest));
+    assert!(matches!(capacity.aggregation, Aggregation::Minimum));
+    let now = Utc::now();
+    let observation = monitor_providers::metric_window::project(
+        &job()?,
+        queue,
+        "subscription",
+        vec![(now - Duration::minutes(10), 0.0), (now, 12.0)],
+    )?;
+    assert!(matches!(
+        observation.data,
+        Data::Metric {
+            value: 12.0,
+            window_seconds: 0,
+            ..
+        }
+    ));
+    Ok(())
+}
+#[tokio::test]
+async fn latency_distributions_require_samples_and_failure_series_have_explicit_thresholds()
+-> Result<(), Box<dyn std::error::Error>> {
+    let now = Utc::now();
+    for (name, value, code, complete) in [
+        (
+            "run-latency-ms",
+            json!({"distributionValue":{"count":"2","mean":125.0}}),
+            "200",
+            true,
+        ),
+        (
+            "run-latency-ms",
+            json!({"distributionValue":{"count":"0","mean":0.0}}),
+            "200",
+            false,
+        ),
+        ("run-requests", json!({"int64Value":"3"}), "503", true),
+    ] {
+        let mut job = job()?;
+        job.target.metrics = monitor_providers::metric_catalog::gcp()
+            .into_iter()
+            .filter(|query| query.name == name)
+            .collect();
+        let query = job.target.metrics.first().ok_or("missing preset")?;
+        let pages = Pages(Mutex::new(VecDeque::from([
+            json!({"timeSeries":[{"resource":{"type":query.namespace,"labels":{"service_name":"api"}},"metric":{"type":query.metric,"labels":{"response_code":code}},"points":[{"interval":{"endTime":now.to_rfc3339()},"value":value}]}]}),
+        ])));
+        let result = metrics::gcp_from(&pages, &job, &CancellationToken::new()).await;
+        assert_eq!(result.complete(), complete);
+        if name == "run-requests" {
+            assert!(matches!(
+                result.observations[0].data,
+                Data::Metric {
+                    value: 3.0,
+                    warning: Some(1.0),
+                    ..
+                }
+            ));
+        } else if complete {
+            assert!(matches!(
+                result.observations[0].data,
+                Data::Metric { value: 125.0, .. }
+            ));
+        } else {
+            assert!(result.observations.is_empty());
+        }
+    }
+    Ok(())
+}

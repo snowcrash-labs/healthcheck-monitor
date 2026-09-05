@@ -253,7 +253,8 @@ pub fn evaluate(
             }
             return result(Health::Unknown);
         }
-        Data::NetworkPolicy { .. }
+        Data::Activity { .. }
+        | Data::NetworkPolicy { .. }
         | Data::KeyMetadata { .. }
         | Data::Maintenance { .. }
         | Data::Registry { .. }

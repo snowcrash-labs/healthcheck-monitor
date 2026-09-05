@@ -10,6 +10,7 @@ use std::collections::BTreeMap;
 use tokio_util::sync::CancellationToken;
 struct Series {
     labels: String,
+    warning: Option<f64>,
     points: Vec<(DateTime<Utc>, f64)>,
 }
 pub async fn collect<S: Source>(
@@ -104,6 +105,27 @@ pub async fn collect<S: Source>(
             }
             let entry = series.entry(id).or_insert(Series {
                 labels,
+                warning: row
+                    .metric
+                    .as_ref()
+                    .and_then(|metric| metric.labels.get("response_code"))
+                    .and_then(|code| {
+                        let failure = match query.name.as_str() {
+                            "run-requests" | "storage-requests" => {
+                                code.parse::<u16>().is_ok_and(|code| code >= 500)
+                            }
+                            "pubsub-delivery" => matches!(
+                                code.as_str(),
+                                "deadline_exceeded"
+                                    | "invalid"
+                                    | "remote_server_4xx"
+                                    | "remote_server_5xx"
+                                    | "unreachable"
+                            ),
+                            _ => false,
+                        };
+                        failure.then_some(1.0)
+                    }),
                 points: Vec::new(),
             });
             for point in row.points {
@@ -122,6 +144,7 @@ pub async fn collect<S: Source>(
                         .or_else(|| {
                             value
                                 .distribution_value()
+                                .filter(|distribution| distribution.count > 0)
                                 .map(|distribution| distribution.mean)
                         })?;
                     value.is_finite().then_some((at, value))
@@ -163,9 +186,13 @@ pub async fn collect<S: Source>(
     }
     let mut observations = Vec::new();
     for (id, series) in series {
+        let mut query = query.clone();
+        if query.warning.is_none() {
+            query.warning = series.warning;
+        }
         match crate::metric_window::project(
             job,
-            query,
+            &query,
             &format!("{id}/{}", series.labels),
             series.points,
         ) {
