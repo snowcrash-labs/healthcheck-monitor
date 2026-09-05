@@ -17,6 +17,8 @@ See the [operations runbook](docs/plans/2026-09-05-monitor-operations.md) for co
 
 The [persistent service and dashboard assessment](docs/plans/2026-09-05-health-dashboard-assessment.md) describes the proposed server/frontend architecture, implementation effort, operational requirements and comparison with Datadog.
 
-The toolchain is stable Rust with the prebuilt standard library. The workspace passes 225 tests, formatting and Clippy on macOS and Linux ARM64. Development checks use `cargo test --workspace`, `cargo fmt --all --check`, and `cargo clippy --workspace --all-targets -- -D warnings`. Dependency updates use `cargo upgrade --incompatible`; dependency auditing uses `cargo audit`.
+The [release/Python benchmark](docs/plans/2026-09-05-release-python-benchmark.md) records live wall time, CPU time and process-tree memory measurements, scope differences, and reproduction commands.
+
+The toolchain is stable Rust with the prebuilt standard library. The monitoring implementation was verified with 225 tests, formatting and Clippy on macOS and Linux ARM64. The benchmark utility adds six tests verified on macOS. Development checks use `cargo test --workspace`, `cargo fmt --all --check`, and `cargo clippy --workspace --all-targets -- -D warnings`. Dependency updates use `cargo upgrade --incompatible`; dependency auditing uses `cargo audit`.
 
 No infrastructure mutations, notifications, synthetic transactions, application database connections, secret-value reads, queue-message consumption, or response-body collection for endpoint probes are part of this service.

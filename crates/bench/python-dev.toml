@@ -1,0 +1,32 @@
+standalone_projects = []
+
+[github]
+owner = "snowcrash-labs"
+backend_repository = "sc-hiro-backend"
+backend_ref = "dev"
+core_repositories = ["sc-hiro-backend"]
+
+[platform]
+organization_id = "1061245904102"
+monitoring_scope_project = "sc-devops-root"
+
+[collection]
+log_freshness = "1h"
+log_limit = 500
+runtime_failure_freshness = "24h"
+runtime_failure_limit = 250
+queue_sample_count = 1
+queue_sample_interval_seconds = 30
+max_concurrency = 4
+command_timeout_seconds = 90
+region = "us-central1"
+recent_build_limit = 50
+
+[[environments]]
+name = "dev"
+project_id = "dev-sc-transcription-fa62"
+cluster_name = "dev-sc-transcription-gke"
+cluster_location = "us-central1"
+kubectl_context = "gke_dev-sc-transcription-fa62_us-central1_dev-sc-transcription-gke"
+expected_state = "active"
+collect_nats = false

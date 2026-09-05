@@ -1,0 +1,43 @@
+# Rust release and original Python benchmark
+
+The existing Rust release used substantially less CPU time and peak process-tree RSS, but completed these live checks more slowly than the original Python implementation. These are measurements of the implementations and their dependencies, not an isolated comparison of programming languages.
+
+Measurements ran on September 5, 2026, with Rust evidence captured from 17:13:22 through 17:15:16 UTC. The machine was an Apple M4 Max with 14 logical CPUs and 36 GiB RAM, running macOS 27.0 build 26A5368g. Other workstation applications remained running. The supplied ARM64 release executable was used without rebuilding or modifying it. Its SHA-256 was `3dcc929fb2d85047f3ac81ca01f95720aa04cc576977e6de69663a0a5ab5c629`, verified before and after measurement. Python was 3.14.4, uv was 0.12.9, and kubectl was v1.37.0 for darwin/arm64.
+
+Each case has five measured trials after one excluded warm-up. Execution order alternated between rounds, each trial started a fresh process and output directory, and the two implementations did not run concurrently. Compilation and dependency setup were outside the measured interval. No release build was performed; the measurement utility was built in the development profile.
+
+System DNS, credential and kubectl discovery caches were left warm, including activity from the discarded sampler trial series. These results measure fresh invocations on an already-used workstation, not a machine with cold caches.
+
+| Check | Implementation | Median wall time | Median CPU time, user + system | Median peak summed RSS |
+|---|---|---:|---:|---:|
+| Kubernetes state | Original Python | 4.436 s | 1.863 s | 328.95 MiB |
+| Kubernetes state | Rust release | 6.777 s | 0.320 s | 62.67 MiB |
+| KEDA queues, one observation | Original Python | 2.658 s | 2.247 s | 265.27 MiB |
+| KEDA queues, one observation | Rust release | 5.502 s | 0.263 s | 62.06 MiB |
+
+For Kubernetes, Rust used 82.8% less CPU and 80.9% less sampled peak RSS, with 1.53 times the wall time. For queues, Rust used 88.3% less CPU and 76.6% less sampled peak RSS, with 2.07 times the wall time. Wall-time ranges were 4.352-4.549 seconds for Python Kubernetes, 6.637-8.049 seconds for Rust Kubernetes, 2.545-2.776 seconds for Python queues, and 5.356-5.593 seconds for Rust queues. The [measurement data](2026-09-05-release-python-benchmark.json) includes every measured trial and min/median/max summaries.
+
+Both versions selected the `dev` environment and context `gke_dev-sc-transcription-fa62_us-central1_dev-sc-transcription-gke`, with a concurrency ceiling of four. Queue sampling was one observation, so neither implementation waited through the original two-minute sampling window. NATS was disabled in both configurations: the original Python collector additionally runs consumer reports, while the Rust utility fallback only collects stream aggregates. A comparison including those paths would measure different diagnostic depth. The original source, configuration and lockfile checksums remained unchanged; benchmark configurations live separately in [python-dev.toml](../../crates/bench/python-dev.toml) and [rust-dev.toml](../../crates/bench/rust-dev.toml).
+
+The logical checks overlap, but their exact work is different. Python Kubernetes starts five kubectl commands covering nine resource kinds. Rust queries sixteen kinds, including ReplicaSets, HPA, routes, certificates and ExternalSecrets, and evaluates its broader policy set. The measured Rust Kubernetes runs issued 32 paginated reads; an unavailable optional HTTPRoute API remained explicit. Rust queue prerequisites read seven kinds, including ReplicaSets and DaemonSets for ownership and consumer correlation; Python reads five kinds through four initial commands. Both queue implementations returned eighteen successful KEDA metric observations in every measured trial. The live cluster changed during measurement, including pod, node and warning-event counts.
+
+Every required Rust read and every Python command completed successfully. No trial timed out, reported incomplete memory sampling, or encountered a Rust persistence failure. Rust Kubernetes returned exit 1 because of health findings; Python Kubernetes returned 0 under its different exit and evaluation rules. Both queue implementations returned 0. Nonzero health status was retained and did not invalidate a timing sample. This result does not claim identical findings or whole-fleet health coverage.
+
+The wall-time result follows the current adapter design. [Kubernetes collection](../../crates/integrations/src/kubernetes.rs) awaits resource kinds and their pages sequentially, and [KEDA collection](../../crates/integrations/src/queues.rs) awaits each metric read sequentially. The [original Python runner](../../../memos/system-health/src/system_health/runner.py) permits four concurrent subprocesses. Native transport reduces local CPU and process overhead, but it does not compensate for serialized network waits and the additional Rust collection work in these cases. Parallelizing independent reads under the existing concurrency budget is a useful next experiment; it was not applied to the supplied binary or these results.
+
+The [measurement utility](../../crates/bench/src/main.rs) measures monotonic elapsed time and obtains process resource usage through `wait4`, including descendants waited for by uv, Python and helper processes. It samples the entire descendant tree through macOS libproc, sleeping ten milliseconds between samples. The effective interval also includes sampler work. Python's median peak process count was seven for Kubernetes and ten for queues; Rust's was one, with up to two observed concurrently. Summed RSS includes shared pages in each process and is not a measurement of unique physical memory. Short-lived processes or brief allocation peaks can fall between samples. These are one-off peaks, not a sustained-watch memory-growth benchmark.
+
+The original Python serializer writes full Kubernetes objects, including workload environment fields. To preserve the source while avoiding their persistence, its expected temporary JSON path was a FIFO. The unmodified collector and serializer ran normally; a separate reader drained the stream and retained only resource counts and command status/timing metadata. No raw provider payload was written to disk. Rust used its ordinary snapshot and Markdown publication. Consequently Python avoided regular-file I/O, and the reader's CPU and memory are excluded from the measured command tree. This modestly favors Python's output path and is another reason not to interpret the results as language-only speed ratios.
+
+An initial sampler treated `proc_listchildpids` as returning bytes and missed descendants. Its trial series was discarded in full. A regression test failed with that implementation and passed after correcting the return units. Apple's [libproc implementation](https://github.com/apple-oss-distributions/xnu/blob/main/libsyscall/wrappers/libproc/libproc.c) converts the byte count to a PID count in this wrapper. The reported series reran all warm-ups and trials after the correction. Six utility tests cover descendant RSS, current-process RSS, nonzero exit measurement, timeout cleanup, FIFO publication and sensitive-field exclusion. These utility tests were run on macOS; their Linux path was not live-validated in this benchmark.
+
+To reproduce from the repository root, retain the existing release executable, ensure the original Python environment is already installed, set a new output directory in [dev-plan.toml](../../crates/bench/dev-plan.toml), and run:
+
+```text
+rtk proxy cargo build -p monitor-bench
+rtk proxy target/debug/monitor-bench crates/bench/dev-plan.toml
+```
+
+The utility refuses to reuse trial output directories. Original Python commands use `uv run --frozen --no-sync --no-python-downloads` with `PYTHONDONTWRITEBYTECODE=1`. Raw benchmark records and sanitized Rust snapshots remain under `evidence/release-python-benchmark-verified/`; the abandoned sampler output under `evidence/release-python-benchmark/` is not used. The original-source checksum manifest is `evidence/release-python-benchmark/source-inputs.sha256`, whose SHA-256 is `4211b229e7647b1867ec9cf429807581afb8be3d784d251ccd470dfa0b1a1207`.
+
+This benchmark excludes cloud-domain comparisons because the Python gcloud credentials and Rust ADC availability differ. It also excludes GitHub, NATS consumer diagnostics, full-suite scheduling, and long-running server behavior. The result supports a concrete resource-efficiency advantage for these native collectors; it does not establish a general wall-time speedup over the original tool.

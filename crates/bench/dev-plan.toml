@@ -1,0 +1,22 @@
+output = "evidence/release-python-benchmark-verified"
+warmups = 1
+runs = 5
+timeout_seconds = 180
+
+[[variants]]
+name = "rust-kubernetes"
+command = ["target/release/healthcheck-monitor", "run", "--config", "crates/bench/rust-dev.toml", "--target", "dev", "--check", "kubernetes", "--samples", "1", "--output", "{output}"]
+
+[[variants]]
+name = "python-kubernetes"
+legacy_json = "kubernetes.json"
+command = ["uv", "run", "--project", "../memos/system-health", "--frozen", "--no-sync", "--no-python-downloads", "system-health", "--config", "crates/bench/python-dev.toml", "--output", "{output}", "--strict", "kubernetes"]
+
+[[variants]]
+name = "rust-queues"
+command = ["target/release/healthcheck-monitor", "run", "--config", "crates/bench/rust-dev.toml", "--target", "dev", "--check", "queues", "--samples", "1", "--output", "{output}"]
+
+[[variants]]
+name = "python-queues"
+legacy_json = "queues.json"
+command = ["uv", "run", "--project", "../memos/system-health", "--frozen", "--no-sync", "--no-python-downloads", "system-health", "--config", "crates/bench/python-dev.toml", "--output", "{output}", "--strict", "queues"]

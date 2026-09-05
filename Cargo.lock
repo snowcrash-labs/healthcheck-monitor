@@ -2821,6 +2821,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "monitor-bench"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "serde",
+ "serde_json",
+ "toml",
+]
+
+[[package]]
 name = "monitor-core"
 version = "0.1.0"
 dependencies = [
