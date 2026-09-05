@@ -5,6 +5,10 @@ use std::collections::BTreeSet;
 impl Settings {
     pub fn validate(&self) -> Result<(), Error> {
         let invalid = self.jitter_percent > 50
+            || self.log_dedup_entries == 0
+            || self.log_dedup_entries > 200000
+            || self.log_overlap > self.log_window
+            || self.log_overlap > self.runtime_window
             || self.concurrency == 0
             || self.concurrency > 256
             || self.scope_concurrency == 0

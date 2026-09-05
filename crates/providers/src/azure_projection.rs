@@ -26,3 +26,26 @@ pub fn graph(job: &Job, endpoint: &Endpoint, value: &Value) -> Vec<Observation> 
         supported: false,
     })]
 }
+
+pub fn workspace(job: &Job, endpoint: &Endpoint, value: &Value) -> Vec<Observation> {
+    if let (Some(workspace_id), Some(resource_id)) = (
+        text(value, &["/properties/customerId"]),
+        text(value, &["/id"]),
+    ) && workspace_id.len() == 36
+        && workspace_id
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() || byte == b'-')
+        && crate::azure_metric_discovery::valid_resource(job, resource_id)
+    {
+        return vec![observation(
+            job,
+            &endpoint.id,
+            resource_id,
+            Data::LogWorkspace {
+                workspace_id: workspace_id.into(),
+                resource_id: resource_id.into(),
+            },
+        )];
+    }
+    vec![]
+}

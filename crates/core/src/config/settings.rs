@@ -24,6 +24,8 @@ pub struct Settings {
     pub page_size: usize,
     pub max_series: usize,
     pub log_window: Span,
+    pub log_overlap: Span,
+    pub log_dedup_entries: usize,
     pub log_entries: usize,
     pub runtime_window: Span,
     pub runtime_entries: usize,
@@ -70,6 +72,8 @@ impl Default for Settings {
             page_size: 100,
             max_series: 1000,
             log_window: Span(3600),
+            log_overlap: Span(120),
+            log_dedup_entries: 4096,
             log_entries: 500,
             runtime_window: Span(86400),
             runtime_entries: 250,
@@ -99,6 +103,12 @@ pub use super::patch::SettingsPatch;
 impl Settings {
     /// Apply only explicitly provided values.
     pub fn overlay(&mut self, patch: &SettingsPatch) {
+        if let Some(value) = patch.log_dedup_entries {
+            self.log_dedup_entries = value;
+        }
+        if let Some(value) = patch.log_overlap {
+            self.log_overlap = value;
+        }
         if let Some(value) = patch.certificate_warning {
             self.certificate_warning = value;
         }

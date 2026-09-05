@@ -67,6 +67,7 @@ pub async fn collect(
     if job.check == Check::Metrics || job.check == Check::Queues {
         return crate::azure_metrics::collect_from(
             &common::NativeSource {
+                dedupe: None,
                 http,
                 auth,
                 cache: Some(cache),

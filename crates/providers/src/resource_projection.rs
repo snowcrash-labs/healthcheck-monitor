@@ -4,23 +4,7 @@ use monitor_core::{config::resolve::Job, model::*};
 use monitor_integrations::projection::{self, boolean, number, observation, text, timestamp};
 use serde_json::Value;
 
-pub fn rows<'a>(payload: &'a Value, path: &str) -> Vec<&'a Value> {
-    match payload.pointer(path) {
-        Some(Value::Array(values)) => values.iter().collect(),
-        Some(Value::Object(values)) if path == "/items" => values
-            .values()
-            .flat_map(|v| {
-                v.as_object()
-                    .into_iter()
-                    .flat_map(|m| m.values())
-                    .filter_map(Value::as_array)
-                    .flatten()
-            })
-            .collect(),
-        Some(value) if value.is_object() => vec![value],
-        _ => vec![],
-    }
-}
+pub use crate::projection_rows::rows;
 pub fn project(job: &Job, endpoint: &Endpoint, value: &Value) -> Vec<Observation> {
     let mut result = project_data(job, endpoint, value);
     if let Some(url) = crate::advertisements::endpoint(endpoint, value) {
@@ -34,6 +18,9 @@ pub fn project(job: &Job, endpoint: &Endpoint, value: &Value) -> Vec<Observation
     result
 }
 fn project_data(job: &Job, endpoint: &Endpoint, value: &Value) -> Vec<Observation> {
+    if endpoint.id == "log-workspaces" {
+        return crate::azure_projection::workspace(job, endpoint, value);
+    }
     if job.target.provider == Provider::Aws
         && let Some(observations) = crate::aws_projection::project(job, endpoint, value)
     {

@@ -76,16 +76,8 @@ pub async fn execute(cli: Cli) -> Result<u8, Error> {
                 .credentials
                 .get(&profile)
                 .ok_or_else(|| Error::Config("unknown credential profile".into()))?;
-            let helper = monitor_integrations::process::Helper::Login {
-                credential: credential.clone(),
-            };
             monitor_integrations::process::Processes::new(1)
-                .run(
-                    helper,
-                    64 * 1024,
-                    std::time::Duration::from_secs(300),
-                    &tokio_util::sync::CancellationToken::new(),
-                )
+                .login(credential.clone(), std::time::Duration::from_secs(300))
                 .await
                 .map_err(|_| Error::Config("authentication helper failed".into()))?;
             Ok(0)

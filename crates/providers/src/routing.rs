@@ -176,6 +176,26 @@ impl Router {
             return Ok(result);
         }
         let auth = self.auth(job, &scope).await?;
+        if job.check == Check::Logs {
+            let dedupe = self.log_dedupe(job, &scope).await;
+            let source = crate::common::NativeSource {
+                http: &scope.http,
+                auth: &auth,
+                cache: Some(&scope.inventory),
+                dedupe: dedupe.as_deref(),
+            };
+            return Ok(match job.target.provider {
+                Provider::Gcp => crate::gcp_logs::collect_from(&source, job, cancel).await,
+                Provider::Aws => crate::aws_logs::collect_from(&source, job, cancel).await,
+                Provider::Azure => crate::azure_logs::collect_from(&source, job, cancel).await,
+                _ => CheckResult::failure(
+                    job.target.name.clone(),
+                    job.check,
+                    job.revision.clone(),
+                    Coverage::Unsupported,
+                ),
+            });
+        }
         if job.check == Check::Discovery {
             let roots = self.config.read().await.discovery.clone();
             return Ok(crate::discovery::collect(&scope.http, &auth, job, &roots, cancel).await);

@@ -264,14 +264,22 @@ pub fn evaluate(
             }
         }
         Data::Log {
-            signature, count, ..
+            signature,
+            count,
+            sampled,
+            ..
         } => {
             if *signature != LogClass::Warning && *count > 0 {
                 return warning("runtime-failure-sample");
             }
+            if *count == 0 && !sampled {
+                return result(Health::Healthy);
+            }
             return result(Health::Unknown);
         }
-        Data::MetricResource { .. }
+        Data::LogWorkspace { .. }
+        | Data::LogWindow { .. }
+        | Data::MetricResource { .. }
         | Data::Quota { .. }
         | Data::Inventory { .. }
         | Data::Scaler { .. }

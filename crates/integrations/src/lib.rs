@@ -5,6 +5,8 @@ pub mod github;
 pub mod kube_links;
 pub mod kube_projection;
 pub mod kubernetes;
+pub mod log_dedup;
+pub mod log_window;
 pub mod logs;
 pub mod nats;
 pub mod process;

@@ -77,7 +77,14 @@ async fn request_inner(
                 .header("content-type", "application/x-amz-json-1.1");
         }
     } else {
-        builder = builder.bearer_auth(auth.bearer().await?);
+        builder = builder.bearer_auth(
+            auth.bearer_for(
+                endpoint
+                    .url
+                    .starts_with("https://api.loganalytics.azure.com/"),
+            )
+            .await?,
+        );
     }
     let mut request = builder.build().map_err(|_| Error::Malformed)?;
     if let Some((service, region, _)) = &endpoint.aws {
@@ -93,6 +100,7 @@ pub async fn collect(
     cancel: &CancellationToken,
 ) -> CheckResult {
     let source = NativeSource {
+        dedupe: None,
         http,
         auth,
         cache: None,
@@ -101,6 +109,9 @@ pub async fn collect(
 }
 
 pub trait Source: Send + Sync {
+    fn dedupe(&self) -> Option<&monitor_integrations::log_dedup::Dedupe> {
+        None
+    }
     fn cache(&self) -> Option<&crate::inventory_cache::InventoryCache> {
         None
     }
@@ -113,11 +124,15 @@ pub trait Source: Send + Sync {
 }
 
 pub(crate) struct NativeSource<'a> {
+    pub dedupe: Option<&'a monitor_integrations::log_dedup::Dedupe>,
     pub http: &'a Http,
     pub auth: &'a Auth,
     pub cache: Option<&'a crate::inventory_cache::InventoryCache>,
 }
 impl Source for NativeSource<'_> {
+    fn dedupe(&self) -> Option<&monitor_integrations::log_dedup::Dedupe> {
+        self.dedupe
+    }
     fn cache(&self) -> Option<&crate::inventory_cache::InventoryCache> {
         self.cache
     }
@@ -227,6 +242,7 @@ pub async fn collect_cached(
 ) -> CheckResult {
     collect_from(
         &NativeSource {
+            dedupe: None,
             http,
             auth,
             cache: Some(cache),

@@ -47,6 +47,9 @@ pub async fn monitor(config_path: &Path, options: Options, mode: Mode) -> Result
         state.begin_run();
     }
     let router = Arc::new(Router::new(config, settings.subprocesses));
+    if matches!(mode, Mode::Watch { .. }) {
+        router.restore_logs(&state.snapshot).await;
+    }
     let stop = CancellationToken::new();
     let (updates, receiver) = watch::channel(effective.clone());
     let (sender, mut results) = mpsc::channel(settings.concurrency);

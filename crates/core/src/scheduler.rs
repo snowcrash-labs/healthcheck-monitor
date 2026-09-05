@@ -99,7 +99,8 @@ pub async fn drive<C: Collector + 'static>(
             }
             running.insert(entry.job.key.clone());
             *scopes.entry(scope).or_default() += 1;
-            let job = entry.job.clone();
+            let mut job = entry.job.clone();
+            job.continuous = matches!(mode, Mode::Watch { .. });
             let collector = collector.clone();
             let cancel = entry.cancel.child_token();
             let next_interval = match mode {

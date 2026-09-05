@@ -3,14 +3,8 @@ use crate::{
     auth::Auth,
     common::{self, Endpoint},
 };
-use chrono::{Duration, Utc};
 use monitor_core::{config::resolve::Job, model::*};
-use monitor_integrations::{
-    logs::Groups,
-    projection::{observation, operation, text},
-    transport::{Error, Http},
-};
-use serde_json::json;
+use monitor_integrations::transport::Http;
 use tokio_util::sync::CancellationToken;
 
 pub fn endpoints(job: &Job) -> Vec<Endpoint> {
@@ -120,125 +114,18 @@ pub async fn collect(
         return crate::metrics::gcp(http, auth, &job, cancel).await;
     }
     if job.check == Check::Logs {
-        return logs(http, auth, job, cancel).await;
+        return crate::gcp_logs::collect_from(
+            &common::NativeSource {
+                dedupe: None,
+                http,
+                auth,
+                cache: None,
+            },
+            job,
+            cancel,
+        )
+        .await;
     }
     common::collect_cached(http, auth, job, endpoints(job), cancel, cache).await
-}
-async fn logs(http: &Http, auth: &Auth, job: &Job, cancel: &CancellationToken) -> CheckResult {
-    let mut result = CheckResult::failure(
-        job.target.name.clone(),
-        job.check,
-        job.revision.clone(),
-        Coverage::Missing,
-    );
-    result.operations.clear();
-    for (id, window, limit, runtime) in [
-        (
-            "errors",
-            job.settings.log_window,
-            job.settings.log_entries,
-            false,
-        ),
-        (
-            "runtime",
-            job.settings.runtime_window,
-            job.settings.runtime_entries,
-            true,
-        ),
-    ] {
-        let since = Utc::now() - Duration::seconds(window.0 as i64);
-        let filter = format!(
-            "timestamp>=\"{}\" AND {}",
-            since.to_rfc3339(),
-            if runtime {
-                "severity>=ERROR AND (SEARCH(\"ImportError\") OR SEARCH(\"ModuleNotFoundError\") OR SEARCH(\"panic\") OR SEARCH(\"OOMKilled\"))"
-            } else {
-                "severity>=ERROR"
-            }
-        );
-        let mut endpoint = Endpoint::get(
-            id,
-            "https://logging.googleapis.com/v2/entries:list",
-            "/entries",
-        );
-        endpoint.body = Some(
-            json!({"resourceNames":[format!("projects/{}", job.target.scope)],"filter":filter,"orderBy":"timestamp desc","pageSize":limit.min(job.settings.page_size)}),
-        );
-        let mut groups = Groups::default();
-        let mut count = 0;
-        let mut outcome = Ok(0);
-        let mut pages = 0;
-        for _ in 0..job.settings.max_pages {
-            pages += 1;
-            match common::request(http, auth, &endpoint, job, cancel).await {
-                Ok(value) => {
-                    if let Some(rows) = value.get("entries").and_then(|v| v.as_array()) {
-                        for row in rows {
-                            if count >= limit {
-                                outcome = Err(Error::Limit);
-                                break;
-                            }
-                            if let Some(message) = text(
-                                row,
-                                &[
-                                    "/textPayload",
-                                    "/jsonPayload/message",
-                                    "/jsonPayload/msg",
-                                    "/protoPayload/status/message",
-                                ],
-                            ) {
-                                let time = monitor_integrations::projection::timestamp(
-                                    row,
-                                    &["/timestamp"],
-                                )
-                                .unwrap_or(result.started_at);
-                                let namespace = text(row, &["/resource/labels/namespace_name"])
-                                    .unwrap_or("project");
-                                let workload = text(
-                                    row,
-                                    &[
-                                        "/labels/k8s-pod~1app",
-                                        "/resource/labels/container_name",
-                                        "/resource/labels/service_name",
-                                        "/resource/labels/function_name",
-                                    ],
-                                )
-                                .unwrap_or("unknown");
-                                groups.add_for(&format!("{namespace}/{workload}"), message, time);
-                            }
-                            count += 1;
-                        }
-                    }
-                    let token = text(&value, &["/nextPageToken"]).unwrap_or("");
-                    if outcome.is_err() || token.is_empty() {
-                        break;
-                    }
-                    if let Some(body) = &mut endpoint.body {
-                        body["pageToken"] = json!(token);
-                    }
-                    if pages == job.settings.max_pages {
-                        outcome = Err(Error::Limit);
-                    }
-                }
-                Err(e) => {
-                    outcome = Err(e);
-                    break;
-                }
-            }
-        }
-        for (signature, data) in groups.finish_scoped() {
-            result
-                .observations
-                .push(observation(job, id, &signature, data));
-        }
-        result.operations.push(operation(
-            id,
-            outcome.map(|_| count).as_ref().copied(),
-            pages,
-            true,
-        ));
-    }
-    result.finished_at = Utc::now();
-    result
 }
 use crate::gcp_catalog::CATALOG;

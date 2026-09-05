@@ -1,8 +1,29 @@
 //! Freshness and selection lifecycle for bounded comparison state.
 use crate::{config::resolve::Job, model::*, state::State};
 use chrono::{DateTime, Utc};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 impl State {
+    pub fn new(revision: String, scope: Vec<String>) -> Self {
+        Self {
+            snapshot: Snapshot {
+                version: 1,
+                revision,
+                captured_at: Utc::now(),
+                selected_scope: scope,
+                samples: BTreeMap::new(),
+                selectors: BTreeMap::new(),
+                freshness: BTreeMap::new(),
+                results: BTreeMap::new(),
+                findings: BTreeMap::new(),
+                health: BTreeMap::new(),
+                progress: BTreeMap::new(),
+                retired: BTreeMap::new(),
+                confirmations: BTreeMap::new(),
+                persistence_fault: false,
+            },
+        }
+    }
+
     pub(crate) fn trim_retired(&mut self, limit: usize) {
         while self.snapshot.retired.len() > limit {
             let oldest = self

@@ -4,6 +4,19 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Data {
+    LogWorkspace {
+        workspace_id: String,
+        resource_id: String,
+    },
+    LogWindow {
+        gap_seconds: u64,
+        start: DateTime<Utc>,
+        end: DateTime<Utc>,
+        scanned: usize,
+        duplicates: usize,
+        limit: usize,
+        complete: bool,
+    },
     Certificate {
         issued: Option<bool>,
         expires_at: Option<DateTime<Utc>>,

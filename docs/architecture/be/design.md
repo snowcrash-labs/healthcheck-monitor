@@ -27,6 +27,8 @@ Snapshots retain observation ages, selectors, health states, active findings, bo
 
 One-off runs clear stored observation and flow baselines before collecting while keeping unresolved selected findings. Collection counts are recorded in each snapshot. Recovery/removal confirmations require distinct observation timestamps, so cached inventories do not count twice. Finding attribution preserves pending removals across reload and restart.
 
+Log queries have fixed window boundaries and a configurable overlap, initially two minutes. Each window reports scanned entries, duplicates, its cap, completeness, and missing history. Shared `scc::HashCache` fingerprint tables reserve bytes from the cache budget. Fingerprints from a batch suppress later duplicates only after its collection cursor is committed, so cancellation cannot hide evidence on retry. No original event IDs, messages, or stack payloads enter the cache. Complete replacement windows can retire historical diagnostic findings without asserting overall service health.
+
 CronJob calendars use explicit resource timezones or the configured target controller timezone. An unknown controller timezone never defaults to the workstation timezone. Completed Jobs update only their actual controller UID. Provider metrics use deterministic resource/dimension identities and explicit aggregation; Azure batches metric names and AWS reuses native CloudWatch clients. Historical backup points are consolidated by resource before recovery-age evaluation.
 
 ## Operational boundaries

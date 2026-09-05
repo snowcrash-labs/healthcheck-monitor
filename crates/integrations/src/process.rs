@@ -58,6 +58,37 @@ impl Processes {
             permits: Semaphore::new(limit),
         }
     }
+    /// Explicit authentication inherits the foreground terminal so browser/device prompts work.
+    pub async fn login(&self, credential: Credential, timeout: Duration) -> Result<(), Error> {
+        let _permit = self
+            .permits
+            .acquire()
+            .await
+            .map_err(|_| Error::Unavailable)?;
+        let (executable, args) = command(Helper::Login { credential })?;
+        let mut child = Command::new(executable)
+            .args(args)
+            .stdin(Stdio::inherit())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .kill_on_drop(true)
+            .spawn()
+            .map_err(|_| Error::Unavailable)?;
+        let outcome = tokio::select! {
+            _=tokio::signal::ctrl_c()=>Err(Error::Cancelled),
+            result=tokio::time::timeout(timeout,child.wait())=>match result {
+                Ok(Ok(status)) if status.success()=>Ok(()),
+                Ok(Ok(_))=>Err(Error::Authentication),
+                Ok(Err(_))=>Err(Error::Unavailable),
+                Err(_)=>Err(Error::Timeout),
+            }
+        };
+        if outcome.is_err() {
+            let _ = child.kill().await;
+            let _ = child.wait().await;
+        }
+        outcome
+    }
     pub async fn run(
         &self,
         helper: Helper,

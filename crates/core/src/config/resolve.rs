@@ -18,6 +18,12 @@ pub struct Selection {
 }
 #[derive(Debug, Clone, Serialize)]
 pub struct Job {
+    #[serde(skip)]
+    pub continuous: bool,
+    #[serde(skip)]
+    pub log_start: Option<chrono::DateTime<chrono::Utc>>,
+    #[serde(skip)]
+    pub log_end: Option<chrono::DateTime<chrono::Utc>>,
     pub key: String,
     pub target: Target,
     pub check: Check,
@@ -167,6 +173,9 @@ impl Config {
                     target.resources = selection.resources.clone();
                 }
                 jobs.push(Job {
+                    continuous: false,
+                    log_start: None,
+                    log_end: None,
                     key: format!("{}/{check:?}", target.name),
                     target,
                     check,

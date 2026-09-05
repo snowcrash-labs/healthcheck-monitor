@@ -1,32 +1,12 @@
 //! Bounded current state and confirmed transitions, independent of persistence.
 use crate::{config::resolve::Job, model::*, policy::evaluate};
 use chrono::{DateTime, Utc};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 pub struct State {
     pub snapshot: Snapshot,
 }
 impl State {
-    pub fn new(revision: String, scope: Vec<String>) -> Self {
-        Self {
-            snapshot: Snapshot {
-                version: 1,
-                revision,
-                captured_at: Utc::now(),
-                selected_scope: scope,
-                samples: BTreeMap::new(),
-                selectors: BTreeMap::new(),
-                freshness: BTreeMap::new(),
-                results: BTreeMap::new(),
-                findings: BTreeMap::new(),
-                health: BTreeMap::new(),
-                progress: BTreeMap::new(),
-                retired: BTreeMap::new(),
-                confirmations: BTreeMap::new(),
-                persistence_fault: false,
-            },
-        }
-    }
     /// Failed and truncated operations cannot clear findings or imply removals.
     pub fn apply(
         &mut self,
@@ -40,6 +20,8 @@ impl State {
             result = crate::flows::evaluate(&mut self.snapshot, job, now);
         }
         let mut transitions = Vec::new();
+        crate::partial_results::retain(job, &self.snapshot, &mut result);
+        crate::log_recovery::reconcile(job, &self.snapshot, &mut result);
         self.snapshot
             .freshness
             .insert(job.key.clone(), job.settings.freshness());
@@ -113,9 +95,24 @@ impl State {
                 })
             });
             let evaluation = evaluate(observation, prior, &job.settings, now);
+            let complete = result
+                .operations
+                .iter()
+                .any(|op| op.id == observation.operation && op.coverage == Coverage::Complete);
+            let health = if !complete
+                && matches!(
+                    evaluation.health,
+                    Health::Healthy | Health::ExpectedInactive
+                ) {
+                Health::Unknown
+            } else {
+                evaluation.health
+            };
             if !matches!(
                 observation.data,
-                Data::MetricResource { .. }
+                Data::LogWorkspace { .. }
+                    | Data::LogWindow { .. }
+                    | Data::MetricResource { .. }
                     | Data::Quota { .. }
                     | Data::Owner { .. }
                     | Data::Inventory { .. }
@@ -125,7 +122,7 @@ impl State {
             ) {
                 self.snapshot
                     .health
-                    .insert(observation.resource.clone(), evaluation.health);
+                    .insert(observation.resource.clone(), health);
             }
             if result
                 .operations
