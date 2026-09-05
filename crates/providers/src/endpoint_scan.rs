@@ -70,6 +70,15 @@ pub async fn fetch<S: Source>(
                         ));
                     outcome = Ok(1);
                 } else if payload.as_object().is_some_and(|m| m.is_empty())
+                    || endpoint.items == "/items"
+                        && payload
+                            .get("items")
+                            .and_then(Value::as_object)
+                            .is_some_and(|scopes| {
+                                scopes.values().all(|scope| {
+                                    text(scope, &["/warning/code"]) == Some("NO_RESULTS_ON_PAGE")
+                                })
+                            })
                     || payload.pointer(&endpoint.items).is_some_and(|v| {
                         v.as_array().is_some_and(|a| a.is_empty()) || v.as_str() == Some("")
                     })

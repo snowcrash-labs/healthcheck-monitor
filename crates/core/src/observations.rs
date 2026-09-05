@@ -197,3 +197,21 @@ pub enum LogClass {
     Warning,
     OtherError,
 }
+impl Data {
+    /// Inventory and collection metadata do not imply resource health.
+    pub fn is_health_evidence(&self) -> bool {
+        !matches!(
+            self,
+            Self::SloDefinition { .. }
+                | Self::LogWorkspace { .. }
+                | Self::LogWindow { .. }
+                | Self::MetricResource { .. }
+                | Self::Quota { .. }
+                | Self::Owner { .. }
+                | Self::Inventory { .. }
+                | Self::Identity { .. }
+                | Self::Scaler { .. }
+                | Self::AdvertisedEndpoint { .. }
+        )
+    }
+}

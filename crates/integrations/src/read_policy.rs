@@ -24,6 +24,12 @@ pub fn allowed(request: &Request) -> bool {
                 && (!path.contains("/secrets/") || path.ends_with("/versions"))
         }
         reqwest::Method::POST => {
+            if request.url().host_str() == Some("management.azure.com")
+                && path.contains("/providers/microsoft.network/applicationgateways/")
+                && path.ends_with("/backendhealth")
+            {
+                return true;
+            }
             if request.url().host_str().is_some_and(|host| {
                 host.starts_with("application-signals.") && host.ends_with(".api.aws")
             }) && matches!(path.as_str(), "/slos" | "/budget-report")

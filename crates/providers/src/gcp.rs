@@ -64,6 +64,7 @@ pub fn endpoints(job: &Job) -> Vec<Endpoint> {
                 *id,
                 "sql"
                     | "redis"
+                    | "redis-clusters"
                     | "valkey"
                     | "buckets"
                     | "kms-keyrings"
@@ -77,7 +78,7 @@ pub fn endpoints(job: &Job) -> Vec<Endpoint> {
         for region in &regions {
             if *region == "global"
                 && template.contains("{r}")
-                && !matches!(*id, "builds" | "build-triggers")
+                && !matches!(*id, "builds" | "build-triggers" | "kms-keyrings")
             {
                 continue;
             }
@@ -85,7 +86,14 @@ pub fn endpoints(job: &Job) -> Vec<Endpoint> {
                 continue;
             }
             endpoints.push(Endpoint::get(
-                format!("{id}/{region}"),
+                format!(
+                    "{id}/{}",
+                    if template.contains("{r}") {
+                        *region
+                    } else {
+                        "global"
+                    }
+                ),
                 format!(
                     "https://{}",
                     template.replace("{p}", project).replace("{r}", region)
@@ -120,11 +128,17 @@ pub async fn collect(
         .await;
     }
     if job.check == Check::Metrics || job.check == Check::Queues {
-        let mut job = job.clone();
-        if job.target.metrics.is_empty() {
-            job.target.metrics = crate::metric_catalog::gcp();
-        }
-        return crate::metrics::gcp(http, auth, &job, cancel).await;
+        return crate::gcp_metrics::collect(
+            &common::NativeSource {
+                http,
+                auth,
+                cache: Some(cache),
+                dedupe: None,
+            },
+            job,
+            cancel,
+        )
+        .await;
     }
     if job.check == Check::Logs {
         return crate::gcp_logs::collect_from(

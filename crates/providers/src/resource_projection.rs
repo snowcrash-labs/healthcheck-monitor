@@ -18,6 +18,16 @@ pub fn project(job: &Job, endpoint: &Endpoint, value: &Value) -> Vec<Observation
     result
 }
 fn project_data(job: &Job, endpoint: &Endpoint, value: &Value) -> Vec<Observation> {
+    if job.target.provider == Provider::Gcp
+        && let Some(observations) = crate::gcp_operational::project(job, endpoint, value)
+    {
+        return observations;
+    }
+    if job.target.provider == Provider::Azure
+        && let Some(observations) = crate::azure_operational::project(job, endpoint, value)
+    {
+        return observations;
+    }
     if endpoint.id.starts_with("slo-objectives/") {
         return crate::slo_projection::gcp(job, endpoint, value);
     }

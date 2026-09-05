@@ -188,6 +188,8 @@ pub struct Snapshot {
     pub captured_at: DateTime<Utc>,
     pub selected_scope: Vec<String>,
     #[serde(default)]
+    pub scope_fingerprints: BTreeMap<String, String>,
+    #[serde(default)]
     pub samples: BTreeMap<String, u32>,
     #[serde(default)]
     pub selectors: BTreeMap<String, Vec<String>>,
@@ -197,6 +199,8 @@ pub struct Snapshot {
     pub findings: BTreeMap<String, Finding>,
     #[serde(default)]
     pub health: BTreeMap<String, Health>,
+    #[serde(default)]
+    pub pressure: BTreeMap<String, crate::capacity::Pressure>,
     #[serde(default)]
     pub progress: BTreeMap<String, crate::flows::Progress>,
     #[serde(default)]

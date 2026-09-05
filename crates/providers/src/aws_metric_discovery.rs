@@ -34,7 +34,7 @@ pub async fn discover(
                         let Some(name) = metric.metric_name() else {
                             continue;
                         };
-                        let dimensions: BTreeMap<_, _> = metric
+                        let dimensions: BTreeMap<String, String> = metric
                             .dimensions()
                             .iter()
                             .filter_map(|d| d.name().zip(d.value()))
@@ -52,12 +52,17 @@ pub async fn discover(
                         let suffix = crate::metric_window::id(
                             &serde_json::json!({"namespace":namespace,"metric":name,"dimensions":dimensions}),
                         );
+                        let labels = crate::metric_identity::label_path(
+                            dimensions
+                                .iter()
+                                .map(|(key, value)| (key.as_str(), value.as_str())),
+                        );
                         metrics.push(MetricQuery {
                             aggregation: Default::default(),
                             name: format!("{namespace}/{name}/{suffix}"),
                             namespace: (*namespace).into(),
                             metric: name.into(),
-                            resource: format!("{namespace}/{name}/{suffix}"),
+                            resource: format!("{namespace}/{name}/{suffix}/{labels}"),
                             dimensions,
                             capacity: crate::metric_catalog::percent_metric(name).then_some(100.0),
                             warning: None,

@@ -158,6 +158,7 @@ fn relevant(name: &str, queues: bool) -> bool {
             "throttl",
             "health",
             "replica",
+            "load",
         ][..]
     };
     terms.iter().any(|term| name.contains(term))
@@ -188,7 +189,8 @@ fn definitions(
         if name.len() > 256 || name.contains(',') || name.chars().any(char::is_control) {
             return Err(Error::Malformed);
         }
-        let percent = text(row, &["/unit"]) == Some("Percent");
+        let percent =
+            text(row, &["/unit"]) == Some("Percent") && crate::metric_catalog::percent_metric(name);
         let supports_min = row
             .get("supportedAggregationTypes")
             .and_then(Value::as_array)

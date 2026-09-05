@@ -34,6 +34,17 @@ pub struct Job {
     pub severity: std::collections::BTreeMap<String, crate::model::Severity>,
 }
 impl Job {
+    pub fn observation_scope(&self) -> String {
+        format!(
+            "{:?}",
+            (
+                self.target.provider,
+                &self.target.scope,
+                &self.target.context,
+                &self.target.credential
+            )
+        )
+    }
     pub fn scope(&self) -> String {
         format!("{:?}/{}", self.target.provider, self.target.scope)
     }

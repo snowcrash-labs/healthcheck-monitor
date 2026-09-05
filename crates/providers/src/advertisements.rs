@@ -6,7 +6,12 @@ pub fn endpoint(source: &Endpoint, value: &Value) -> Option<String> {
     let family = source.id.split('/').next()?;
     if !matches!(
         family,
-        "cloud-run" | "load-balancers" | "cloudfront" | "container-apps" | "app-service"
+        "cloud-run"
+            | "load-balancers"
+            | "cloudfront"
+            | "container-apps"
+            | "app-service"
+            | "front-door-endpoints"
     ) {
         return None;
     }
@@ -23,6 +28,7 @@ pub fn endpoint(source: &Endpoint, value: &Value) -> Option<String> {
             "/DNSName",
             "/DomainName",
             "/properties/defaultHostName",
+            "/properties/hostName",
             "/properties/configuration/ingress/fqdn",
         ],
     )?;

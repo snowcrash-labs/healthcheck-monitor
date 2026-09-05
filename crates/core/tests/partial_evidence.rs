@@ -57,3 +57,42 @@ fn cancelled_endpoint_refresh_retains_last_observation_without_refreshing_its_ag
     assert!(!result.complete());
     Ok(())
 }
+#[test]
+fn changing_provider_scope_drops_old_baselines_without_claiming_recovery()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut job =
+        Config::parse("version=1\n[[targets]]\nname='dev'\nprovider='edge'\nscope='old'")?
+            .resolve(&Selection::default())?
+            .jobs
+            .into_iter()
+            .find(|job| job.check == Check::Edge)
+            .ok_or("job")?;
+    let at = Utc::now();
+    let mut result = CheckResult::failure(
+        "dev".into(),
+        Check::Edge,
+        job.revision.clone(),
+        Coverage::Complete,
+    );
+    result.observations.push(Observation {
+        resource: "dev/service".into(),
+        operation: "Edge".into(),
+        observed_at: at,
+        expected: Expected::Active,
+        data: Data::Condition {
+            rule: "unavailable".into(),
+            healthy: Some(false),
+        },
+    });
+    let mut state = State::new(job.revision.clone(), vec![job.key.clone()]);
+    state.apply(&job, result, at);
+    let old = state.snapshot.clone();
+    job.target.scope = "new".into();
+    job.revision = "changed".into();
+    state.retain_scope(&[job]);
+    assert!(state.snapshot.results.is_empty());
+    assert!(state.snapshot.findings.is_empty());
+    assert!(state.snapshot.health.is_empty());
+    assert!(monitor_core::report::diff(&old, &state.snapshot).is_empty());
+    Ok(())
+}

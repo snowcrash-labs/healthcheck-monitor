@@ -10,12 +10,14 @@ impl State {
                 revision,
                 captured_at: Utc::now(),
                 selected_scope: scope,
+                scope_fingerprints: BTreeMap::new(),
                 samples: BTreeMap::new(),
                 selectors: BTreeMap::new(),
                 freshness: BTreeMap::new(),
                 results: BTreeMap::new(),
                 findings: BTreeMap::new(),
                 health: BTreeMap::new(),
+                pressure: BTreeMap::new(),
                 progress: BTreeMap::new(),
                 retired: BTreeMap::new(),
                 confirmations: BTreeMap::new(),
@@ -44,6 +46,7 @@ impl State {
     pub fn begin_run(&mut self) {
         self.snapshot.results.clear();
         self.snapshot.health.clear();
+        self.snapshot.pressure.clear();
         self.snapshot.progress.clear();
         self.snapshot.confirmations.clear();
         self.snapshot.samples.clear();
@@ -92,7 +95,37 @@ impl State {
         transitions
     }
     pub fn retain_scope(&mut self, jobs: &[Job]) {
+        if jobs
+            .first()
+            .is_some_and(|job| job.revision != self.snapshot.revision)
+        {
+            self.snapshot.pressure.clear();
+            self.snapshot.progress.clear();
+        }
         for job in jobs {
+            if self
+                .snapshot
+                .scope_fingerprints
+                .get(&job.key)
+                .is_none_or(|scope| scope != &job.observation_scope())
+            {
+                self.snapshot.results.remove(&job.key);
+                self.snapshot
+                    .retired
+                    .retain(|id, _| !id.starts_with(&format!("{}/", job.target.name)));
+                self.snapshot.findings.retain(|_, finding| {
+                    !(finding
+                        .resource
+                        .starts_with(&format!("{}/", job.target.name))
+                        && finding.check.is_none_or(|check| check == job.check))
+                });
+                self.snapshot
+                    .pressure
+                    .retain(|resource, _| !resource.starts_with(&format!("{}/", job.target.name)));
+                self.snapshot
+                    .progress
+                    .retain(|resource, _| !resource.starts_with(&format!("{}/", job.target.name)));
+            }
             if self
                 .snapshot
                 .selectors
@@ -105,6 +138,10 @@ impl State {
         self.snapshot.selectors = jobs
             .iter()
             .map(|job| (job.key.clone(), job.target.resources.clone()))
+            .collect();
+        self.snapshot.scope_fingerprints = jobs
+            .iter()
+            .map(|job| (job.key.clone(), job.observation_scope()))
             .collect();
         let flow_keys: BTreeSet<_> = jobs
             .iter()
@@ -122,6 +159,16 @@ impl State {
             .retain(|key, _| flow_keys.contains(key));
         let keys: BTreeSet<_> = jobs.iter().map(|j| &j.key).collect();
         self.snapshot.results.retain(|k, _| keys.contains(k));
+        let observed: BTreeSet<_> = self
+            .snapshot
+            .results
+            .values()
+            .flat_map(|result| &result.observations)
+            .map(|obs| &obs.resource)
+            .collect();
+        self.snapshot
+            .health
+            .retain(|resource, _| observed.contains(resource));
         self.snapshot.freshness.retain(|key, _| keys.contains(key));
         self.snapshot.samples.retain(|key, _| keys.contains(key));
         self.snapshot.findings.retain(|_, finding| {

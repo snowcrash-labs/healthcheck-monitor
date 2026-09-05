@@ -122,3 +122,67 @@ fn aws_alarm_states_include_composite_and_log_alarms_without_diagnostics()
     assert!(!serde_json::to_string(&observations)?.contains("private-"));
     Ok(())
 }
+#[test]
+fn azure_vm_power_and_dead_letter_counts_are_operational_evidence()
+-> Result<(), Box<dyn std::error::Error>> {
+    let job = job("azure")?;
+    let vm = Endpoint::get(
+        "vm-instance-view/vm",
+        "https://management.azure.com/vm/instanceView",
+        "",
+    );
+    let observations = project(
+        &job,
+        &vm,
+        &json!({"statuses":[{"code":"ProvisioningState/succeeded"},{"code":"PowerState/deallocated","message":"private-value"}]}),
+    );
+    assert!(matches!(
+        observations[0].data,
+        Data::Service {
+            state: ServiceState::Stopped,
+            ..
+        }
+    ));
+    assert!(!serde_json::to_string(&observations)?.contains("private-value"));
+    let queue = Endpoint::get(
+        "service-bus-queues/bus",
+        "https://management.azure.com/bus/queues",
+        "/value",
+    );
+    let observations = project(
+        &job,
+        &queue,
+        &json!({"name":"work","properties":{"countDetails":{"activeMessageCount":2,"deadLetterMessageCount":3,"transferDeadLetterMessageCount":0}}}),
+    );
+    assert!(observations.iter().any(|obs| matches!(
+        obs.data,
+        Data::Metric {
+            value: 3.0,
+            warning: Some(1.0),
+            ..
+        }
+    )));
+    Ok(())
+}
+#[test]
+fn active_failed_revisions_are_not_mistaken_for_intentional_scale_to_zero()
+-> Result<(), Box<dyn std::error::Error>> {
+    let endpoint = Endpoint::get(
+        "container-revisions/app",
+        "https://management.azure.com/app/revisions",
+        "/value",
+    );
+    let failed = project(
+        &job("azure")?,
+        &endpoint,
+        &json!({"name":"revision","properties":{"active":true,"replicas":0,"healthState":"Unhealthy"}}),
+    );
+    assert_eq!(failed[0].expected, Expected::Active);
+    let inactive = project(
+        &job("azure")?,
+        &endpoint,
+        &json!({"name":"revision","properties":{"active":false,"replicas":0}}),
+    );
+    assert_eq!(inactive[0].expected, Expected::ScaleToZero);
+    Ok(())
+}

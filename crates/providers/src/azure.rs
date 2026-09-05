@@ -20,6 +20,11 @@ pub fn endpoints(job: &Job) -> Vec<Endpoint> {
         )];
     }
     let mut out = Vec::new();
+    if matches!(job.check, Check::Inventory | Check::Managed) {
+        for region in &job.target.regions {
+            out.push(Endpoint::get(format!("quotas/{region}"),format!("{root}/providers/Microsoft.Compute/locations/{region}/usages?api-version=2024-11-01"),"/value"));
+        }
+    }
     if job.check == Check::Inventory {
         out.push(graph(job));
     }

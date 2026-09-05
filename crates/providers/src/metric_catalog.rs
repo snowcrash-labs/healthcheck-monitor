@@ -18,6 +18,36 @@ pub fn gcp() -> Vec<MetricQuery> {
 }
 const GCP: &[(&str, &str, &str, Option<f64>)] = &[
     (
+        "valkey-memory",
+        "memorystore.googleapis.com/Instance",
+        "memorystore.googleapis.com/instance/memory/maximum_utilization",
+        Some(1.0),
+    ),
+    (
+        "valkey-cpu",
+        "memorystore.googleapis.com/Instance",
+        "memorystore.googleapis.com/instance/cpu/maximum_utilization",
+        Some(1.0),
+    ),
+    (
+        "valkey-headroom",
+        "memorystore.googleapis.com/Instance",
+        "memorystore.googleapis.com/instance/memory/size",
+        None,
+    ),
+    (
+        "valkey-evictions",
+        "memorystore.googleapis.com/Instance",
+        "memorystore.googleapis.com/instance/stats/total_evicted_keys_count",
+        None,
+    ),
+    (
+        "valkey-replication-lag",
+        "memorystore.googleapis.com/Instance",
+        "memorystore.googleapis.com/instance/replication/average_ack_lag",
+        None,
+    ),
+    (
         "node-cpu",
         "k8s_node",
         "kubernetes.io/node/cpu/allocatable_utilization",
@@ -140,5 +170,16 @@ pub fn percent_metric(name: &str) -> bool {
             | "cpu_percent"
             | "memory_percent"
             | "usedmemorypercentage"
+            | "serverLoad"
+            | "CpuPercentage"
+            | "MemoryPercentage"
+            | "dtu_consumption_percent"
+            | "storage_percent"
+            | "connection_percent"
+            | "workers_percent"
+            | "sessions_percent"
+            | "log_write_percent"
+            | "physical_data_read_percent"
+            | "NormalizedRUConsumption"
     )
 }

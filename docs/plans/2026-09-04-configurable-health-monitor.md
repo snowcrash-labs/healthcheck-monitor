@@ -74,6 +74,8 @@ SLO checks now read provider-configured GCP objective definitions and their comp
 
 Cloud log adapters use explicit start/end timestamps, the separate error/runtime windows, configurable overlap, bounded cross-scan fingerprint caches, and sampled/duplicate/gap counts. Only completed collections advance the cursor; incomplete or cancelled batches remain eligible for retry. Missing history after a long outage is visible. Diagnostic findings can recover after two distinct complete replacement windows; capped windows cannot establish silence or clear findings. Cache admission and provider truncation remain incomplete coverage outcomes.
 
+Managed-service checks now include Azure VM power state, scale-set instance views, active Container App revisions, Service Bus counts, Resource Health, diagnostic configuration, Application Gateway backend health, recovery settings, and Compute quotas. GCP checks distinguish the Valkey and Redis Cluster APIs, include global KMS rings, and retain SQL backup history and quota usage. Automatic GCP metric registration follows successful inventories, so absent services do not create spurious missing-series failures. Monitoring pages are combined into bounded metric windows, with readable allowlisted resource labels. Capacity pressure from current-only APIs uses separate warning/error timers and resets after collection gaps. Scope changes discard old baselines without recording recovery. Verification passes 136 tests and Clippy on macOS.
+
 ## References
 
 - [July 10 operational monitoring checklist](https://soundpatrol.slack.com/archives/D0B7J7697GW/p1783716940793489).

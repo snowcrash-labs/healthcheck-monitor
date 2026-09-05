@@ -50,3 +50,6 @@ Linux and macOS development checks are defined in the repository workflow. Local
 - [S3 regional bucket inventory](https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListBuckets.html).
 - [GCP SLO telemetry selectors](https://docs.cloud.google.com/stackdriver/docs/solutions/slo-monitoring/api/timeseries-selectors).
 - [AWS SLO budget reports](https://docs.aws.amazon.com/applicationsignals/latest/APIReference/API_BatchGetServiceLevelObjectiveBudgetReport.html).
+- [Valkey instance API](https://docs.cloud.google.com/memorystore/docs/valkey/reference/rest/v1/projects.locations.instances/list).
+- [Valkey operational metrics](https://docs.cloud.google.com/memorystore/docs/valkey/supported-monitoring-metrics).
+- [Azure Resource Health](https://learn.microsoft.com/en-us/rest/api/resourcehealth/availability-statuses/get-by-resource?view=rest-resourcehealth-2025-05-01).

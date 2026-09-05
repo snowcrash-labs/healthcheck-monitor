@@ -21,9 +21,14 @@ pub(crate) const CATALOG: &[(&str, &str, &str)] = &[
         "/instances",
     ),
     (
-        "valkey",
+        "redis-clusters",
         "redis.googleapis.com/v1/projects/{p}/locations/{r}/clusters",
         "/clusters",
+    ),
+    (
+        "valkey",
+        "memorystore.googleapis.com/v1/projects/{p}/locations/{r}/instances",
+        "/instances",
     ),
     (
         "builds",
@@ -113,7 +118,7 @@ pub(crate) const CATALOG: &[(&str, &str, &str)] = &[
     (
         "quotas",
         "compute.googleapis.com/compute/v1/projects/{p}/regions/{r}",
-        "",
+        "/quotas",
     ),
     (
         "provider-health",

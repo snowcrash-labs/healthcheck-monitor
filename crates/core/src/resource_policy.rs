@@ -40,6 +40,9 @@ pub(crate) fn evaluate(obs: &Observation, settings: &Settings) -> Evaluation {
             window_seconds,
             ..
         } => {
+            if inactive {
+                return result(Health::ExpectedInactive);
+            }
             if !value.is_finite() {
                 return result(Health::Unknown);
             }
@@ -56,7 +59,11 @@ pub(crate) fn evaluate(obs: &Observation, settings: &Settings) -> Evaluation {
             if warn.is_none() && err.is_none() {
                 return result(Health::Unknown);
             }
-            if capacity.is_some() && *window_seconds < settings.capacity_sustain.0 {
+            if capacity.is_some()
+                && *window_seconds < settings.capacity_sustain.0
+                && (warn.is_some_and(|threshold| value >= threshold)
+                    || err.is_some_and(|threshold| value >= threshold))
+            {
                 return result(Health::Unknown);
             }
             if err.is_some_and(|t| value >= t) {

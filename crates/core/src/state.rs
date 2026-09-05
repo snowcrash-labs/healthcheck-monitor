@@ -15,6 +15,9 @@ impl State {
         now: DateTime<Utc>,
     ) -> Vec<Transition> {
         let samples = self.snapshot.samples.entry(job.key.clone()).or_default();
+        self.snapshot
+            .scope_fingerprints
+            .insert(job.key.clone(), job.observation_scope());
         *samples = samples.saturating_add(1);
         if job.check == Check::Flows {
             result = crate::flows::evaluate(&mut self.snapshot, job, now);
@@ -94,11 +97,18 @@ impl State {
                             .any(|op| op.id == o.operation && op.coverage == Coverage::Complete)
                 })
             });
-            let evaluation = evaluate(observation, prior, &job.settings, now);
             let complete = result
                 .operations
                 .iter()
                 .any(|op| op.id == observation.operation && op.coverage == Coverage::Complete);
+            let evaluation = crate::capacity::evaluate(
+                &mut self.snapshot.pressure,
+                observation,
+                &job.settings,
+                complete,
+                now,
+            )
+            .unwrap_or_else(|| evaluate(observation, prior, &job.settings, now));
             let health = if !complete
                 && matches!(
                     evaluation.health,
@@ -108,19 +118,7 @@ impl State {
             } else {
                 evaluation.health
             };
-            if !matches!(
-                observation.data,
-                Data::SloDefinition { .. }
-                    | Data::LogWorkspace { .. }
-                    | Data::LogWindow { .. }
-                    | Data::MetricResource { .. }
-                    | Data::Quota { .. }
-                    | Data::Owner { .. }
-                    | Data::Inventory { .. }
-                    | Data::Identity { .. }
-                    | Data::Scaler { .. }
-                    | Data::AdvertisedEndpoint { .. }
-            ) {
+            if observation.data.is_health_evidence() {
                 self.snapshot
                     .health
                     .insert(observation.resource.clone(), health);
@@ -275,6 +273,9 @@ impl State {
             .collect();
         self.snapshot
             .health
+            .retain(|resource, _| observed.contains(resource));
+        self.snapshot
+            .pressure
             .retain(|resource, _| observed.contains(resource));
         self.snapshot.captured_at = now;
         self.snapshot.revision = job.revision.clone();

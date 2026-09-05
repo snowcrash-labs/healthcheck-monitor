@@ -63,12 +63,34 @@ fn metric(name: &str, aggregation: &str, value: f64) -> Value {
     json!({"name":{"value":name},"timeseries":[{"metadatavalues":[{"name":{"value":"ShardId"},"value":"0"}],"data":[{"timeStamp":"2026-09-05T00:00:00Z",aggregation:value},{"timeStamp":"2026-09-05T00:01:00Z",aggregation:value+1.0}]}]})
 }
 #[tokio::test]
+async fn availability_percentages_are_not_capacity_pressure()
+-> Result<(), Box<dyn std::error::Error>> {
+    let source = fake(vec![
+        Ok(graph()),
+        Ok(
+            json!({"value":[{"name":{"value":"Availability"},"unit":"Percent","primaryAggregationType":"Average","supportedAggregationTypes":["Minimum","Average"]}]}),
+        ),
+        Ok(json!({"value":[metric("Availability","average",99.0)]})),
+    ]);
+    let result = collect_from(&source, &job()?, &CancellationToken::new()).await;
+    assert!(result.complete());
+    assert!(
+        result
+            .observations
+            .iter()
+            .any(|obs| matches!(obs.data, Data::Metric { capacity: None, .. }))
+    );
+    Ok(())
+}
+#[tokio::test]
 async fn discovers_metrics_and_applies_the_documented_aggregation()
 -> Result<(), Box<dyn std::error::Error>> {
     let source = fake(vec![
         Ok(graph()),
         Ok(definitions()),
-        Ok(json!({"value":[metric("usedmemorypercentage", "minimum", 91.0)]})),
+        Ok(
+            json!({"value":[metric("usedmemorypercentage", "minimum", 91.0),metric("serverLoad", "minimum", 50.0)]}),
+        ),
     ]);
     let result = collect_from(&source, &job()?, &CancellationToken::new()).await;
     assert!(result.complete());
