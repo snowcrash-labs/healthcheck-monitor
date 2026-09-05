@@ -1,0 +1,154 @@
+//! Fixed helper commands with bounded streams and process-group cleanup.
+use super::transport::Error;
+use monitor_core::{
+    config::types::{Credential, NatsFallback},
+    model::Provider,
+};
+use std::{process::Stdio, time::Duration};
+use tokio::{
+    io::{AsyncRead, AsyncReadExt},
+    process::Command,
+    sync::Semaphore,
+};
+use tokio_util::sync::CancellationToken;
+
+pub enum Helper {
+    GithubToken,
+    NatsReport {
+        context: String,
+        fallback: NatsFallback,
+    },
+    Login {
+        credential: Credential,
+    },
+}
+pub struct Output {
+    pub stdout: Vec<u8>,
+    pub stderr: Vec<u8>,
+}
+struct Group(i32);
+impl Drop for Group {
+    fn drop(&mut self) {
+        // A dedicated process group also covers grandchildren started by credential helpers.
+        unsafe {
+            libc::kill(-self.0, libc::SIGKILL);
+        }
+    }
+}
+pub struct Processes {
+    permits: Semaphore,
+}
+impl Processes {
+    pub fn new(limit: usize) -> Self {
+        Self {
+            permits: Semaphore::new(limit),
+        }
+    }
+    pub async fn run(
+        &self,
+        helper: Helper,
+        limit: usize,
+        timeout: Duration,
+        cancel: &CancellationToken,
+    ) -> Result<Output, Error> {
+        let permit = tokio::select! { _ = cancel.cancelled() => return Err(Error::Cancelled), permit = self.permits.acquire() => permit.map_err(|_| Error::Unavailable)? };
+        let (executable, args) = command(helper)?;
+        let mut command = Command::new(executable);
+        command
+            .args(args)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .kill_on_drop(true)
+            .process_group(0);
+        let mut child = command.spawn().map_err(|_| Error::Unavailable)?;
+        let _group = Group(child.id().ok_or(Error::Unavailable)? as i32);
+        let stdout = child.stdout.take().ok_or(Error::Unavailable)?;
+        let stderr = child.stderr.take().ok_or(Error::Unavailable)?;
+        let collect = async {
+            let (stdout, stderr, status) =
+                tokio::try_join!(read(stdout, limit), read(stderr, limit), async {
+                    child.wait().await.map_err(|_| Error::Unavailable)
+                })?;
+            if !status.success() {
+                return Err(Error::Authentication);
+            }
+            Ok(Output { stdout, stderr })
+        };
+        let outcome = tokio::select! {
+            _ = cancel.cancelled() => Err(Error::Cancelled),
+            result = tokio::time::timeout(timeout, collect) => result.map_err(|_| Error::Timeout).and_then(|r| r),
+        };
+        if outcome.is_err() {
+            let _ = child.kill().await;
+            let _ = child.wait().await;
+        }
+        drop(permit);
+        outcome
+    }
+}
+async fn read<R: AsyncRead + Unpin>(reader: R, limit: usize) -> Result<Vec<u8>, Error> {
+    let mut bytes = Vec::new();
+    reader
+        .take(limit as u64 + 1)
+        .read_to_end(&mut bytes)
+        .await
+        .map_err(|_| Error::Unavailable)?;
+    if bytes.len() > limit {
+        return Err(Error::Limit);
+    }
+    Ok(bytes)
+}
+fn command(helper: Helper) -> Result<(&'static str, Vec<String>), Error> {
+    match helper {
+        Helper::GithubToken => Ok(("gh", vec!["auth".into(), "token".into()])),
+        Helper::NatsReport { context, fallback } => {
+            for value in [&context, &fallback.namespace, &fallback.deployment] {
+                if !monitor_core::config::validate::identifier(value) || value.starts_with('-') {
+                    return Err(Error::Forbidden);
+                }
+            }
+            Ok((
+                "kubectl",
+                vec![
+                    "--context".into(),
+                    context,
+                    "-n".into(),
+                    fallback.namespace,
+                    "exec".into(),
+                    format!("deployment/{}", fallback.deployment),
+                    "--".into(),
+                    "nats".into(),
+                    "stream".into(),
+                    "report".into(),
+                    "--raw".into(),
+                ],
+            ))
+        }
+        Helper::Login { credential } => match credential.provider {
+            Provider::Gcp => Ok((
+                "gcloud",
+                vec!["auth".into(), "application-default".into(), "login".into()],
+            )),
+            Provider::Aws => Ok((
+                "aws",
+                vec![
+                    "sso".into(),
+                    "login".into(),
+                    "--profile".into(),
+                    credential.profile.ok_or(Error::Authentication)?,
+                ],
+            )),
+            Provider::Azure => Ok((
+                "az",
+                vec![
+                    "login".into(),
+                    "--tenant".into(),
+                    credential.tenant.ok_or(Error::Authentication)?,
+                ],
+            )),
+            Provider::Github => Ok(("gh", vec!["auth".into(), "login".into(), "--web".into()])),
+            _ => Err(Error::Forbidden),
+        },
+    }
+}

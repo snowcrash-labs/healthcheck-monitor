@@ -18,8 +18,8 @@ tokio.workspace = true
 tokio-util.workspace = true
 tracing.workspace = true
 url.workspace = true
-kube = { version = "*", default-features = false, features = ["client", "rustls-tls", "aws-lc-rs", "gzip", "ws"] }
-k8s-openapi = { version = "*", default-features = false, features = ["latest"] }
+kube = { version = "4.2.0", default-features = false, features = ["client", "rustls-tls", "aws-lc-rs", "gzip", "ws"] }
+k8s-openapi = { version = "0.28.0", default-features = false, features = ["std", "latest"] }
 async-nats = { version = "*", default-features = false, features = ["ring", "jetstream", "nkeys"] }
 hickory-resolver = { version = "*", default-features = false, features = ["system-config", "tokio"] }
 rustls = { version = "*", default-features = false, features = ["std", "aws_lc_rs", "tls12"] }
@@ -29,6 +29,8 @@ x509-parser = "*"
 serde_yaml_ng = "*"
 base64 = "*"
 libc = "*"
+http = "*"
+roxmltree = "*"
 
 [lints]
 workspace = true

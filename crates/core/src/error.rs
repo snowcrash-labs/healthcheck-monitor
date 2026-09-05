@@ -14,6 +14,7 @@ pub enum Error {
 }
 impl Error {
     /// Only transient filesystem failures can be retried by persistence.
-    pub fn retryable(&self) -> bool { matches!(self, Self::Io(_)) }
+    pub fn retryable(&self) -> bool {
+        matches!(self, Self::Io(_))
+    }
 }
-

@@ -35,7 +35,11 @@ pub struct Credential {
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct DiscoveryRoot { pub provider: Provider, pub scope: String, pub credential: Option<String> }
+pub struct DiscoveryRoot {
+    pub provider: Provider,
+    pub scope: String,
+    pub credential: Option<String>,
+}
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Profile {
@@ -76,7 +80,11 @@ pub struct Target {
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct Endpoint { pub name: String, pub url: Url, pub accepted: Vec<u16> }
+pub struct Endpoint {
+    pub name: String,
+    pub url: Url,
+    pub accepted: Vec<u16>,
+}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct MetricQuery {
@@ -92,5 +100,7 @@ pub struct MetricQuery {
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct NatsFallback { pub namespace: String, pub deployment: String }
-
+pub struct NatsFallback {
+    pub namespace: String,
+    pub deployment: String,
+}

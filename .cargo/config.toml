@@ -1,11 +1,5 @@
 [build]
-# Development uses the host ABI; Linux verification supplies its target explicitly.
-target = "aarch64-apple-darwin"
 jobs = 4
-
-[unstable]
-build-std = ["core", "alloc", "std", "panic_unwind"]
-build-std-features = ["backtrace"]
 
 [target.aarch64-apple-darwin]
 # Apple M1 is the oldest supported Apple Silicon generation.
