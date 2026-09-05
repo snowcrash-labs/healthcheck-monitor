@@ -89,6 +89,21 @@ pub async fn collect(
                 1,
                 true,
             ));
+        } else if let Ok(revision) = &head {
+            let operation_id = format!("reference/{repository}");
+            result.observations.push(observation(
+                job,
+                &operation_id,
+                revision,
+                Data::Commit {
+                    repository: repository.to_ascii_lowercase(),
+                    revision: revision.clone(),
+                    reference: Some(reference.clone()),
+                },
+            ));
+            result
+                .operations
+                .push(operation(&operation_id, Ok(1), 1, job.settings.required));
         }
         let mut status = Ok(0usize);
         let mut seen = BTreeSet::new();
@@ -96,6 +111,12 @@ pub async fn collect(
             pages = page;
             let query = url::form_urlencoded::Serializer::new(String::new())
                 .append_pair("sha", &reference)
+                .append_pair(
+                    "since",
+                    &(chrono::Utc::now()
+                        - chrono::Duration::seconds(job.settings.runtime_window.0 as i64))
+                    .to_rfc3339(),
+                )
                 .append_pair("per_page", &job.settings.page_size.min(100).to_string())
                 .append_pair("page", &page.to_string())
                 .finish();
@@ -173,7 +194,19 @@ async fn resolve(
     cancel: &CancellationToken,
 ) -> Result<String, Error> {
     if reference.len() == 40 && reference.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-        return Ok(reference.into());
+        let value = get(
+            http,
+            job,
+            token,
+            &format!("repos/{repository}/commits/{reference}"),
+            cancel,
+        )
+        .await?;
+        return if text(&value, &["/sha"]) == Some(reference) {
+            Ok(reference.into())
+        } else {
+            Err(Error::Missing)
+        };
     }
     let reference = reference.strip_prefix("refs/").unwrap_or(reference);
     let reference = if reference.starts_with("heads/") || reference.starts_with("tags/") {

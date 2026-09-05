@@ -2,6 +2,7 @@
 pub mod bounds;
 pub mod budget;
 pub mod capacity;
+pub mod collection_budget;
 pub mod config;
 mod endpoint_policy;
 pub mod error;

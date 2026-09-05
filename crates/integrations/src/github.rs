@@ -48,6 +48,7 @@ pub async fn collect(
         Coverage::Missing,
     );
     result.operations.clear();
+    let mut budget = monitor_core::collection_budget::Limit::new(&job.settings);
     let mut paths = vec![("identity".to_string(), "user".to_string(), None)];
     if job.check != Check::Preflight {
         if job.target.provider == Provider::Github {
@@ -87,17 +88,7 @@ pub async fn collect(
         let mut pages = 0;
         for page in 1..=job.settings.max_pages {
             pages = page;
-            let url = format!("https://api.github.com/{path}");
-            let request = http
-                .client()
-                .get(url)
-                .query(&[
-                    ("per_page", job.settings.page_size.min(100)),
-                    ("page", page),
-                ])
-                .bearer_auth(token)
-                .header("X-GitHub-Api-Version", "2022-11-28")
-                .build();
+            let request = super::github_requests::list(http, job, token, &id, &path, page);
             let response = match request {
                 Ok(r) => http.json(r, &job.settings, cancel).await,
                 Err(_) => Err(Error::Malformed),
@@ -118,16 +109,20 @@ pub async fn collect(
                             outcome = Err(Error::Malformed);
                             break;
                         }
-                        result.observations.push(observation(
-                            job,
-                            &id,
-                            "current",
-                            Data::Identity {
-                                scope: text(&payload, &["/login"])
-                                    .map(super::projection::identity)
-                                    .unwrap_or_default(),
-                            },
-                        ));
+                        budget.observations(
+                            &mut result.observations,
+                            [observation(
+                                job,
+                                &id,
+                                "current",
+                                Data::Identity {
+                                    scope: text(&payload, &["/login"])
+                                        .map(super::projection::identity)
+                                        .unwrap_or_default(),
+                                },
+                            )],
+                        );
+                        outcome = Ok(1);
                         break;
                     }
                     let rows = array
@@ -156,18 +151,18 @@ pub async fn collect(
                         };
                         let Some(name) = name else { continue };
                         let data = if id.starts_with("workflows/")
-                            && text(row, &["/path", "/name"]).is_some_and(|pipeline| {
+                            && super::github_requests::pipeline(row).is_some_and(|pipeline| {
                                 job.target.build_targets.contains_key(pipeline)
                             }) {
                             Data::Build {
                                 superseded: false,
-                                pipeline: text(row, &["/path", "/name"])
+                                pipeline: super::github_requests::pipeline(row)
                                     .map(super::projection::identity)
                                     .unwrap_or_default(),
                                 revision: text(row, &["/head_sha"])
                                     .map(super::projection::identity)
                                     .unwrap_or_default(),
-                                target: text(row, &["/path", "/name"])
+                                target: super::github_requests::pipeline(row)
                                     .and_then(|pipeline| job.target.build_targets.get(pipeline))
                                     .cloned()
                                     .unwrap_or_default(),
@@ -180,10 +175,26 @@ pub async fn collect(
                                 supported: true,
                             }
                         };
-                        result.observations.push(observation(job, &id, &name, data));
+                        if !budget.observations(
+                            &mut result.observations,
+                            [observation(job, &id, &name, data)],
+                        ) {
+                            outcome = Err(Error::Limit);
+                            break;
+                        }
                     }
                     outcome = outcome.map(|n| n + rows.len());
-                    if outcome.is_err() || rows.len() < job.settings.page_size.min(100) {
+                    if id.starts_with("workflows/")
+                        && page * super::github_requests::page_size(job, &id) >= 1000
+                        && payload
+                            .get("total_count")
+                            .and_then(Value::as_u64)
+                            .is_some_and(|total| total > 1000)
+                    {
+                        outcome = Err(Error::Limit);
+                    }
+                    if outcome.is_err() || rows.len() < super::github_requests::page_size(job, &id)
+                    {
                         break;
                     }
                     if page == job.settings.max_pages {
@@ -196,12 +207,15 @@ pub async fn collect(
                 }
             }
         }
-        result.operations.push(operation(
-            &id,
-            outcome.as_ref().copied(),
-            pages,
-            job.settings.required,
-        ));
+        budget.operations(
+            &mut result.operations,
+            [operation(
+                &id,
+                outcome.as_ref().copied(),
+                pages,
+                job.settings.required,
+            )],
+        );
     }
     if job.check != Check::Preflight
         && let (Some(file), Some(repo)) =
@@ -230,15 +244,20 @@ pub async fn collect(
             let text = std::str::from_utf8(&bytes).map_err(|_| Error::Malformed)?;
             let targets = build_targets(text)?;
             for target in &targets {
-                result.observations.push(observation(
-                    job,
-                    "desired-targets",
-                    target,
-                    Data::Inventory {
-                        family: "build-target".into(),
-                        supported: true,
-                    },
-                ));
+                if !budget.observations(
+                    &mut result.observations,
+                    [observation(
+                        job,
+                        "desired-targets",
+                        target,
+                        Data::Inventory {
+                            family: "build-target".into(),
+                            supported: true,
+                        },
+                    )],
+                ) {
+                    return Err(Error::Limit);
+                }
             }
             Ok(targets.len())
         }
@@ -258,13 +277,13 @@ pub async fn collect(
             .max_assets
             .saturating_sub(result.observations.len());
         let commits = super::github_commits::collect(http, &remaining, token, cancel).await;
-        result.operations.extend(commits.operations);
-        result.observations.extend(commits.observations);
+        budget.merge(&mut result, commits);
     }
     if job.target.change.is_some() && job.check != Check::Preflight {
         let changed = super::changes::collect(http, job, token, cancel).await;
-        result.operations.extend(changed.operations);
-        result.observations.extend(changed.observations);
+        budget.merge(&mut result, changed);
     }
+    budget.finish(&mut result, job.settings.required);
+    result.finished_at = chrono::Utc::now();
     result
 }

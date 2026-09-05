@@ -45,3 +45,23 @@ fn limits_and_malformed_pairs_cannot_become_complete() {
     malformed.record(&row, 10);
     assert_eq!(malformed.coverage, Coverage::Malformed);
 }
+#[test]
+fn an_internal_error_cannot_be_erased_by_a_later_complete_page() {
+    let mut series = Series::default();
+    series.record(
+        &MetricDataResult::builder()
+            .status_code(StatusCode::InternalError)
+            .build(),
+        10,
+    );
+    series.record(
+        &MetricDataResult::builder()
+            .status_code(StatusCode::Complete)
+            .timestamps(DateTime::from_secs(1))
+            .values(5.0)
+            .build(),
+        10,
+    );
+    assert_eq!(series.coverage, Coverage::Unavailable);
+    assert_eq!(series.points.len(), 1);
+}

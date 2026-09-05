@@ -75,7 +75,12 @@ impl Auth {
                 Ok(Self::Azure(Box::new(credential)))
             }
             Provider::Aws => {
+                let prepared = crate::aws_process_profiles::load(
+                    profile.and_then(|profile| profile.profile.as_deref()),
+                )
+                .await?;
                 let mut loader = aws_config::defaults(aws_config::BehaviorVersion::latest())
+                    .profile_files(prepared.files.clone())
                     // Buffered requests allow body caps to apply before transmission.
                     .disable_request_compression(true)
                     .http_client(crate::aws_transport::client(http, settings)?)
@@ -95,6 +100,15 @@ impl Auth {
                     );
                 if let Some(name) = profile.and_then(|p| p.profile.as_ref()) {
                     loader = loader.profile_name(name);
+                }
+                if let Some(provider) = crate::aws_process_chain::build(
+                    &prepared,
+                    region.unwrap_or("us-east-1"),
+                    http,
+                    settings,
+                    processes,
+                )? {
+                    loader = loader.credentials_provider(provider);
                 }
                 let mut config = loader.load().await;
                 if let Some(role) = profile.and_then(|p| p.role_arn.as_ref()) {

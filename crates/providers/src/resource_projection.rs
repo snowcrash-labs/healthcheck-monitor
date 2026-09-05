@@ -1,11 +1,14 @@
 //! Service-specific health semantics before evidence enters the policy engine.
 use crate::common::Endpoint;
 use monitor_core::{config::resolve::Job, model::*};
-use monitor_integrations::projection::{self, boolean, number, observation, text, timestamp};
+use monitor_integrations::projection::{self, boolean, number, observation, text};
 use serde_json::Value;
 
 pub use crate::projection_rows::rows;
 pub fn project(job: &Job, endpoint: &Endpoint, value: &Value) -> Vec<Observation> {
+    if !crate::resource_scope::selected(job, endpoint, value) {
+        return crate::resource_scope::inventory_only(job, endpoint, value);
+    }
     let mut result = project_data(job, endpoint, value);
     result.extend(crate::metadata_fields::project(job, endpoint, value));
     if job.target.provider == Provider::Azure && endpoint.id == "registries" {
@@ -113,6 +116,9 @@ fn project_data(job: &Job, endpoint: &Endpoint, value: &Value) -> Vec<Observatio
             "/taskArn",
             "/serviceArn",
             "/regionName",
+            "/Target/Id",
+            "/instance",
+            "/ipAddress",
         ],
     )
     .or_else(|| value.as_str())
@@ -200,10 +206,21 @@ fn project_data(job: &Job, endpoint: &Endpoint, value: &Value) -> Vec<Observatio
     }
     if family == "backend-health" || family == "target-health" {
         let health = text(value, &["/healthState", "/TargetHealth/State"]);
-        return vec![obs(Data::Condition {
-            rule: "load-balancer-backend-unhealthy".into(),
-            healthy: health.map(|v| matches!(v, "HEALTHY" | "healthy" | "unused")),
-        })];
+        let name = number(value, &["/Target/Port", "/port"])
+            .map_or_else(|| name.to_owned(), |port| format!("{name}:{port}"));
+        return vec![observation(
+            job,
+            id,
+            &name,
+            Data::Condition {
+                rule: "load-balancer-backend-unhealthy".into(),
+                healthy: health.and_then(|value| match value {
+                    "HEALTHY" | "healthy" => Some(true),
+                    "UNHEALTHY" | "unhealthy" | "TIMEOUT" => Some(false),
+                    _ => None,
+                }),
+            },
+        )];
     }
     if family == "instance-status" {
         let status = text(value, &["/instanceStatus/status"]);
@@ -217,36 +234,6 @@ fn project_data(job: &Job, endpoint: &Endpoint, value: &Value) -> Vec<Observatio
             rule: "certificate-not-issued".into(),
             healthy: text(value, &["/Status", "/properties/provisioningState"])
                 .map(|v| matches!(v, "ISSUED" | "Succeeded")),
-        })];
-    }
-    if family == "autoscaling" {
-        let desired = number(value, &["/DesiredCapacity"]).unwrap_or(0.0) as u32;
-        let ready = value
-            .pointer("/Instances/member")
-            .and_then(Value::as_array)
-            .map_or(0, |a| {
-                a.iter()
-                    .filter(|v| {
-                        text(v, &["/HealthStatus"]) == Some("Healthy")
-                            && text(v, &["/LifecycleState"]) == Some("InService")
-                    })
-                    .count() as u32
-            });
-        return vec![obs(Data::Workload {
-            desired,
-            ready,
-            created_at: timestamp(value, &["/CreatedTime"]),
-            draining: false,
-            node: false,
-        })];
-    }
-    if family == "ecs-services-detail" {
-        return vec![obs(Data::Workload {
-            desired: number(value, &["/desiredCount"]).unwrap_or(0.0) as u32,
-            ready: number(value, &["/runningCount"]).unwrap_or(0.0) as u32,
-            created_at: timestamp(value, &["/createdAt"]),
-            draining: text(value, &["/status"]) == Some("DRAINING"),
-            node: false,
         })];
     }
     let mut result = projection::service(job, id, value)

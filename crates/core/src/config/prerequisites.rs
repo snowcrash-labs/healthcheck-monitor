@@ -27,6 +27,11 @@ pub fn sampling(jobs: &mut [Job]) -> Result<(), Error> {
         }
     }
     for (target, check, settings) in sources {
+        if settings.samples > 1 && settings.sample_interval.0 > settings.freshness() {
+            return Err(Error::Config(
+                "sampling interval exceeds evidence freshness".into(),
+            ));
+        }
         if check == Check::Flows
             && jobs.iter().any(|job| {
                 job.target.name == target

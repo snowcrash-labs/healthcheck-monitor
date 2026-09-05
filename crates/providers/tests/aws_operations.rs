@@ -8,6 +8,19 @@ use monitor_core::{
 };
 use monitor_providers::{common::Endpoint, details::followups, resource_projection::project};
 use serde_json::json;
+#[test]
+fn artifact_references_do_not_collect_unrelated_running_services()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut job = job()?;
+    job.artifact_only = true;
+    let endpoints = monitor_providers::aws::endpoints(&job);
+    assert!(!endpoints.is_empty());
+    assert!(endpoints.iter().all(|endpoint| matches!(
+        endpoint.id.split('/').next(),
+        Some("ecr" | "codebuild" | "codepipeline")
+    )));
+    Ok(())
+}
 fn job() -> Result<Job, Box<dyn std::error::Error>> {
     Config::parse("version=1\n[[targets]]\nname='test'\nprovider='aws'\nscope='123456789012'\nregions=['us-east-1']\n[targets.build_targets]\nrelease='api'")?.resolve(&Selection::default())?.jobs.into_iter().find(|job|job.check==Check::Releases).ok_or_else(||"missing job".into())
 }
@@ -105,6 +118,28 @@ fn quotas_follow_discovered_service_codes_instead_of_only_compute()
             .as_ref()
             .and_then(|body| body.get("ServiceCode")),
         Some(&json!("lambda"))
+    );
+    Ok(())
+}
+#[test]
+fn a_single_healthy_autoscaling_member_counts_as_ready() -> Result<(), Box<dyn std::error::Error>> {
+    let endpoint = Endpoint::get(
+        "autoscaling/us-east-1",
+        "https://autoscaling.us-east-1.amazonaws.com/",
+        "",
+    );
+    let value = json!({"AutoScalingGroupName":"workers","DesiredCapacity":"1","Instances":{"member":{"HealthStatus":"Healthy","LifecycleState":"InService"}}});
+    assert!(
+        project(&job()?, &endpoint, &value)
+            .iter()
+            .any(|observation| matches!(
+                observation.data,
+                Data::Workload {
+                    desired: 1,
+                    ready: 1,
+                    ..
+                }
+            ))
     );
     Ok(())
 }

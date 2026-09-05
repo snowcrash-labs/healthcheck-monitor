@@ -51,6 +51,44 @@ pub fn markdown(snapshot: &Snapshot) -> String {
             &format!("Observed resource states: {health_summary}.\n\n"),
         );
     }
+    let mut scope = String::new();
+    for (target, regions) in &snapshot.regions {
+        if !regions.is_empty() {
+            scope.push_str(&format!(
+                "Regions for {}: {}. Global resources remain included.\n\n",
+                safe(target),
+                regions
+                    .iter()
+                    .map(|region| safe(region))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        }
+    }
+    let filters: BTreeSet<_> = snapshot
+        .selectors
+        .iter()
+        .filter(|(_, selectors)| !selectors.is_empty())
+        .map(|(key, selectors)| (key.split('/').next().unwrap_or(key), selectors))
+        .collect();
+    for (target, selectors) in filters {
+        scope.push_str(&format!(
+            "Resource filters for {}: {}{}.\n\n",
+            safe(target),
+            selectors
+                .iter()
+                .take(8)
+                .map(|selector| safe(selector))
+                .collect::<Vec<_>>()
+                .join(", "),
+            if selectors.len() > 8 {
+                "; remaining filters are recorded in the snapshot"
+            } else {
+                ""
+            }
+        ));
+    }
+    out.insert_str(out.find("| Check").unwrap_or(out.len()), &scope);
     for key in &snapshot.selected_scope {
         let label = if snapshot.collection_only.contains(key) {
             format!("{} (prerequisite)", safe(key))

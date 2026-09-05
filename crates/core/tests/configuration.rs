@@ -147,3 +147,52 @@ fn selected_checks_share_the_tightest_runtime_and_provider_scope_limits()
     }
     Ok(())
 }
+#[test]
+fn cli_selectors_and_region_hostnames_are_validated_before_requests()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut config = config("")?;
+    for selector in ["api' or true", "../secret", "api\\name", "api\nname"] {
+        assert!(
+            config
+                .resolve(&Selection {
+                    resources: vec![selector.into()],
+                    ..Default::default()
+                })
+                .is_err()
+        );
+    }
+    config.targets[0].regions = vec!["region/host".into()];
+    assert!(config.validate().is_err());
+    Ok(())
+}
+#[test]
+fn large_repeated_selectors_cannot_expand_effective_configuration_past_its_budget()
+-> Result<(), Box<dyn std::error::Error>> {
+    let text=format!("version=1\n{}",(0..8).map(|index|format!("[[targets]]\nname='target-{index}'\nprovider='gcp'\nscope='project'\nregions=['us-central1']\n")).collect::<String>());
+    let config = Config::parse(&text)?;
+    let selected = Selection {
+        resources: (0..1024)
+            .map(|index| format!("{index}-{}", "a".repeat(500)))
+            .collect(),
+        ..Default::default()
+    };
+    assert!(config.resolve(&selected).is_err());
+    Ok(())
+}
+#[test]
+fn region_order_is_incidental_but_region_selection_changes_observation_scope()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut job = config("")?
+        .resolve(&Selection::default())?
+        .jobs
+        .into_iter()
+        .next()
+        .ok_or("missing job")?;
+    job.target.regions = vec!["us-central1".into(), "us-east1".into()];
+    let before = job.observation_scope();
+    job.target.regions.reverse();
+    assert_eq!(before, job.observation_scope());
+    job.target.regions = vec!["europe-west1".into()];
+    assert_ne!(before, job.observation_scope());
+    Ok(())
+}

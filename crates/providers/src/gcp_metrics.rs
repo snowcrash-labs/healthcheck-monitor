@@ -58,7 +58,7 @@ pub async fn collect<S: Source>(source: &S, job: &Job, cancel: &CancellationToke
             }
             result.operations.iter().any(|operation| {
                 operation.id.starts_with(&format!("{family}/"))
-                    && (operation.records > 0 || operation.coverage != Coverage::Complete)
+                    && (result.observations.iter().any(|observation|observation.operation==operation.id && !matches!(&observation.data,Data::Inventory{family,..} if family=="inventory-only-region")) || operation.coverage != Coverage::Complete)
             })
         })
         .map(|mut query| {

@@ -9,6 +9,7 @@ pub struct Budget {
     limit: AtomicUsize,
     used: AtomicUsize,
     changed: Notify,
+    admission: tokio::sync::Mutex<()>,
 }
 pub struct Permit {
     budget: Arc<Budget>,
@@ -20,6 +21,7 @@ impl Budget {
             limit: AtomicUsize::new(limit),
             used: AtomicUsize::new(0),
             changed: Notify::new(),
+            admission: tokio::sync::Mutex::new(()),
         }
     }
     /// Existing reservations retain their charge; new admissions wait until they fit.
@@ -60,6 +62,8 @@ impl Budget {
         }
     }
     pub async fn acquire(self: &Arc<Self>) -> Result<Permit, Error> {
+        // Tokio's FIFO mutex orders helper admission without holding a permit while waiting.
+        let _turn = self.admission.lock().await;
         loop {
             let changed = self.changed.notified();
             tokio::pin!(changed);

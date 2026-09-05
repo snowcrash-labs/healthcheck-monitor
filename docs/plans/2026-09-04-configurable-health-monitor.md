@@ -1,6 +1,6 @@
 # Configurable health monitoring
 
-Status: implementation in progress. The service performs read-only observations of explicitly configured Soundpatrol targets. A one-off run and continuous monitoring use the same collection, evaluation, and evidence pipeline. Deployment, remediation, synthetic transactions, message consumption, notifications, application database connections, and historical evidence import remain outside this implementation.
+Status: implementation and synthetic/platform verification are complete; live cloud validation retains the credential and telemetry-mapping gaps below. The service performs read-only observations of explicitly configured Soundpatrol targets. A one-off run and continuous monitoring use the same collection, evaluation, and evidence pipeline. Deployment, remediation, synthetic transactions, message consumption, notifications, application database connections, and historical evidence import remain outside this implementation.
 
 ## Execution and configuration
 
@@ -70,13 +70,15 @@ Reload applies the tightest shared ceilings among selected checks and rejects ob
 
 The provider audit has corrected global/regional builds, registry identity, Valkey versus Redis Cluster APIs, operational projections, pipeline execution state, AWS quota discovery, CloudFront metric routing/statistics, and service-specific pagination. Automatic AWS metrics now follow shared inventories and distinguish absent services from missing telemetry. GCP gauges retain current values; capacity readings retain sustained minima. Cloud Run latency, request/delivery failures, dead-letter counts and Redis Cluster telemetry have explicit presets.
 
-Verification currently passes 196 tests and Clippy. All 46 direct dependencies are current after `cargo upgrade --incompatible`. The audit of 482 locked dependencies found no vulnerabilities or advisory warnings. The normal/build dependency tree uses rustls and excludes native-tls and OpenSSL. No release builds were performed.
+Verification passes 225 tests, formatting and Clippy on macOS and Linux ARM64 with Rust 1.98.1 and its prebuilt standard library. All 48 direct dependencies are current after `cargo upgrade --incompatible`. The audit of 482 locked dependencies found no vulnerabilities or advisory warnings. The normal/build dependency tree uses rustls and excludes native-tls and OpenSSL linkage. No release builds were performed.
 
 Read-only development checks confirmed Kubernetes, KEDA, the fixed NATS report fallback, and the configured trusted-TLS HTTP 200 health route. A focused queue run returned exit 0 with 2,416 prerequisite observations and 20 queue/stream observations using one sample; it establishes neither persistence nor fleet health. A simulated 24-hour watch exceeded 5,000 collections while checking task, retained-state and disk bounds; it is not a production RSS measurement.
 
 The [verification record](2026-09-05-monitor-verification.md) maps all 30 source tests and additional acceptance contracts to Rust tests. The [operations runbook](2026-09-05-monitor-operations.md) documents profiles, configuration, credentials/read permissions, evidence and Linux/macOS foreground supervision.
 
-Remaining acceptance work includes the final provider/telemetry audit, configuration-to-collector validation, live checks of the finished runtime, and final documentation review. GCP ADC, applicable AWS/Azure credentials, direct NATS TLS access, Linux execution and deployment-specific aggregate flow mappings remain validation gaps. The repository has no remote; the prepared Linux/macOS workflow has not run. These gaps do not reduce required implementation coverage.
+The final full development run attempted all 17 selected checks and references, completed in 25 seconds, and published its report with exit 3. It retained 4,067 Kubernetes observations, 20 queue observations, nine endpoint observations and 1,305 GitHub observations while independent GCP API checks reported missing ADC. The report includes current health errors, incomplete provenance and unmapped required flow telemetry; it does not claim fleet health.
+
+GCP ADC, applicable AWS/Azure credentials, direct NATS TLS access and deployment-specific aggregate flow mappings remain live-validation gaps. Production-scale RSS and provider behavior under sustained live load require operational validation. The repository has no remote; the prepared GitHub workflow has not run, but its development checks were executed locally on both platforms. These gaps do not reduce required implementation coverage or authorize infrastructure changes.
 
 ## References
 

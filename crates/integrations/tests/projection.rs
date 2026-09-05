@@ -182,3 +182,30 @@ fn external_secret_sync_age_and_nonperiodic_modes_are_distinct()
     )));
     Ok(())
 }
+#[test]
+fn ready_nodes_with_pressure_are_unhealthy_while_draining_nodes_keep_their_grace()
+-> Result<(), Box<dyn std::error::Error>> {
+    let job = job()?;
+    let mut value = json!({"metadata":{"name":"node","creationTimestamp":"2020-01-01T00:00:00Z"},"status":{"conditions":[{"type":"Ready","status":"True"},{"type":"DiskPressure","status":"True"}]}});
+    let observations = kube_projection::project(&job, "nodes", &value);
+    let observation = observations
+        .iter()
+        .find(|observation| matches!(observation.data, Data::Workload { node: true, .. }))
+        .ok_or("missing node")?;
+    assert_eq!(
+        monitor_core::policy::evaluate(observation, None, &job.settings, chrono::Utc::now()).health,
+        Health::Unhealthy
+    );
+    value["spec"] =
+        json!({"taints":[{"key":"ToBeDeletedByClusterAutoscaler","effect":"NoSchedule"}]});
+    let observations = kube_projection::project(&job, "nodes", &value);
+    let observation = observations
+        .iter()
+        .find(|observation| matches!(observation.data, Data::Workload { node: true, .. }))
+        .ok_or("missing node")?;
+    assert_eq!(
+        monitor_core::policy::evaluate(observation, None, &job.settings, chrono::Utc::now()).health,
+        Health::ExpectedInactive
+    );
+    Ok(())
+}

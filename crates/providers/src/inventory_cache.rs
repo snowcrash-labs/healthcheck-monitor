@@ -65,13 +65,8 @@ impl InventoryCache {
             .iter()
             .all(|op| op.coverage == Coverage::Complete)
         {
-            let bytes = monitor_core::bounds::result_bytes(&value.result).saturating_add(
-                value
-                    .followups
-                    .iter()
-                    .map(|endpoint| endpoint.url.len().saturating_mul(4).saturating_add(4096))
-                    .sum::<usize>(),
-            );
+            let bytes = monitor_core::bounds::result_bytes(&value.result)
+                .saturating_add(value.followups.iter().map(Endpoint::bytes).sum::<usize>());
             if let Ok(bytes) = u32::try_from(bytes)
                 && let Ok(permit) = self.bytes.clone().try_acquire_many_owned(bytes)
             {

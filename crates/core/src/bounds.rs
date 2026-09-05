@@ -11,18 +11,19 @@ pub fn observation_bytes(observation: &Observation) -> usize {
 }
 pub fn result_bytes(result: &CheckResult) -> usize {
     result.observations.iter().fold(
-        result
-            .operations
-            .len()
-            .saturating_mul(std::mem::size_of::<Operation>() + 1024),
+        result.operations.iter().map(operation_bytes).sum(),
         |sum, o| sum.saturating_add(observation_bytes(o)),
     )
 }
-pub fn truncate(result: &mut CheckResult, bytes: usize, assets: usize) {
-    let mut used = result
-        .operations
+pub fn operation_bytes(operation: &Operation) -> usize {
+    operation
+        .id
         .len()
-        .saturating_mul(std::mem::size_of::<Operation>() + 1024);
+        .saturating_mul(4)
+        .saturating_add(std::mem::size_of::<Operation>() + 256)
+}
+pub fn truncate(result: &mut CheckResult, bytes: usize, assets: usize) {
+    let mut used = result.operations.iter().map(operation_bytes).sum::<usize>();
     let mut retained = 0;
     for observation in result.observations.iter().take(assets) {
         used = used.saturating_add(observation_bytes(observation));

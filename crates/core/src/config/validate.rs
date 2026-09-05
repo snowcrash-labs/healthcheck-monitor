@@ -181,6 +181,12 @@ impl Config {
                 }
             }
             if target.regions.len() > 32
+                || target.regions.iter().any(|region| {
+                    region.len() > 64
+                        || !region.bytes().all(|byte| {
+                            byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-'
+                        })
+                })
                 || target.metrics.len() > 500
                 || target.endpoints.len() > 256
             {

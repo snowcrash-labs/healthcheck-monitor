@@ -1,21 +1,8 @@
 //! Project resource health without environment values, annotations, or raw events.
+use super::kube_conditions::condition;
 use super::projection::{boolean, number, observation, text, timestamp};
 use monitor_core::{config::resolve::Job, model::*};
 use serde_json::Value;
-
-fn condition(value: &Value, kind: &str) -> Option<bool> {
-    value
-        .pointer("/status/conditions")
-        .and_then(Value::as_array)?
-        .iter()
-        .find(|v| text(v, &["/type"]) == Some(kind))
-        .and_then(|v| text(v, &["/status"]))
-        .and_then(|v| match v {
-            "True" => Some(true),
-            "False" => Some(false),
-            _ => None,
-        })
-}
 pub fn project(job: &Job, kind: &str, value: &Value) -> Vec<Observation> {
     let Some(name) = text(value, &["/metadata/name"]) else {
         return vec![];
@@ -94,7 +81,7 @@ pub fn project(job: &Job, kind: &str, value: &Value) -> Vec<Observation> {
                 number(value, &["/spec/replicas"]).unwrap_or(1.0) as u32
             };
             let ready = if node {
-                u32::from(condition(value, "Ready") == Some(true))
+                u32::from(super::kube_conditions::node_ready(value))
             } else {
                 number(value, &["/status/readyReplicas", "/status/numberReady"]).unwrap_or(0.0)
                     as u32

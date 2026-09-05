@@ -10,25 +10,7 @@ use sha2::Digest;
 use std::collections::{BTreeSet, VecDeque};
 use tokio_util::sync::CancellationToken;
 
-#[derive(Clone)]
-pub struct Endpoint {
-    pub id: String,
-    pub url: String,
-    pub items: String,
-    pub body: Option<Value>,
-    pub aws: Option<(String, String, String)>,
-}
-impl Endpoint {
-    pub fn get(id: impl Into<String>, url: impl Into<String>, items: &str) -> Self {
-        Self {
-            id: id.into(),
-            url: url.into(),
-            items: items.into(),
-            body: None,
-            aws: None,
-        }
-    }
-}
+pub use crate::endpoint::Endpoint;
 pub async fn request(
     http: &Http,
     auth: &Auth,
@@ -207,26 +189,45 @@ pub async fn collect_from<S: Source>(
         Coverage::Missing,
     );
     result.operations.clear();
-    let mut pending: VecDeque<_> = endpoints.into();
+    let mut initial = endpoints.into_iter();
+    let mut pending = VecDeque::new();
+    let mut queued_bytes = 0usize;
+    let queue_bytes = job.settings.memory_bytes / 4 / job.settings.concurrency.max(1);
+    let mut budget = monitor_core::collection_budget::Limit::new(&job.settings);
     let mut visited = BTreeSet::new();
-    while let Some(endpoint) = pending.pop_front() {
+    loop {
+        if budget.exhausted() {
+            if !pending.is_empty() || initial.len() > 0 {
+                budget.mark_limited();
+            }
+            break;
+        }
+        let endpoint = if let Some(endpoint) = pending.pop_front() {
+            queued_bytes = queued_bytes.saturating_sub(Endpoint::bytes(&endpoint));
+            endpoint
+        } else if let Some(endpoint) = initial.next() {
+            endpoint
+        } else {
+            break;
+        };
         let key = cache_key(job, &endpoint);
         if !visited.insert(key.clone()) {
             continue;
         }
         if visited.len() > job.settings.max_assets {
-            result
-                .operations
-                .push(operation("discovery-limit", Err(&Error::Limit), 0, true));
+            budget.mark_limited();
             break;
         }
         if cancel.is_cancelled() {
-            result.operations.push(operation(
-                &endpoint.id,
-                Err(&Error::Cancelled),
-                0,
-                job.settings.required,
-            ));
+            budget.operations(
+                &mut result.operations,
+                [operation(
+                    &endpoint.id,
+                    Err(&Error::Cancelled),
+                    0,
+                    job.settings.required,
+                )],
+            );
             continue;
         }
         let mut fetched = if let Some(cache) = source.cache() {
@@ -234,33 +235,25 @@ pub async fn collect_from<S: Source>(
         } else {
             crate::endpoint_scan::fetch(source, job, endpoint, cancel).await
         };
-        let remaining = job
-            .settings
-            .max_assets
-            .saturating_sub(result.observations.len());
-        if fetched.result.observations.len() > remaining {
-            fetched.result.observations.truncate(remaining);
-            for op in &mut fetched.result.operations {
-                if op.coverage == Coverage::Complete {
-                    op.coverage = Coverage::Truncated;
-                }
-            }
-        }
         for followup in fetched.followups {
-            if pending.len() >= job.settings.ready_queue {
+            let bytes = followup.bytes();
+            if pending.len() >= job.settings.ready_queue
+                || bytes > queue_bytes.saturating_sub(queued_bytes)
+            {
                 for op in &mut fetched.result.operations {
                     op.coverage = Coverage::Truncated;
                 }
                 break;
             }
+            queued_bytes += bytes;
             pending.push_back(followup);
         }
         for op in &mut fetched.result.operations {
             op.required = job.settings.required;
         }
-        result.operations.extend(fetched.result.operations);
-        result.observations.extend(fetched.result.observations);
+        budget.merge(&mut result, fetched.result);
     }
+    budget.finish(&mut result, job.settings.required);
     if result.operations.is_empty() {
         result.operations.push(operation(
             "not-configured",

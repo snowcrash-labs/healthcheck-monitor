@@ -12,7 +12,17 @@ struct RegionClients {
     signals: aws_sdk_applicationsignals::Client,
 }
 impl AwsClients {
-    pub fn new(config: SdkConfig) -> Self {
+    pub fn new(mut config: SdkConfig) -> Self {
+        if let Some(provider) = config.credentials_provider() {
+            config = config
+                .to_builder()
+                .credentials_provider(
+                    aws_credential_types::provider::SharedCredentialsProvider::new(
+                        crate::aws_credential_cache::Cached::new(provider),
+                    ),
+                )
+                .build();
+        }
         Self {
             sts: aws_sdk_sts::Client::new(&config),
             config,
@@ -33,7 +43,8 @@ impl AwsClients {
         {
             return Ok(client);
         }
-        if self.regions.len() >= 32 {
+        // Configured regions plus CloudFront's mandatory global metric region.
+        if self.regions.len() >= 33 {
             return Err(Error::Limit);
         }
         let config = self

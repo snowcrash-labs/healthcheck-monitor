@@ -61,8 +61,21 @@ pub fn state(value: Option<&str>) -> ServiceState {
             ServiceState::Stopped
         }
         Some(
-            "failed" | "failure" | "error" | "unhealthy" | "impaired" | "degraded" | "unavailable"
-            | "alarm",
+            "failed"
+            | "failure"
+            | "error"
+            | "unhealthy"
+            | "impaired"
+            | "degraded"
+            | "unavailable"
+            | "alarm"
+            | "storage-full"
+            | "incompatible-parameters"
+            | "incompatible-network"
+            | "incompatible-restore"
+            | "inaccessible-encryption-credentials"
+            | "inaccessible-encryption-credentials-recoverable"
+            | "restore-error",
         ) => ServiceState::Failed,
         Some(
             "pending" | "creating" | "updating" | "starting" | "provisioning" | "queued"
@@ -138,9 +151,10 @@ pub fn service(job: &Job, operation: &str, value: &Value) -> Option<Observation>
             "/DBClusterStatus",
             "/CacheClusterStatus",
             "/TableStatus",
-            "/properties/provisioningState",
+            "/properties/powerState/code",
             "/properties/state",
             "/properties/status",
+            "/properties/provisioningState",
             "/healthStatus",
         ],
     ));

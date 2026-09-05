@@ -36,6 +36,9 @@ pub fn endpoints(job: &Job) -> Vec<Endpoint> {
     }
     for region in &job.target.regions {
         for (name, service, prefix, action, items) in JSON_APIS {
+            if job.artifact_only && !matches!(*name, "ecr" | "codebuild" | "codepipeline") {
+                continue;
+            }
             if *name == "health" && job.target.regions.first() != Some(region) {
                 continue;
             }
@@ -100,6 +103,9 @@ pub fn endpoints(job: &Job) -> Vec<Endpoint> {
             ("backup", "backup", "/backup-vaults/", "/BackupVaultList"),
             ("acm", "acm", "/", "/CertificateSummaryList"),
         ] {
+            if job.artifact_only {
+                continue;
+            }
             if matches!(job.check, Check::Alerts | Check::Edge | Check::Slo) {
                 continue;
             }

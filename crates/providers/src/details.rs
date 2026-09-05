@@ -4,6 +4,9 @@ use monitor_core::{config::resolve::Job, model::Provider};
 use monitor_integrations::projection::text;
 use serde_json::{Value, json};
 pub fn followups(job: &Job, parent: &Endpoint, row: &Value) -> Vec<Endpoint> {
+    if !crate::resource_scope::selected(job, parent, row) {
+        return vec![];
+    }
     if parent.id.starts_with("pipeline-state/") {
         return crate::aws_pipeline::followups(job, parent, row);
     }

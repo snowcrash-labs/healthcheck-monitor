@@ -186,3 +186,24 @@ fn active_failed_revisions_are_not_mistaken_for_intentional_scale_to_zero()
     assert_eq!(inactive[0].expected, Expected::ScaleToZero);
     Ok(())
 }
+#[test]
+fn successful_provisioning_does_not_hide_a_stopped_runtime()
+-> Result<(), Box<dyn std::error::Error>> {
+    let observations = project(
+        &job("azure")?,
+        &Endpoint::get(
+            "app-service",
+            "https://management.azure.com/sites",
+            "/value",
+        ),
+        &json!({"id":"/subscriptions/subscription/resourceGroups/group/providers/Microsoft.Web/sites/app","properties":{"provisioningState":"Succeeded","state":"Stopped"}}),
+    );
+    assert!(observations.iter().any(|observation| matches!(
+        observation.data,
+        Data::Service {
+            state: ServiceState::Stopped,
+            ..
+        }
+    )));
+    Ok(())
+}

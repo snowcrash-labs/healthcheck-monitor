@@ -18,10 +18,33 @@ pub fn project(job: &Job, endpoint: &Endpoint, value: &Value) -> Option<Vec<Obse
             "/instanceId",
             "/InstanceId",
             "/Id",
+            "/AutoScalingGroupName",
+            "/serviceArn",
+            "/serviceName",
         ],
     )
     .unwrap_or("configuration");
     let data = match family {
+        "autoscaling" => Data::Workload {
+            desired: number(value, &["/DesiredCapacity"]).unwrap_or(0.0) as u32,
+            ready: crate::projection_rows::rows(value, "/Instances/member")
+                .into_iter()
+                .filter(|instance| {
+                    text(instance, &["/HealthStatus"]) == Some("Healthy")
+                        && text(instance, &["/LifecycleState"]) == Some("InService")
+                })
+                .count() as u32,
+            created_at: timestamp(value, &["/CreatedTime"]),
+            draining: false,
+            node: false,
+        },
+        "ecs-services-detail" => Data::Workload {
+            desired: number(value, &["/desiredCount"]).unwrap_or(0.0) as u32,
+            ready: number(value, &["/runningCount"]).unwrap_or(0.0) as u32,
+            created_at: timestamp(value, &["/createdAt"]),
+            draining: text(value, &["/status"]) == Some("DRAINING"),
+            node: false,
+        },
         "cloudfront" => Data::Service {
             state: match (boolean(value, &["/Enabled"]), text(value, &["/Status"])) {
                 (Some(false), _) => ServiceState::Stopped,

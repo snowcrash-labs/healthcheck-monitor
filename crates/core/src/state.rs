@@ -15,6 +15,9 @@ impl State {
         now: DateTime<Utc>,
     ) -> Vec<Transition> {
         let samples = self.snapshot.samples.entry(job.key.clone()).or_default();
+        self.snapshot
+            .regions
+            .insert(job.target.name.clone(), job.target.regions.clone());
         if job.assess_health {
             self.snapshot.collection_only.remove(&job.key);
         } else {

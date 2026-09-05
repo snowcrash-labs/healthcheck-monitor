@@ -29,13 +29,14 @@ impl Series {
     pub fn record(&mut self, row: &MetricDataResult, limit: usize) {
         if !matches!(
             self.coverage,
-            Coverage::Truncated | Coverage::Malformed | Coverage::Denied
+            Coverage::Truncated | Coverage::Malformed | Coverage::Denied | Coverage::Unavailable
         ) {
             self.coverage = match row.status_code().map(|code| code.as_str()) {
                 Some("Complete") => Coverage::Complete,
                 Some("Forbidden") => Coverage::Denied,
                 Some("InternalError") => Coverage::Unavailable,
-                _ => Coverage::Missing,
+                Some("PartialData") => Coverage::Missing,
+                _ => Coverage::Malformed,
             };
         }
         if row.timestamps().len() != row.values().len() {

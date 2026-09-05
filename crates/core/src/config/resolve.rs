@@ -43,13 +43,17 @@ pub struct Job {
 }
 impl Job {
     pub fn observation_scope(&self) -> String {
+        let mut regions = self.target.regions.clone();
+        regions.sort_unstable();
+        regions.dedup();
         format!(
             "{:?}",
             (
                 self.target.provider,
                 &self.target.scope,
                 &self.target.context,
-                &self.target.credential
+                &self.target.credential,
+                regions
             )
         )
     }
@@ -111,6 +115,16 @@ impl Config {
         selection: &Selection,
         metadata_only: bool,
     ) -> Result<Effective, Error> {
+        if selection.resources.len() > 1024
+            || selection
+                .resources
+                .iter()
+                .any(|selector| !super::validate::identifier(selector))
+        {
+            return Err(Error::Config(
+                "invalid or excessive CLI resource selectors".into(),
+            ));
+        }
         let profile_name = selection.profile.as_deref().unwrap_or("full");
         let profile = self
             .profiles
@@ -134,6 +148,7 @@ impl Config {
             .map(|byte| format!("{byte:02x}"))
             .collect();
         let mut jobs = Vec::new();
+        let mut footprint = super::shared_limits::Footprint::default();
         for target in self
             .targets
             .iter()
@@ -225,6 +240,7 @@ impl Config {
                 if !settings.enabled {
                     continue;
                 }
+                footprint.admit(target, &settings, &selection.resources, &self.severity)?;
                 let mut target = target.clone();
                 if !selection.resources.is_empty() {
                     target.resources = selection.resources.clone();

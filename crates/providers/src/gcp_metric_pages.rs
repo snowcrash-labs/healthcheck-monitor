@@ -73,6 +73,14 @@ pub async fn collect<S: Source>(
             }
         };
         for row in response.time_series {
+            if row.resource.as_ref().is_some_and(|resource| {
+                ["location", "region", "zone"]
+                    .into_iter()
+                    .filter_map(|key| resource.labels.get(key))
+                    .any(|location| !crate::resource_scope::location(job, location))
+            }) {
+                continue;
+            }
             let id = crate::metric_window::id(
                 &serde_json::json!({"resource":row.resource,"metric":row.metric}),
             );

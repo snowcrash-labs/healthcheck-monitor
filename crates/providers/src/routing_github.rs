@@ -10,6 +10,12 @@ impl Router {
         scope: &Scope,
         cancel: &CancellationToken,
     ) -> Result<CheckResult, Error> {
+        if job.check == Check::Preflight {
+            let (token, expected) = self.github_token(job, cancel).await?;
+            return Ok(
+                github::collect(&scope.http, job, &token, expected.as_deref(), cancel).await,
+            );
+        }
         let mut cache = scope.github_cache.lock().await;
         if job.check != Check::Preflight
             && let Some(cached) = cache.as_mut().filter(|cached| {
@@ -27,25 +33,51 @@ impl Router {
         if job.check != Check::Preflight {
             *cache = None;
         }
-        let config = self.config.read().await;
-        let profile = job
-            .target
-            .github_credential
+        let (token, expected) = self.github_token(job, cancel).await?;
+        let result = github::collect(&scope.http, job, &token, expected.as_deref(), cancel).await;
+        if result.complete() {
+            *cache = None;
+            if let Ok(bytes) = u32::try_from(monitor_core::bounds::result_bytes(&result))
+                && let Ok(permit) = self.cache_bytes.clone().try_acquire_many_owned(bytes)
+            {
+                *cache = Some(Cached {
+                    consumers: std::collections::BTreeSet::from([job.check]),
+                    result: result.clone(),
+                    _bytes: permit,
+                });
+            }
+        }
+        Ok(result)
+    }
+    async fn github_token(
+        &self,
+        job: &Job,
+        cancel: &CancellationToken,
+    ) -> Result<(String, Option<String>), Error> {
+        let profile = {
+            let config = self.config.read().await;
+            job.target
+                .github_credential
+                .as_ref()
+                .or_else(|| {
+                    (job.target.provider == Provider::Github)
+                        .then_some(job.target.credential.as_ref())
+                        .flatten()
+                })
+                .and_then(|name| config.credentials.get(name))
+                .or_else(|| {
+                    config
+                        .credentials
+                        .values()
+                        .find(|profile| profile.provider == Provider::Github)
+                })
+                .cloned()
+        };
+        let expected = profile
             .as_ref()
-            .or_else(|| {
-                (job.target.provider == Provider::Github)
-                    .then_some(job.target.credential.as_ref())
-                    .flatten()
-            })
-            .and_then(|name| config.credentials.get(name))
-            .or_else(|| {
-                config
-                    .credentials
-                    .values()
-                    .find(|profile| profile.provider == Provider::Github)
-            });
-        let expected = profile.and_then(|profile| profile.expected_identity.clone());
+            .and_then(|profile| profile.expected_identity.clone());
         let env = profile
+            .as_ref()
             .and_then(|p| p.token_env.as_deref())
             .unwrap_or("GH_TOKEN");
         let token = match std::env::var(env) {
@@ -66,20 +98,6 @@ impl Router {
                     .to_string()
             }
         };
-        drop(config);
-        let result = github::collect(&scope.http, job, &token, expected.as_deref(), cancel).await;
-        if job.check != Check::Preflight && result.complete() {
-            *cache = None;
-            if let Ok(bytes) = u32::try_from(monitor_core::bounds::result_bytes(&result))
-                && let Ok(permit) = self.cache_bytes.clone().try_acquire_many_owned(bytes)
-            {
-                *cache = Some(Cached {
-                    consumers: std::collections::BTreeSet::from([job.check]),
-                    result: result.clone(),
-                    _bytes: permit,
-                });
-            }
-        }
-        Ok(result)
+        Ok((token, expected))
     }
 }

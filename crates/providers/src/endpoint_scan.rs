@@ -30,6 +30,9 @@ pub async fn fetch<S: Source>(
     );
     result.operations.clear();
     let mut pending = VecDeque::new();
+    let mut queued_bytes = 0usize;
+    let queue_limit = job.settings.memory_bytes / 4 / job.settings.concurrency.max(1);
+    let mut budget = monitor_core::collection_budget::Limit::new(&job.settings);
     let mut endpoint = endpoint;
     let mut outcome = Ok(0usize);
     let mut pages = 0;
@@ -42,10 +45,14 @@ pub async fn fetch<S: Source>(
                 let batches = crate::aws_batches::followups(&endpoint, &rows);
                 if let Some(batches) = &batches {
                     for batch in batches {
-                        if pending.len() >= job.settings.ready_queue {
+                        let size = batch.bytes();
+                        if pending.len() >= job.settings.ready_queue
+                            || size > queue_limit.saturating_sub(queued_bytes)
+                        {
                             outcome = Err(Error::Limit);
                             break;
                         }
+                        queued_bytes += size;
                         pending.push_back(batch.clone());
                     }
                 }
@@ -59,42 +66,35 @@ pub async fn fetch<S: Source>(
                         if let Err(error) = crate::metadata_fields::validate(job, &endpoint, row) {
                             outcome = Err(error);
                         }
-                        let available = job
-                            .settings
-                            .max_assets
-                            .saturating_sub(result.observations.len());
-                        if projected.len() > available {
+                        if !budget.observations(&mut result.observations, projected) {
                             outcome = Err(Error::Limit);
                         }
-                        result
-                            .observations
-                            .extend(projected.into_iter().take(available));
                         for detail in if batches.is_none() {
                             crate::details::followups(job, &endpoint, row)
                         } else {
                             vec![]
                         } {
-                            if pending.len() >= job.settings.ready_queue {
+                            let size = detail.bytes();
+                            if pending.len() >= job.settings.ready_queue
+                                || size > queue_limit.saturating_sub(queued_bytes)
+                            {
                                 outcome = Err(Error::Limit);
                                 break;
                             }
+                            queued_bytes += size;
                             pending.push_back(detail);
+                        }
+                        if outcome.is_err() {
+                            break;
                         }
                     }
                     outcome = outcome.map(|n| n + rows.len());
                 } else if endpoint.items.is_empty() {
                     let projected = crate::resource_projection::project(job, &endpoint, &payload);
-                    let available = job
-                        .settings
-                        .max_assets
-                        .saturating_sub(result.observations.len());
                     outcome = crate::metadata_fields::validate(job, &endpoint, &payload).map(|_| 1);
-                    if projected.len() > available {
+                    if !budget.observations(&mut result.observations, projected) {
                         outcome = Err(Error::Limit);
                     }
-                    result
-                        .observations
-                        .extend(projected.into_iter().take(available));
                 } else if payload.as_object().is_some_and(|m| m.is_empty())
                     || endpoint.items == "/items"
                         && payload

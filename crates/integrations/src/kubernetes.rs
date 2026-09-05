@@ -77,6 +77,7 @@ impl Kubernetes {
             Coverage::Missing,
         );
         result.operations.clear();
+        let mut budget = monitor_core::collection_budget::Limit::new(&job.settings);
         for (kind, api) in KINDS {
             if !required_kind(job, kind) {
                 continue;
@@ -112,17 +113,11 @@ impl Kubernetes {
                                 break;
                             }
                             let projected = super::kube_projection::project(job, kind, item);
-                            let available = job
-                                .settings
-                                .max_assets
-                                .saturating_sub(result.observations.len());
-                            if projected.len() > available {
+                            let before = result.observations.len();
+                            if !budget.observations(&mut result.observations, projected) {
                                 outcome = Err(Error::Limit);
                             }
-                            count += projected.len().min(available);
-                            result
-                                .observations
-                                .extend(projected.into_iter().take(available));
+                            count += result.observations.len() - before;
                             if outcome.is_err() {
                                 break;
                             }
@@ -149,13 +144,28 @@ impl Kubernetes {
             }
             let required = !api.contains(".io/")
                 || matches!(outcome, Err(Error::Denied | Error::Authentication));
-            result.operations.push(operation(
-                kind,
-                outcome.as_ref().copied(),
-                pages,
-                required && job.settings.required,
-            ));
+            budget.operations(
+                &mut result.operations,
+                [operation(
+                    kind,
+                    outcome.as_ref().copied(),
+                    pages,
+                    required && job.settings.required,
+                )],
+            );
         }
+        if cancel.is_cancelled() {
+            budget.operations(
+                &mut result.operations,
+                [operation(
+                    "collection-cancelled",
+                    Err(&Error::Cancelled),
+                    0,
+                    job.settings.required,
+                )],
+            );
+        }
+        budget.finish(&mut result, job.settings.required);
         result.finished_at = chrono::Utc::now();
         result
     }

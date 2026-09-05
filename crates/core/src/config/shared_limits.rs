@@ -2,6 +2,10 @@
 use super::resolve::Job;
 use crate::error::Error;
 pub fn normalize(jobs: &mut [Job]) -> Result<(), Error> {
+    let mut footprint = Footprint::default();
+    for job in jobs.iter() {
+        footprint.admit(&job.target, &job.settings, &[], &job.severity)?;
+    }
     let Some(first) = jobs.first() else {
         return Ok(());
     };
@@ -42,4 +46,45 @@ pub fn normalize(jobs: &mut [Job]) -> Result<(), Error> {
         })?;
     }
     Ok(())
+}
+/// Account for scheduler, reload-channel and comparison copies before cloning large job settings.
+pub(super) struct Footprint {
+    used: usize,
+    limit: usize,
+}
+impl Default for Footprint {
+    fn default() -> Self {
+        Self {
+            used: 0,
+            limit: usize::MAX,
+        }
+    }
+}
+impl Footprint {
+    pub fn admit(
+        &mut self,
+        target: &super::types::Target,
+        settings: &super::settings::Settings,
+        selectors: &[String],
+        severity: &std::collections::BTreeMap<String, crate::model::Severity>,
+    ) -> Result<(), Error> {
+        let mut bytes = serde_json::to_vec(target)?.len();
+        if !selectors.is_empty() {
+            bytes = bytes
+                .saturating_sub(serde_json::to_vec(&target.resources)?.len())
+                .saturating_add(serde_json::to_vec(selectors)?.len());
+        }
+        bytes = bytes
+            .saturating_add(serde_json::to_vec(severity)?.len())
+            .saturating_add(4096)
+            .saturating_mul(4);
+        self.limit = self.limit.min(settings.memory_bytes / 8);
+        self.used = self.used.saturating_add(bytes);
+        if self.used > self.limit {
+            return Err(Error::Config(
+                "effective configuration exceeds the shared memory budget".into(),
+            ));
+        }
+        Ok(())
+    }
 }

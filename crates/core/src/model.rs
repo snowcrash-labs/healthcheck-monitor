@@ -196,6 +196,8 @@ pub struct Snapshot {
     #[serde(default)]
     pub selectors: BTreeMap<String, Vec<String>>,
     #[serde(default)]
+    pub regions: BTreeMap<String, Vec<String>>,
+    #[serde(default)]
     pub freshness: BTreeMap<String, u64>,
     pub results: BTreeMap<String, CheckResult>,
     pub findings: BTreeMap<String, Finding>,

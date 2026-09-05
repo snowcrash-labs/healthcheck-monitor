@@ -55,10 +55,10 @@ pub async fn monitor(config_path: &Path, options: Options, mode: Mode) -> Result
             effective.jobs.iter().map(|j| j.key.clone()).collect(),
         ),
     };
-    state.retain_scope(&effective.jobs);
     if matches!(mode, Mode::Once) {
         state.begin_run();
     }
+    state = state.reconfigured(&effective.jobs)?;
     let router = Arc::new(Router::new(config, &effective));
     if matches!(mode, Mode::Watch { .. }) {
         router.restore_logs(&state.snapshot).await;
@@ -95,8 +95,12 @@ pub async fn monitor(config_path: &Path, options: Options, mode: Mode) -> Result
             _ = reload.recv(), if matches!(mode, Mode::Watch { .. }) && cleanup_deadline.is_none() => {
                 match load(config_path).and_then(|config| config.resolve(&selection).map(|e| (config, e))) {
                     Ok((config, replacement)) => {
+                        let candidate=match state.reconfigured(&replacement.jobs) {
+                            Ok(candidate)=>candidate,
+                            Err(error)=>{tracing::warn!(error=%error,"Configuration reload rejected; previous configuration retained");continue;},
+                        };
                         router.reload(config, &replacement).await;
-                        state.retain_scope(&replacement.jobs);
+                        state=candidate;
                         if let Some(job) = replacement.jobs.first() { settings = job.settings.clone(); }
                         history = tokio::time::interval(settings.history_interval.duration());
                         history.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -104,7 +108,7 @@ pub async fn monitor(config_path: &Path, options: Options, mode: Mode) -> Result
                         if updates.send(replacement).is_err() { stop.cancel(); }
                         tracing::info!(revision = %effective.revision, "Configuration reloaded");
                     }
-                    Err(_) => tracing::warn!("Configuration reload rejected; previous configuration retained"),
+                    Err(error) => tracing::warn!(error=%error,"Configuration reload rejected; previous configuration retained"),
                 }
             },
             _ = history.tick(), if matches!(mode, Mode::Watch { .. }) && cleanup_deadline.is_none() => {

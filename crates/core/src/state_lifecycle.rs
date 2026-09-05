@@ -3,6 +3,36 @@ use crate::{config::resolve::Job, model::*, state::State};
 use chrono::{DateTime, Utc};
 use std::collections::{BTreeMap, BTreeSet};
 impl State {
+    /// A reload cannot silently discard unresolved evidence to satisfy a smaller budget.
+    pub fn reconfigured(&self, jobs: &[Job]) -> Result<Self, crate::error::Error> {
+        let mut next = Self {
+            snapshot: self.snapshot.clone(),
+        };
+        next.retain_scope(jobs);
+        let job = jobs.first().ok_or(crate::error::Error::Evidence)?;
+        let settings = &job.settings;
+        next.trim_retired(settings.max_findings);
+        let assets = next
+            .snapshot
+            .results
+            .values()
+            .map(|result| result.observations.len())
+            .sum::<usize>();
+        let bytes = next
+            .snapshot
+            .results
+            .values()
+            .map(crate::bounds::result_bytes)
+            .sum::<usize>();
+        if assets > settings.max_assets
+            || next.snapshot.findings.len() > settings.max_findings
+            || bytes > settings.memory_bytes / 2
+        {
+            return Err(crate::error::Error::Config("replacement limits cannot retain current evidence; previous configuration retained".into()));
+        }
+        next.snapshot.revision = job.revision.clone();
+        Ok(next)
+    }
     pub(crate) fn apply_derived(
         &mut self,
         job: &Job,
@@ -46,6 +76,7 @@ impl State {
                 scope_fingerprints: BTreeMap::new(),
                 samples: BTreeMap::new(),
                 selectors: BTreeMap::new(),
+                regions: BTreeMap::new(),
                 freshness: BTreeMap::new(),
                 results: BTreeMap::new(),
                 findings: BTreeMap::new(),
@@ -138,6 +169,13 @@ impl State {
         transitions
     }
     pub fn retain_scope(&mut self, jobs: &[Job]) {
+        self.snapshot.regions.clear();
+        for job in jobs {
+            self.snapshot
+                .regions
+                .entry(job.target.name.clone())
+                .or_insert_with(|| job.target.regions.clone());
+        }
         if jobs
             .first()
             .is_some_and(|job| job.revision != self.snapshot.revision)
