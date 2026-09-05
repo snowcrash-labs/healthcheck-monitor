@@ -1,37 +1,191 @@
-# Soundpatrol healthcheck monitor
+# Healthcheck Monitor
 
-Read-only Rust monitoring for explicitly configured infrastructure, with one-off checks, continuous monitoring and an autonomous web dashboard through the same engine. The [requirements and acceptance plan](docs/plans/2026-09-04-configurable-health-monitor.md) includes the July 10 operational checklist and documented live-validation gaps.
+A read-only infrastructure health monitor in Rust, built at Soundpatrol. Run a focused assessment from the terminal, monitor continuously, or serve a live web dashboard. All three modes use the same collection and evaluation engine.
 
-```text
-cargo run -p healthcheck-monitor -- config validate --show-effective
-cargo run -p healthcheck-monitor -- run --profile quick --target dev
-cargo run -p healthcheck-monitor -- run --target api --check queues --samples 1
-cargo run -p healthcheck-monitor -- watch --profile full --interval 60s --duration 30m
-cargo run -p healthcheck-monitor -- report evidence/monitor-latest.json
-cargo run -p healthcheck-monitor -- diff older.json newer.json
-```
+The monitor keeps **system health**, **collection coverage**, and **evidence freshness** separate. A successful API request does not establish health; unavailable telemetry does not mean an outage has recovered. Reports describe their selected scope.
 
-Edit `monitor.toml` or pass `--config`. Collection does not start interactive login. Use `auth status` for configured identities and `auth login <profile>` only when login is intended. Reports distinguish collection coverage from health and retain the selected scope.
+## Capabilities
 
-See the [operations runbook](docs/plans/2026-09-05-monitor-operations.md) for configuration, permissions, evidence and foreground supervision, and the [verification record](docs/plans/2026-09-05-monitor-verification.md) for the source-test crosswalk and validation gaps.
+- **Cloud and Kubernetes checks:** Inventory, workload state, managed dependencies, metrics, queues, alerts, SLOs, backup/recovery metadata, and provider health across GCP, AWS, Azure, and Kubernetes.
+- **Shared dependencies:** DNS, trusted TLS and expiry, HTTP status and latency, NATS/KEDA aggregates, GitHub workflows, release provenance, and bounded redacted diagnostics.
+- **Configurable execution:** TOML profiles, target/check/resource selection, sampling, per-check schedules, thresholds, grace periods, finite limits, and atomic SIGHUP reload.
+- **Persistent dashboard:** Axum, SolidJS 2 RC, Solid router, and Vite; paginated findings and resources, evidence details, transition history, live updates, persistent top bars, and light/dark/system themes.
+- **Evidence and history:** Atomic JSON snapshots, Markdown reports, rotated NDJSON transitions, offline comparisons, and PostgreSQL dashboard history with native UUIDv7 keys.
+- **Bounded operation:** Fair scheduling, independent provider scopes, reused clients and observations, batched metrics, bounded caches, response limits, and cancellation deadlines.
 
-The Axum dashboard uses SolidJS 2 RC, the Solid router and Vite 8.2.2, with a persistent top bar and light/dark/system themes in centralized CSS. PostgreSQL 18.6 stores compact history with native `uuidv7()` keys. TLS prefers HTTP/2. See the [dashboard runbook](docs/plans/2026-09-05-dashboard-operations.md) for the local demo, database setup, shared-access boundary and verification commands.
+Collection does not change infrastructure, consume queue messages, read application database records or secret values, perform synthetic transactions, or send notifications. Endpoint probes do not retain response bodies. PostgreSQL writes belong only to the monitor's own history store.
+
+## Quick start
+
+Requirements: current stable Rust, a C compiler for jemalloc, and credentials for your selected targets. The project uses edition 2024 and the prebuilt Rust standard library. Linux and macOS are supported.
 
 ```sh
-cargo build -p healthcheck-monitor
-npm --prefix dashboard ci
-npm --prefix dashboard run build
-env HEALTHCHECK_DATABASE_URL='postgresql:///healthcheck_monitor_dashboard_dev?host=/tmp' \
-  target/debug/healthcheck-monitor serve --server-config server.example.toml \
-  --target dev --check kubernetes --samples 1 --output evidence/dashboard-demo
+git clone https://github.com/snowcrash-labs/healthcheck-monitor.git
+cd healthcheck-monitor
+cargo build --locked -p healthcheck-monitor
+cp monitor.example.toml monitor.local.toml
 ```
 
-Open `http://127.0.0.1:9840`. Collection continues without browsers. One-off CLI assessments remain independent of PostgreSQL. The [original dashboard assessment](docs/plans/2026-09-05-health-dashboard-assessment.md) explains the operating scope and comparison with Datadog.
+Edit `monitor.local.toml` with your Kubernetes context, endpoints, and cloud targets before collecting. It is ignored by Git. The checked-in `monitor.toml` is Soundpatrol's deployment configuration; the generic example is the starting point for another environment.
 
-The [release/Python benchmark](docs/plans/2026-09-05-release-python-benchmark.md) records live wall time, CPU time and process-tree memory measurements, scope differences, and reproduction commands.
+```sh
+target/debug/healthcheck-monitor config validate --config monitor.local.toml --show-effective
+target/debug/healthcheck-monitor run --config monitor.local.toml --profile quick
+```
 
-The [collection optimization record](docs/plans/2026-09-05-collection-optimization.md) describes bounded parallel reads, shared HTTP/DNS pools, native AWS SDK coverage, and the paired concurrency benchmark. Four-way collection reduced development-build elapsed time by 56% for Kubernetes and 65% for KEDA queues on the configured dev target.
+An individual scan failure does not stop independent checks. The command publishes the available evidence before choosing its exit status.
 
-The toolchain is stable Rust with the prebuilt standard library. The original monitoring implementation was verified with 225 tests on macOS and Linux ARM64. The current workspace has 258 passing regular tests plus the native PostgreSQL contract test on macOS; current dashboard changes have not been rerun on Linux. Formatting, Clippy, and dependency/TLS audits pass. Development checks use `cargo test --workspace`, `cargo fmt --all --check`, and `cargo clippy --workspace --all-targets -- -D warnings`. Dependency updates use `cargo upgrade --incompatible`; dependency auditing uses `cargo audit`.
+## Execution modes
 
-No infrastructure mutations, notifications, synthetic transactions, application database connections, secret-value reads, queue-message consumption, or response-body collection for endpoint probes are part of this service.
+| Command | Behavior |
+| --- | --- |
+| `run` | Collect and evaluate an assessment, publish evidence, then exit. |
+| `watch` | Schedule checks autonomously until stopped or `--duration` expires. |
+| `serve` | Run the same autonomous monitor with an HTTP API and dashboard. |
+| `report <snapshot>` | Render an existing JSON snapshot offline. |
+| `diff <older> <newer>` | Compare snapshots offline. |
+| `config validate --show-effective` | Validate and print resolved settings without credentials. |
+| `auth status` | Check configured identities and credential availability. |
+| `auth login <profile>` | Explicitly launch the selected authentication helper. |
+
+```sh
+# Focus on Kubernetes; required collection prerequisites are included automatically.
+target/debug/healthcheck-monitor run --config monitor.local.toml \
+  --target cluster --check kubernetes --output evidence/cluster
+
+# One queue observation leaves persistence-dependent conclusions unevaluated.
+target/debug/healthcheck-monitor run --config monitor.local.toml \
+  --target cluster --check queues --samples 1 --output evidence/queues
+
+# Override every selected check's cadence for this invocation.
+target/debug/healthcheck-monitor watch --config monitor.local.toml \
+  --profile full --interval 60s --duration 30m --output evidence/watch
+
+target/debug/healthcheck-monitor report evidence/cluster/monitor-latest.json
+target/debug/healthcheck-monitor diff older-snapshot.json newer-snapshot.json
+```
+
+`--target`, `--check`, and `--resource` support focused diagnostics. Queue assessments use five observations, thirty seconds apart, by default. Use separate output directories for concurrent processes because each evidence store has a single-writer lock.
+
+## Dashboard
+
+The dashboard needs Node 24 or newer, npm, and a dedicated PostgreSQL 18.6 or newer database. The CLI's `run`, `watch`, `report`, and `diff` commands do not require PostgreSQL or Node.
+
+```sh
+npm --prefix dashboard ci
+npm --prefix dashboard run build
+```
+
+Create a database owned by the monitoring service role, then provide its connection URL. Embedded migrations initialize the `health_monitor` schema at startup. Adjust the example URL for your PostgreSQL user, authentication method, and host.
+
+```sh
+env HEALTHCHECK_DATABASE_URL='postgresql://localhost/healthcheck_monitor_dashboard_dev' \
+  target/debug/healthcheck-monitor serve --config monitor.local.toml \
+  --server-config server.example.toml --profile quick --output evidence/dashboard
+```
+
+Open **http://127.0.0.1:9840**. Checks run without connected browsers. Refreshes read current state; they do not launch scans. Target selection survives navigation, and theme preference persists locally. Styling is centralized in [styles.css](dashboard/src/styles.css).
+
+If the monitor runs on another machine over SSH, forward its loopback port from your computer:
+
+```sh
+ssh -N -L 9840:127.0.0.1:9840 your-monitor-host
+```
+
+The default listener is loopback-only. Configure TLS in `server.local.toml` to prefer HTTP/2 through ALPN. Shared access requires a trusted authentication proxy; the server verifies its peer address, shared credential, public authority, and allowed identity domain. See the [dashboard runbook](docs/plans/2026-09-05-dashboard-operations.md) for TLS, access controls, database permissions, retention, and foreground supervision.
+
+For frontend development, run the loopback service and `npm --prefix dashboard run dev`. Vite serves the application on port 5173 and proxies API requests to port 9840.
+
+## Configuration and credentials
+
+Settings resolve in this order: built-in defaults, global configuration, selected profile, target settings, check settings, and explicit CLI overrides. Detailed monitoring runs only against configured targets; organization discovery does not silently expand that scope.
+
+| Profile | Default behavior |
+| --- | --- |
+| `quick` | Preflight, endpoints, Kubernetes state, and one queue observation. |
+| `full` | All applicable configured domains; the default profile. |
+| `deep` | Full coverage with a 24-hour, 5,000-entry log window and bounded diagnostics. |
+
+Profiles are editable presets. Capacity defaults are 80% warning and 90% error sustained for ten minutes where a valid denominator exists. Business-specific latency, queue age, recovery objectives, and SLO thresholds require configuration. Intervals, retries, timeouts, concurrency, freshness, retention, and confirmation counts are adjustable.
+
+| Integration | Credential source |
+| --- | --- |
+| GCP | Native `google-cloud-auth` with Application Default Credentials or a configured credential file. Local ADC uses `gcloud auth application-default login`; ordinary `gcloud auth login` is separate. |
+| AWS | Official `aws-config` and service SDKs; shared profiles, IAM Identity Center sessions, role assumption, environment credentials, or workload credentials. Interactive SSO login uses `aws sso login`. |
+| Azure | `azure_identity`; the existing `az login` session through `AzureCliCredential`, or configured managed/workload identity. |
+| Kubernetes | The selected kubeconfig context and supported credential plugin. GKE commonly uses `gke-gcloud-auth-plugin`. |
+| GitHub | The configured token environment variable, defaulting to `GH_TOKEN`, then the existing `gh auth token` credential. |
+
+Collection never initiates interactive login. Providers reuse and refresh credentials where supported; expired credentials leave dependent checks incomplete while independent checks continue. Tokens are excluded from snapshots, database history, frontend assets, and diagnostic logs.
+
+SIGHUP reloads monitoring configuration in `watch` or `serve`. Invalid replacements retain the previous configuration. Listener, TLS, access, database, and asset settings require a restart.
+
+## Health and failure semantics
+
+Health states are `healthy`, `degraded`, `unhealthy`, `unknown`, and `expected_inactive`. Findings retain stable resource/rule identities, original observation times, expected state, confidence, and evidence references. Fresh evidence is required for recovery; stale, failed, or truncated collection cannot establish recovery or resource removal.
+
+Configured endpoint paths require exact accepted statuses. Kubernetes Job terminal conditions take precedence over failed attempt counters. Restart comparisons require the same pod UID and container. Grace periods, suspended schedules, intentional scale-to-zero, and dormant resources remain explicit expectations.
+
+| `run` exit code | Meaning |
+| --- | --- |
+| `0` | No error-level findings or incomplete required coverage in the selected scope. |
+| `1` | Health errors; `--strict` also includes warnings. |
+| `2` | Fatal configuration or output failure. |
+| `3` | Incomplete required coverage, including combined coverage and health failures. |
+| `130` | User cancellation after attempting partial publication. |
+
+`watch` and `serve` continue through individual failures and unhealthy resources. Duration expiry is normal completion; the final report retains health and coverage. Shutdown allows five seconds to finalize partial evidence and clean up outstanding work.
+
+Disk and PostgreSQL faults remain visible while collection continues. Database admission is bounded; dropped records become explicit gaps when storage recovers. Pending database history can be lost if an outage lasts through shutdown. The journal is not a durable message spool.
+
+## Coverage and architecture
+
+| Domain | Representative coverage |
+| --- | --- |
+| GCP | GKE, Compute, Cloud Run, SQL, Redis/Valkey, Pub/Sub, Eventarc, Scheduler, builds, storage, DNS, keys/secrets metadata, Monitoring metrics/alerts/SLOs, quotas, and service health. |
+| AWS | EC2/Auto Scaling/EBS, EKS/ECS/Lambda, load balancing, Route 53/CloudFront/ACM, RDS/ElastiCache/DynamoDB, S3, queues/events, registries/builds, backups, keys/secrets metadata, CloudWatch, quotas, and AWS Health. |
+| Azure | Resource Graph, VM/VMSS/disks, AKS, Container Apps/App Service/Functions, load balancing/DNS/network metadata, databases/cache/storage, messaging, registries, Key Vault metadata, backups, Monitor, quotas, and Resource/Service Health. |
+| Shared | Kubernetes controllers, pods, jobs and schedules, HPA/KEDA, warning events, routes, certificates, ExternalSecrets, NATS aggregates, endpoints, GitHub, provenance, and redacted diagnostics. |
+
+AWS collection uses official Rust SDK clients over a bounded transport. GCP and Azure management reads use bounded typed REST adapters with native credential providers. Kubernetes uses `kube`; other shared integrations use native clients where applicable. A configured NATS fallback runs fixed aggregate reports through an existing utility deployment. Unsupported services, denied APIs, missing metrics, and unavailable entitlements remain explicit coverage outcomes.
+
+```mermaid
+flowchart LR
+    Config[Resolved configuration] --> Engine[Shared scheduler and evaluator]
+    Providers[Cloud and shared integrations] --> Engine
+    Engine --> Evidence[JSON, Markdown, NDJSON]
+    Engine --> View[Bounded current view]
+    Engine --> History[PostgreSQL history]
+    View --> API[Axum API and revision events]
+    History --> API
+    API --> Dashboard[SolidJS dashboard]
+    Evidence --> Offline[Offline report and diff]
+```
+
+The workspace separates [core evaluation](crates/core), [provider adapters](crates/providers), [shared integrations](crates/integrations), [runtime supervision](crates/runtime), [history](crates/history), [HTTP serving](crates/server), and the [CLI](crates/cli). Clients and observations are reused across checks; independent reads run concurrently within global and provider-scope limits.
+
+## Development and verification
+
+```sh
+cargo fmt --all --check
+cargo clippy --locked --workspace --all-targets -- -D warnings
+cargo test --locked --workspace
+cargo audit
+npm --prefix dashboard run check
+npm --prefix dashboard test
+npm --prefix dashboard run build
+npm --prefix dashboard audit
+```
+
+PostgreSQL contract tests require an isolated database named `healthcheck_monitor_dashboard_test`. Browser tests require a running dashboard with at least one observed resource and Playwright Chromium. Commands are in the [dashboard runbook](docs/plans/2026-09-05-dashboard-operations.md). Dependency maintenance uses `cargo upgrade --incompatible` and committed Rust/npm lockfiles.
+
+Native macOS verification passed 258 regular Rust tests plus the PostgreSQL contract test, five frontend tests, and two browser scenarios. The original engine was also tested on Linux ARM64; the workflow covers Linux/macOS checks and PostgreSQL. Live cloud credentials, environment-specific telemetry mappings, shared SSO integration, and production load remain deployment-specific validation work.
+
+## Documentation
+
+- [Monitoring configuration, permissions, and operation](docs/plans/2026-09-05-monitor-operations.md)
+- [Dashboard setup, access controls, and history](docs/plans/2026-09-05-dashboard-operations.md)
+- [Backend design](docs/architecture/be/design.md) and [frontend conventions](docs/design/fe/dashboard.md)
+- [Monitoring verification](docs/plans/2026-09-05-monitor-verification.md) and [dashboard verification](docs/plans/2026-09-05-persistent-dashboard.md)
+- [Collection optimization and concurrency measurements](docs/plans/2026-09-05-collection-optimization.md)
+- [Rust/Python benchmark and measurement limits](docs/plans/2026-09-05-release-python-benchmark.md)

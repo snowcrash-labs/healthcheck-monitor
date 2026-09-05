@@ -1,0 +1,45 @@
+# Copy to monitor.local.toml and replace the context and endpoint before collecting.
+version = 1
+
+[profiles.quick]
+checks = ["preflight", "edge", "kubernetes", "queues"]
+[profiles.quick.settings]
+samples = 1
+
+[profiles.full]
+checks = ["preflight", "discovery", "inventory", "kubernetes", "edge", "managed", "queues", "releases", "github", "metrics", "logs", "alerts", "slo", "flows"]
+
+[profiles.deep]
+checks = ["preflight", "discovery", "inventory", "kubernetes", "edge", "managed", "queues", "releases", "github", "metrics", "logs", "alerts", "slo", "flows"]
+[profiles.deep.settings]
+log_window = "24h"
+log_entries = 5000
+
+[[targets]]
+name = "cluster"
+provider = "kubernetes"
+scope = "my-cluster"
+context = "my-kubernetes-context"
+expected = "active"
+
+[[targets]]
+name = "api"
+provider = "edge"
+scope = "service.example.com"
+expected = "active"
+
+[[targets.endpoints]]
+name = "health"
+url = "https://service.example.com/healthz"
+accepted = [200]
+
+# Cloud target example; uncomment and replace the project and regions to enable.
+# [credentials.google]
+# provider = "gcp"
+#
+# [[targets]]
+# name = "cloud"
+# provider = "gcp"
+# scope = "my-google-cloud-project"
+# credential = "google"
+# regions = ["us-central1"]
