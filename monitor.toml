@@ -1,0 +1,112 @@
+# Explicit monitoring targets from Soundpatrol's source configuration.
+version = 1
+
+[credentials.google]
+provider = "gcp"
+
+[credentials.github]
+provider = "github"
+token_env = "GH_TOKEN"
+
+[[discovery]]
+provider = "gcp"
+scope = "organizations/1061245904102"
+credential = "google"
+
+[profiles.quick]
+checks = ["preflight", "edge", "kubernetes", "queues"]
+[profiles.quick.settings]
+samples = 1
+
+[profiles.full]
+checks = ["preflight", "discovery", "inventory", "kubernetes", "edge", "managed", "queues", "releases", "github", "metrics", "logs", "alerts", "slo"]
+
+[profiles.deep]
+checks = ["preflight", "discovery", "inventory", "kubernetes", "edge", "managed", "queues", "releases", "github", "metrics", "logs", "alerts", "slo"]
+[profiles.deep.settings]
+log_window = "24h"
+log_entries = 5000
+
+[[targets]]
+name = "dev"
+provider = "gcp"
+scope = "dev-sc-transcription-fa62"
+credential = "google"
+regions = ["us-central1"]
+expected = "active"
+context = "gke_dev-sc-transcription-fa62_us-central1_dev-sc-transcription-gke"
+
+[[targets.endpoints]]
+name = "web-health"
+url = "https://app.dev.soundpatrol.com/api/healthz"
+accepted = [200]
+
+[targets.nats_fallback]
+namespace = "transcription"
+deployment = "nats-box"
+
+[[targets]]
+name = "api"
+provider = "gcp"
+scope = "api-sc-transcription-4cd1"
+credential = "google"
+regions = ["us-central1"]
+expected = "active"
+context = "gke_api-sc-transcription-4cd1_us-central1_api-sc-transcription-gke"
+
+[targets.nats_fallback]
+namespace = "transcription"
+deployment = "nats-box"
+
+[[targets]]
+name = "prod"
+provider = "gcp"
+scope = "prod-sc-transcription-1122"
+credential = "google"
+regions = ["us-central1"]
+expected = "dormant"
+context = "gke_prod-sc-transcription-1122_us-central1_prod-sc-transcription-gke"
+
+[[targets]]
+name = "sony"
+provider = "gcp"
+scope = "sony-sc-transcription-f435"
+credential = "google"
+regions = ["us-central1"]
+expected = "dormant"
+context = "gke_sony-sc-transcription-f435_us-central1_sony-sc-transcription-gke"
+
+[[targets]]
+name = "operations"
+provider = "gcp"
+scope = "sc-devops-root"
+credential = "google"
+regions = ["us-central1"]
+expected = "active"
+context = "gke_sc-devops-root_us-central1-a_sc-devops-gke"
+
+[[targets]]
+name = "c2pa"
+provider = "gcp"
+scope = "c2pa-service"
+credential = "google"
+regions = ["us-central1"]
+expected = "active"
+
+[[targets]]
+name = "ghoskey"
+provider = "gcp"
+scope = "ghoskey-enforcement"
+credential = "google"
+regions = ["us-central1"]
+expected = "active"
+
+[[targets]]
+name = "source"
+provider = "github"
+scope = "snowcrash-labs"
+credential = "github"
+repositories = ["snowcrash-labs/sc-hiro-backend", "snowcrash-labs/soundpatrol-web", "snowcrash-labs/devops", "snowcrash-labs/soundpatrol-db", "snowcrash-labs/soundpatrol-creatorlab", "snowcrash-labs/c2pa-service", "snowcrash-labs/ghoskey-enforcement"]
+desired_file = "cloudbuild_build.yaml"
+source_ref = "dev"
+

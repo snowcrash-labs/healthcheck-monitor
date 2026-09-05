@@ -7,13 +7,18 @@ pub struct Evaluation {
     pub health: Health,
     pub findings: Vec<Finding>,
 }
-fn result(health: Health) -> Evaluation {
+pub(crate) fn result(health: Health) -> Evaluation {
     Evaluation {
         health,
         findings: vec![],
     }
 }
-fn fault(obs: &Observation, rule: &str, severity: Severity, confidence: Confidence) -> Evaluation {
+pub(crate) fn fault(
+    obs: &Observation,
+    rule: &str,
+    severity: Severity,
+    confidence: Confidence,
+) -> Evaluation {
     Evaluation {
         health: if severity == Severity::Error {
             Health::Unhealthy
@@ -204,47 +209,7 @@ pub fn evaluate(
                 return warning("latest-schedule-not-successful");
             }
         }
-        Data::Queue {
-            backlog,
-            activation,
-            ready,
-            crash_loop,
-            scaler_ready,
-            age_seconds,
-            dead_letters,
-            ..
-        } => {
-            if !backlog.is_finite() || *backlog < 0.0 {
-                return result(Health::Unknown);
-            }
-            if inactive {
-                return result(Health::ExpectedInactive);
-            }
-            if dead_letters.is_some_and(|n| n > 0.0) {
-                return warning("dead-letter-backlog");
-            }
-            if *backlog > *activation {
-                if *crash_loop && *ready == 0 {
-                    return error("queued-work-crash-looping-consumer");
-                }
-                if !scaler_ready {
-                    return error("queued-work-scaler-not-ready");
-                }
-                if settings
-                    .queue_age_error
-                    .zip(*age_seconds)
-                    .is_some_and(|(limit, value)| value > limit)
-                {
-                    return error("queue-age");
-                }
-                if *ready == 0 {
-                    if previous.is_some_and(|p| matches!(&p.data, Data::Queue { backlog: b, ready: 0, .. } if *b > *activation)) {
-                        return fault(obs, "persistent-queued-work-consumer-starting", Severity::Warning, Confidence::Correlated);
-                    }
-                    return result(Health::Unknown);
-                }
-            }
-        }
+        Data::Queue { .. } => return crate::queue_policy::evaluate(obs, previous, settings),
         Data::Service {
             state,
             backup_enabled,
@@ -304,11 +269,15 @@ pub fn evaluate(
         }
         Data::Build {
             state: ServiceState::Failed,
+            superseded: false,
             ..
         } => return warning("deployment-blocked"),
         Data::Build {
             state: ServiceState::Ready,
             ..
+        } => {}
+        Data::Build {
+            superseded: true, ..
         } => {}
         Data::Build { .. } => return result(Health::Unknown),
         Data::Image {
@@ -328,7 +297,10 @@ pub fn evaluate(
             }
             return result(Health::Unknown);
         }
-        Data::Inventory { .. } => return result(Health::Unknown),
+        Data::Inventory { .. }
+        | Data::Scaler { .. }
+        | Data::Owner { .. }
+        | Data::AdvertisedEndpoint { .. } => return result(Health::Unknown),
         Data::Condition { rule, healthy } => match healthy {
             Some(false) => return error(rule),
             None => return result(Health::Unknown),

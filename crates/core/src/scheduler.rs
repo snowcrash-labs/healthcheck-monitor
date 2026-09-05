@@ -4,6 +4,7 @@ use crate::{
     model::{CheckResult, Coverage},
 };
 use async_trait::async_trait;
+use futures::FutureExt;
 use std::{
     collections::{BTreeMap, BTreeSet},
     sync::Arc,
@@ -96,9 +97,9 @@ pub async fn drive(
                 let started = chrono::Utc::now();
                 let result = tokio::select! {
                     _ = cancel.cancelled() => CheckResult::failure(job.target.name.clone(), job.check, job.revision.clone(), Coverage::Cancelled),
-                    result = tokio::time::timeout(job.settings.operation_timeout.duration(), collector.collect(&job, cancel.clone())) => match result {
+                    result = std::panic::AssertUnwindSafe(collector.collect(&job, cancel.clone())).catch_unwind() => match result {
                         Ok(result) => result,
-                        Err(_) => CheckResult::failure(job.target.name.clone(), job.check, job.revision.clone(), Coverage::Timeout),
+                        Err(_) => CheckResult::failure(job.target.name.clone(), job.check, job.revision.clone(), Coverage::Malformed),
                     }
                 };
                 let mut result = result;
@@ -146,9 +147,8 @@ pub async fn drive(
                 if let Some(Ok((job, result))) = completed {
                     running.remove(&job.key);
                     if let Some(count) = scopes.get_mut(&job.scope()) { *count = count.saturating_sub(1); }
-                    if entries.iter().any(|e| e.job.key == job.key && e.job.revision == job.revision) {
-                        if output.send((job, result)).await.is_err() { break; }
-                    }
+                    if entries.iter().any(|e| e.job.key == job.key && e.job.revision == job.revision)
+                        && output.send((job, result)).await.is_err() { break; }
                 }
             },
         }

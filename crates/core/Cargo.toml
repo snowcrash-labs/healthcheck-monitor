@@ -20,7 +20,7 @@ tracing.workspace = true
 url.workspace = true
 
 [dev-dependencies]
-tempfile = "*"
+tempfile = "3.27.0"
 
 [lints]
 workspace = true

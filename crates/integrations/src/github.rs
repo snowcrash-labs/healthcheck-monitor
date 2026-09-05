@@ -135,6 +135,7 @@ pub async fn collect(
                         let Some(name) = name else { continue };
                         let data = if id.starts_with("workflows/") {
                             Data::Build {
+                                superseded: false,
                                 pipeline: text(row, &["/path", "/name"])
                                     .map(super::projection::identity)
                                     .unwrap_or_default(),

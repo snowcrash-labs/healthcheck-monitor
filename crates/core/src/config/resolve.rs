@@ -23,6 +23,7 @@ pub struct Job {
     pub check: Check,
     pub settings: Settings,
     pub revision: String,
+    pub severity: std::collections::BTreeMap<String, crate::model::Severity>,
 }
 impl Job {
     pub fn scope(&self) -> String {
@@ -64,9 +65,9 @@ impl Config {
                 .or_insert_with(|| Profile {
                     checks: Some(checks),
                     settings: SettingsPatch {
-                        samples: Some(samples),
-                        log_entries: Some(entries),
-                        log_window: Some(super::duration::Span(window)),
+                        samples: (name == "quick").then_some(samples),
+                        log_entries: (name == "deep").then_some(entries),
+                        log_window: (name == "deep").then_some(super::duration::Span(window)),
                         ..Default::default()
                     },
                 });
@@ -163,6 +164,7 @@ impl Config {
                     check,
                     settings,
                     revision: revision.clone(),
+                    severity: self.severity.clone(),
                 });
             }
         }

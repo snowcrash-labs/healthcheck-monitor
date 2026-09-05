@@ -16,8 +16,12 @@ tokio.workspace = true
 tokio-util.workspace = true
 toml.workspace = true
 tracing.workspace = true
-tracing-subscriber = { version = "*", default-features = false, features = ["json", "env-filter", "fmt", "time"] }
-tikv-jemallocator = { version = "*", default-features = false, features = ["background_threads", "unprefixed_malloc_on_supported_platforms"] }
+tracing-subscriber = { version = "0.3.23", default-features = false, features = ["json", "env-filter", "fmt", "time"] }
+tikv-jemallocator = { version = "0.7.0", default-features = false, features = ["unprefixed_malloc_on_supported_platforms"] }
+
+# jemalloc does not support background purging on Darwin.
+[target.'cfg(target_os = "linux")'.dependencies]
+tikv-jemallocator = { version = "0.7.0", default-features = false, features = ["background_threads", "unprefixed_malloc_on_supported_platforms"] }
 
 [lints]
 workspace = true

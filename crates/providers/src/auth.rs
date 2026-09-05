@@ -7,7 +7,7 @@ use std::sync::Arc;
 pub enum Auth {
     Gcp(google_cloud_auth::credentials::AccessTokenCredentials),
     Azure(Arc<dyn TokenCredential>),
-    Aws(aws_config::SdkConfig),
+    Aws(Box<aws_config::SdkConfig>),
     None,
 }
 impl Auth {
@@ -15,11 +15,13 @@ impl Auth {
         provider: Provider,
         profile: Option<&Credential>,
         region: Option<&str>,
+        http: &monitor_integrations::transport::Http,
+        settings: &monitor_core::config::settings::Settings,
     ) -> Result<Self, Error> {
         match provider {
             Provider::Gcp => {
                 let credentials = google_cloud_auth::credentials::Builder::default()
-                    .with_scopes(["https://www.googleapis.com/auth/cloud-platform.read-only"])
+                    .with_scopes(["https://www.googleapis.com/auth/cloud-platform"])
                     .build_access_token_credentials()
                     .map_err(|_| Error::Authentication)?;
                 Ok(Self::Gcp(credentials))
@@ -37,6 +39,7 @@ impl Auth {
             }
             Provider::Aws => {
                 let mut loader = aws_config::defaults(aws_config::BehaviorVersion::latest())
+                    .http_client(crate::aws_transport::client(http, settings))
                     .region(aws_config::Region::new(
                         region.unwrap_or("us-east-1").to_string(),
                     ))
@@ -58,9 +61,16 @@ impl Auth {
                         .configure(&config)
                         .build()
                         .await;
-                    config = config.to_builder().credentials_provider(aws_credential_types::provider::SharedCredentialsProvider::new(provider)).build();
+                    config = config
+                        .to_builder()
+                        .credentials_provider(
+                            aws_credential_types::provider::SharedCredentialsProvider::new(
+                                provider,
+                            ),
+                        )
+                        .build();
                 }
-                Ok(Self::Aws(config))
+                Ok(Self::Aws(Box::new(config)))
             }
             _ => Ok(Self::None),
         }

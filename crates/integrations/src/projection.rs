@@ -16,9 +16,12 @@ pub fn number(value: &Value, paths: &[&str]) -> Option<f64> {
     })
 }
 pub fn boolean(value: &Value, paths: &[&str]) -> Option<bool> {
-    paths
-        .iter()
-        .find_map(|p| value.pointer(p).and_then(Value::as_bool))
+    paths.iter().find_map(|p| {
+        value.pointer(p).and_then(|v| {
+            v.as_bool()
+                .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
+        })
+    })
 }
 pub fn timestamp(value: &Value, paths: &[&str]) -> Option<DateTime<Utc>> {
     text(value, paths)

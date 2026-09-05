@@ -109,7 +109,11 @@ pub async fn collect(
     cancel: &CancellationToken,
 ) -> CheckResult {
     if job.check == Check::Metrics || job.check == Check::Queues {
-        return crate::metrics::gcp(http, auth, job, cancel).await;
+        let mut job = job.clone();
+        if job.target.metrics.is_empty() {
+            job.target.metrics = crate::metric_catalog::gcp();
+        }
+        return crate::metrics::gcp(http, auth, &job, cancel).await;
     }
     if job.check == Check::Logs {
         return logs(http, auth, job, cancel).await;
@@ -221,130 +225,4 @@ async fn logs(http: &Http, auth: &Auth, job: &Job, cancel: &CancellationToken) -
     result.finished_at = Utc::now();
     result
 }
-const CATALOG: &[(&str, &str, &str)] = &[
-    (
-        "clusters",
-        "container.googleapis.com/v1/projects/{p}/locations/-/clusters",
-        "/clusters",
-    ),
-    (
-        "cloud-run",
-        "run.googleapis.com/v2/projects/{p}/locations/{r}/services",
-        "/services",
-    ),
-    (
-        "sql",
-        "sqladmin.googleapis.com/sql/v1beta4/projects/{p}/instances",
-        "/items",
-    ),
-    (
-        "redis",
-        "redis.googleapis.com/v1/projects/{p}/locations/{r}/instances",
-        "/instances",
-    ),
-    (
-        "valkey",
-        "redis.googleapis.com/v1/projects/{p}/locations/{r}/clusters",
-        "/clusters",
-    ),
-    (
-        "builds",
-        "cloudbuild.googleapis.com/v1/projects/{p}/locations/{r}/builds",
-        "/builds",
-    ),
-    (
-        "build-triggers",
-        "cloudbuild.googleapis.com/v1/projects/{p}/locations/{r}/triggers",
-        "/triggers",
-    ),
-    (
-        "alert-policies",
-        "monitoring.googleapis.com/v3/projects/{p}/alertPolicies",
-        "/alertPolicies",
-    ),
-    (
-        "uptime-checks",
-        "monitoring.googleapis.com/v3/projects/{p}/uptimeCheckConfigs",
-        "/uptimeCheckConfigs",
-    ),
-    (
-        "dns-zones",
-        "dns.googleapis.com/dns/v1/projects/{p}/managedZones",
-        "/managedZones",
-    ),
-    (
-        "buckets",
-        "storage.googleapis.com/storage/v1/b?project={p}",
-        "/items",
-    ),
-    (
-        "secrets",
-        "secretmanager.googleapis.com/v1/projects/{p}/secrets",
-        "/secrets",
-    ),
-    (
-        "pubsub-topics",
-        "pubsub.googleapis.com/v1/projects/{p}/topics",
-        "/topics",
-    ),
-    (
-        "pubsub-subscriptions",
-        "pubsub.googleapis.com/v1/projects/{p}/subscriptions",
-        "/subscriptions",
-    ),
-    (
-        "eventarc",
-        "eventarc.googleapis.com/v1/projects/{p}/locations/{r}/triggers",
-        "/triggers",
-    ),
-    (
-        "scheduler",
-        "cloudscheduler.googleapis.com/v1/projects/{p}/locations/{r}/jobs",
-        "/jobs",
-    ),
-    (
-        "kms-keyrings",
-        "cloudkms.googleapis.com/v1/projects/{p}/locations/{r}/keyRings",
-        "/keyRings",
-    ),
-    (
-        "enabled-apis",
-        "serviceusage.googleapis.com/v1/projects/{p}/services?filter=state:ENABLED",
-        "/services",
-    ),
-    (
-        "instances",
-        "compute.googleapis.com/compute/v1/projects/{p}/aggregated/instances",
-        "/items",
-    ),
-    (
-        "instance-groups",
-        "compute.googleapis.com/compute/v1/projects/{p}/aggregated/instanceGroups",
-        "/items",
-    ),
-    (
-        "backend-services",
-        "compute.googleapis.com/compute/v1/projects/{p}/global/backendServices",
-        "/items",
-    ),
-    (
-        "firewalls",
-        "compute.googleapis.com/compute/v1/projects/{p}/global/firewalls",
-        "/items",
-    ),
-    (
-        "quotas",
-        "compute.googleapis.com/compute/v1/projects/{p}/regions/{r}",
-        "",
-    ),
-    (
-        "provider-health",
-        "servicehealth.googleapis.com/v1/projects/{p}/locations/global/events",
-        "/events",
-    ),
-    (
-        "artifact-repositories",
-        "artifactregistry.googleapis.com/v1/projects/{p}/locations/{r}/repositories",
-        "/repositories",
-    ),
-];
+use crate::gcp_catalog::CATALOG;

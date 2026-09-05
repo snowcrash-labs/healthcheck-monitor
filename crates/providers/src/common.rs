@@ -2,10 +2,11 @@
 use crate::auth::Auth;
 use monitor_core::{config::resolve::Job, model::*};
 use monitor_integrations::{
-    projection::{operation, service, text},
+    projection::{operation, text},
     transport::{Error, Http},
 };
 use serde_json::Value;
+use std::collections::{BTreeSet, VecDeque};
 use tokio_util::sync::CancellationToken;
 
 #[derive(Clone)]
@@ -85,7 +86,19 @@ pub async fn collect(
         Coverage::Missing,
     );
     result.operations.clear();
-    for endpoint in endpoints {
+    let mut pending: VecDeque<_> = endpoints.into();
+    let mut visited = BTreeSet::new();
+    while let Some(endpoint) = pending.pop_front() {
+        let request_key = format!("{}:{:?}", endpoint.url, endpoint.body);
+        if !visited.insert(request_key) {
+            continue;
+        }
+        if visited.len() > job.settings.max_assets {
+            result
+                .operations
+                .push(operation("discovery-limit", Err(&Error::Limit), 0, true));
+            break;
+        }
         if cancel.is_cancelled() {
             result.operations.push(operation(
                 &endpoint.id,
@@ -103,24 +116,46 @@ pub async fn collect(
             pages = page + 1;
             match request(http, auth, &endpoint, job, cancel).await {
                 Ok(payload) => {
-                    let rows = payload.pointer(&endpoint.items).and_then(Value::as_array);
-                    if let Some(rows) = rows {
-                        for row in rows {
+                    let rows = crate::resource_projection::rows(&payload, &endpoint.items);
+                    if !rows.is_empty() {
+                        for row in &rows {
                             if result.observations.len() >= job.settings.max_assets {
                                 outcome = Err(Error::Limit);
                                 break;
                             }
-                            if let Some(observation) = service(job, &endpoint.id, row) {
-                                result.observations.push(observation);
+                            let projected =
+                                crate::resource_projection::project(job, &endpoint, row);
+                            let available = job
+                                .settings
+                                .max_assets
+                                .saturating_sub(result.observations.len());
+                            if projected.len() > available {
+                                outcome = Err(Error::Limit);
+                            }
+                            result
+                                .observations
+                                .extend(projected.into_iter().take(available));
+                            for detail in crate::details::followups(job, &endpoint, row) {
+                                if pending.len() >= job.settings.ready_queue {
+                                    outcome = Err(Error::Limit);
+                                    break;
+                                }
+                                pending.push_back(detail);
                             }
                         }
                         outcome = outcome.map(|n| n + rows.len());
                     } else if endpoint.items.is_empty() {
-                        if let Some(observation) = service(job, &endpoint.id, &payload) {
-                            result.observations.push(observation);
-                        }
+                        result
+                            .observations
+                            .extend(crate::resource_projection::project(
+                                job, &endpoint, &payload,
+                            ));
                         outcome = Ok(1);
-                    } else if payload.as_object().is_some_and(|m| m.is_empty()) {
+                    } else if payload.as_object().is_some_and(|m| m.is_empty())
+                        || payload.pointer(&endpoint.items).is_some_and(|v| {
+                            v.as_array().is_some_and(|a| a.is_empty()) || v.as_str() == Some("")
+                        })
+                    {
                         outcome = Ok(0);
                     } else {
                         outcome = Err(Error::Malformed);

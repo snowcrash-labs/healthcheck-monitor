@@ -6,50 +6,56 @@ use monitor_core::{
     scheduler::Collector,
 };
 use monitor_integrations::{
-    endpoint, github,
     kubernetes::Kubernetes,
     nats::Nats,
-    process::{Helper, Processes},
-    projection::{observation, operation},
+    process::Processes,
     transport::{Error, Http},
 };
-use std::{collections::BTreeMap, sync::Arc};
+use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 use tokio_util::sync::CancellationToken;
 
-struct Scope {
-    http: Http,
+pub(crate) struct Scope {
+    pub(crate) http: Http,
     auth: Mutex<Option<Arc<Auth>>>,
-    kube: Mutex<Option<Kubernetes>>,
+    pub(crate) kube: Mutex<Option<Kubernetes>>,
     kube_cache: Mutex<Option<CheckResult>>,
-    nats: Mutex<Option<Nats>>,
+    pub(crate) nats: Mutex<Option<Nats>>,
 }
 pub struct Router {
-    config: RwLock<Config>,
-    scopes: RwLock<BTreeMap<String, Arc<Scope>>>,
-    processes: Processes,
+    pub(crate) config: RwLock<Config>,
+    scopes: scc::HashMap<String, Arc<Scope>>,
+    pub(crate) processes: Processes,
 }
 impl Router {
     pub fn new(config: Config, subprocesses: usize) -> Self {
         Self {
             config: RwLock::new(config),
-            scopes: RwLock::new(BTreeMap::new()),
+            scopes: scc::HashMap::new(),
             processes: Processes::new(subprocesses),
         }
     }
     pub async fn reload(&self, config: Config) {
         *self.config.write().await = config;
-        self.scopes.write().await.clear();
+        self.scopes.clear_async().await;
     }
-    async fn scope(&self, job: &Job) -> Result<Arc<Scope>, Error> {
-        if let Some(scope) = self.scopes.read().await.get(&job.target.name) {
-            return Ok(scope.clone());
+    pub(crate) async fn scope(&self, job: &Job) -> Result<Arc<Scope>, Error> {
+        let config = self.config.read().await;
+        if !config.targets.iter().any(|target| {
+            target.name == job.target.name
+                && target.scope == job.target.scope
+                && target.provider == job.target.provider
+        }) {
+            return Err(Error::Cancelled);
         }
-        let mut scopes = self.scopes.write().await;
-        if let Some(scope) = scopes.get(&job.target.name) {
-            return Ok(scope.clone());
+        if let Some(scope) = self
+            .scopes
+            .read_async(&job.target.name, |_, scope| scope.clone())
+            .await
+        {
+            return Ok(scope);
         }
-        if scopes.len() >= 128 {
+        if self.scopes.len() >= 128 {
             return Err(Error::Limit);
         }
         let scope = Arc::new(Scope {
@@ -59,10 +65,14 @@ impl Router {
             kube_cache: Mutex::new(None),
             nats: Mutex::new(None),
         });
-        scopes.insert(job.target.name.clone(), scope.clone());
-        Ok(scope)
+        let entry = self
+            .scopes
+            .entry_async(job.target.name.clone())
+            .await
+            .or_insert(scope);
+        Ok(entry.get().clone())
     }
-    async fn auth(&self, job: &Job, scope: &Scope) -> Result<Arc<Auth>, Error> {
+    pub(crate) async fn auth(&self, job: &Job, scope: &Scope) -> Result<Arc<Auth>, Error> {
         let mut auth = scope.auth.lock().await;
         if let Some(auth) = auth.as_ref() {
             return Ok(auth.clone());
@@ -81,6 +91,8 @@ impl Router {
                 job.target.provider,
                 profile.as_ref(),
                 job.target.regions.first().map(String::as_str),
+                &scope.http,
+                &job.settings,
             ),
         )
         .await
@@ -89,7 +101,7 @@ impl Router {
         *auth = Some(loaded.clone());
         Ok(loaded)
     }
-    async fn kube(
+    pub(crate) async fn kube(
         &self,
         job: &Job,
         scope: &Scope,
@@ -121,126 +133,8 @@ impl Router {
         *cache = Some(result.clone());
         Ok(result)
     }
-    async fn execute(&self, job: &Job, cancel: &CancellationToken) -> Result<CheckResult, Error> {
-        let scope = self.scope(job).await?;
-        if job.check == Check::Kubernetes
-            || job.target.provider == Provider::Kubernetes
-                && job.check != Check::Edge
-                && job.check != Check::Preflight
-        {
-            return self.kube(job, &scope, cancel).await;
-        }
-        if job.check == Check::Edge {
-            let mut result = base(job);
-            for endpoint in &job.target.endpoints {
-                result
-                    .observations
-                    .push(endpoint::probe(&scope.http, job, endpoint, cancel).await);
-            }
-            result.operations.push(operation(
-                "endpoints",
-                if result.observations.is_empty() {
-                    Err(&Error::Unavailable)
-                } else {
-                    Ok(result.observations.len())
-                },
-                1,
-                true,
-            ));
-            result.finished_at = chrono::Utc::now();
-            return Ok(result);
-        }
-        if job.target.provider == Provider::Github || job.check == Check::Github {
-            let config = self.config.read().await;
-            let env = job
-                .target
-                .credential
-                .as_ref()
-                .and_then(|k| config.credentials.get(k))
-                .and_then(|p| p.token_env.as_deref())
-                .unwrap_or("GH_TOKEN");
-            let token = match std::env::var(env) {
-                Ok(token) => token,
-                Err(_) => {
-                    let output = self
-                        .processes
-                        .run(
-                            Helper::GithubToken,
-                            16384,
-                            job.settings.attempt_timeout.duration(),
-                            cancel,
-                        )
-                        .await?;
-                    String::from_utf8(output.stdout)
-                        .map_err(|_| Error::Authentication)?
-                        .trim()
-                        .to_string()
-                }
-            };
-            drop(config);
-            return Ok(github::collect(&scope.http, job, &token, cancel).await);
-        }
-        if job.target.provider == Provider::Nats {
-            let mut nats = scope.nats.lock().await;
-            if nats.is_none() {
-                let url = job.target.nats_url.as_ref().ok_or(Error::Authentication)?;
-                *nats = Some(
-                    tokio::time::timeout(
-                        job.settings.connect_timeout.duration(),
-                        Nats::connect(url.as_str()),
-                    )
-                    .await
-                    .map_err(|_| Error::Timeout)??,
-                );
-            }
-            let nats = nats.as_ref().ok_or(Error::Authentication)?;
-            let observations = tokio::time::timeout(
-                job.settings.operation_timeout.duration(),
-                nats.collect(job, cancel),
-            )
-            .await
-            .map_err(|_| Error::Timeout)??;
-            let mut result = base(job);
-            result
-                .operations
-                .push(operation("nats-streams", Ok(observations.len()), 1, true));
-            result.observations = observations;
-            return Ok(result);
-        }
-        if job.check == Check::Preflight
-            && matches!(job.target.provider, Provider::Edge | Provider::Kubernetes)
-        {
-            let mut result = base(job);
-            if job.target.provider == Provider::Kubernetes {
-                let _ = self.kube(job, &scope, cancel).await?;
-            }
-            result
-                .operations
-                .push(operation("configured-scope", Ok(1), 1, true));
-            result.observations.push(observation(
-                job,
-                "configured-scope",
-                "target",
-                Data::Identity {
-                    scope: job.target.scope.clone(),
-                },
-            ));
-            return Ok(result);
-        }
-        let auth = self.auth(job, &scope).await?;
-        Ok(match job.target.provider {
-            Provider::Gcp => crate::gcp::collect(&scope.http, &auth, job, cancel).await,
-            Provider::Aws => crate::aws::collect(&scope.http, &auth, job, cancel).await,
-            Provider::Azure => crate::azure::collect(&scope.http, &auth, job, cancel).await,
-            _ => CheckResult::failure(
-                job.target.name.clone(),
-                job.check,
-                job.revision.clone(),
-                Coverage::Unsupported,
-            ),
-        })
-    }
 }
+
 #[async_trait::async_trait]
 impl Collector for Router {
     async fn collect(&self, job: &Job, cancel: CancellationToken) -> CheckResult {
@@ -253,7 +147,7 @@ impl Collector for Router {
         }
     }
 }
-fn base(job: &Job) -> CheckResult {
+pub(crate) fn base(job: &Job) -> CheckResult {
     let mut result = CheckResult::failure(
         job.target.name.clone(),
         job.check,

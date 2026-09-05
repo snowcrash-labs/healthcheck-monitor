@@ -142,6 +142,7 @@ const KINDS: &[(&str, &str)] = &[
     ("pods", "/api/v1/pods"),
     ("deployments", "/apis/apps/v1/deployments"),
     ("statefulsets", "/apis/apps/v1/statefulsets"),
+    ("replicasets", "/apis/apps/v1/replicasets"),
     ("daemonsets", "/apis/apps/v1/daemonsets"),
     ("jobs", "/apis/batch/v1/jobs"),
     ("cronjobs", "/apis/batch/v1/cronjobs"),

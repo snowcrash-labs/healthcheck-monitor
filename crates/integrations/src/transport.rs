@@ -7,6 +7,8 @@ use tokio_util::sync::CancellationToken;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    #[error("required telemetry was not returned")]
+    Missing,
     #[error("provider denied access")]
     Denied,
     #[error("credentials unavailable or expired")]
@@ -32,6 +34,7 @@ impl Error {
     }
     pub fn coverage(&self) -> Coverage {
         match self {
+            Self::Missing => Coverage::Missing,
             Self::Denied | Self::Forbidden => Coverage::Denied,
             Self::Authentication => Coverage::Unauthenticated,
             Self::Unavailable | Self::Throttled => Coverage::Unavailable,

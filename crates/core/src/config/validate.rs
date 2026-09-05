@@ -131,15 +131,14 @@ impl Config {
                     return Err(Error::Config("endpoint needs an HTTPS URL without credentials/query and explicit accepted statuses".into()));
                 }
             }
-            if let Some(url) = &target.nats_url {
-                if !matches!(url.scheme(), "tls" | "nats")
+            if let Some(url) = &target.nats_url
+                && (!matches!(url.scheme(), "tls" | "nats")
                     || !url.username().is_empty()
-                    || url.password().is_some()
-                {
-                    return Err(Error::Config(
-                        "NATS URL must not contain credentials".into(),
-                    ));
-                }
+                    || url.password().is_some())
+            {
+                return Err(Error::Config(
+                    "NATS URL must not contain credentials".into(),
+                ));
             }
             for metric in &target.metrics {
                 if !identifier(&metric.name)

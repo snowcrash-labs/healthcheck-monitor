@@ -29,6 +29,18 @@ impl State {
         now: DateTime<Utc>,
     ) -> Vec<Transition> {
         let mut transitions = Vec::new();
+        crate::provenance::mark_retries(&mut result.observations);
+        for observation in &result.observations {
+            if (now - observation.observed_at).num_seconds() > job.settings.freshness() as i64 {
+                for operation in &mut result.operations {
+                    if operation.id == observation.operation
+                        && operation.coverage == Coverage::Complete
+                    {
+                        operation.coverage = Coverage::Stale;
+                    }
+                }
+            }
+        }
         let old = self.snapshot.results.get(&job.key);
         let mut current = BTreeSet::new();
         let mut evaluated = BTreeSet::new();
@@ -71,6 +83,9 @@ impl State {
                 ));
             }
             for mut finding in evaluation.findings {
+                if let Some(severity) = job.severity.get(&finding.rule) {
+                    finding.severity = *severity;
+                }
                 current.insert(finding.id.clone());
                 let previous = self.snapshot.findings.get(&finding.id);
                 if previous.is_none() && self.snapshot.findings.len() >= job.settings.max_findings {

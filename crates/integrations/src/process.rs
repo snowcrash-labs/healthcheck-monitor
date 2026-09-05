@@ -119,6 +119,8 @@ fn command(helper: Helper) -> Result<(&'static str, Vec<String>), Error> {
                     format!("deployment/{}", fallback.deployment),
                     "--".into(),
                     "nats".into(),
+                    "--server=nats://nats:4222".into(),
+                    "--timeout=10s".into(),
                     "stream".into(),
                     "report".into(),
                     "--raw".into(),

@@ -33,6 +33,7 @@ pub fn project(job: &Job, kind: &str, value: &Value) -> Vec<Observation> {
     let name = format!("{namespace}/{name}");
     let created_at = timestamp(value, &["/metadata/creationTimestamp"]);
     let mut output = Vec::new();
+    super::kube_links::project(job, kind, &name, value, &mut output);
     let num = |path| number(value, &[path]).unwrap_or(0.0) as u32;
     let data = match kind {
         "jobs" => Data::Job {
@@ -93,6 +94,13 @@ pub fn project(job: &Job, kind: &str, value: &Value) -> Vec<Observation> {
             }
         }
         "pods" => {
+            if text(value, &["/status/phase"]) == Some("Failed")
+                && created_at.is_some_and(|at| {
+                    (chrono::Utc::now() - at).num_seconds() > job.settings.runtime_window.0 as i64
+                })
+            {
+                return vec![];
+            }
             if text(value, &["/status/phase"]) == Some("Succeeded") {
                 return output;
             }
@@ -139,16 +147,32 @@ pub fn project(job: &Job, kind: &str, value: &Value) -> Vec<Observation> {
             healthy: condition(value, "Ready"),
         },
         "horizontalpodautoscalers" => Data::Condition {
-            rule: "scaling-limited".into(),
-            healthy: condition(value, "ScalingLimited").map(|v| !v),
+            rule: "autoscaler-unavailable".into(),
+            healthy: condition(value, "AbleToScale"),
         },
         "events" => {
             if text(value, &["/type"]) != Some("Warning") {
                 return output;
             }
-            Data::Condition {
-                rule: "kubernetes-warning-event".into(),
-                healthy: Some(false),
+            let last = timestamp(
+                value,
+                &[
+                    "/lastTimestamp",
+                    "/eventTime",
+                    "/metadata/creationTimestamp",
+                ],
+            );
+            let Some(last_seen) = last.filter(|at| {
+                (chrono::Utc::now() - *at).num_seconds() <= job.settings.log_window.0 as i64
+            }) else {
+                return vec![];
+            };
+            Data::Log {
+                signature: LogClass::Warning,
+                count: number(value, &["/count"]).unwrap_or(1.0) as u64,
+                first_seen: timestamp(value, &["/firstTimestamp"]).unwrap_or(last_seen),
+                last_seen,
+                sampled: true,
             }
         }
         _ => Data::Inventory {

@@ -11,21 +11,22 @@ license = "MIT"
 monitor-core = { path = "crates/core" }
 monitor-integrations = { path = "crates/integrations" }
 monitor-providers = { path = "crates/providers" }
-async-trait = "*"
-chrono = { version = "*", default-features = false, features = ["clock", "serde"] }
-clap = { version = "*", default-features = false, features = ["std", "derive", "help", "usage", "error-context"] }
-futures = { version = "*", default-features = false, features = ["std", "async-await"] }
-humantime = "*"
-reqwest = { version = "*", default-features = false, features = ["rustls", "http2", "gzip", "brotli", "hickory-dns", "json", "query", "stream"] }
-serde = { version = "*", default-features = false, features = ["derive", "std"] }
-serde_json = "*"
-sha2 = "*"
-thiserror = "*"
-tokio = { version = "*", default-features = false, features = ["rt-multi-thread", "macros", "signal", "sync", "time", "fs", "io-util", "process", "net", "test-util", "parking_lot"] }
-tokio-util = { version = "*", default-features = false, features = ["rt"] }
-toml = "*"
-tracing = { version = "*", default-features = false, features = ["std", "attributes", "release_max_level_info"] }
-url = { version = "*", features = ["serde"] }
+async-trait = "0.1.92"
+chrono = { version = "0.4.45", default-features = false, features = ["clock", "serde"] }
+clap = { version = "4.6.6", default-features = false, features = ["std", "derive", "help", "usage", "error-context"] }
+futures = { version = "0.3.34", default-features = false, features = ["std", "async-await"] }
+humantime = "2.4.0"
+reqwest = { version = "0.13.4", default-features = false, features = ["rustls", "http2", "gzip", "brotli", "hickory-dns", "json", "query", "stream"] }
+serde = { version = "1.0.229", default-features = false, features = ["derive", "std"] }
+serde_json = "1.0.151"
+scc = { version = "3.8.8", default-features = false }
+sha2 = "0.11.0"
+thiserror = "2.0.20"
+tokio = { version = "1.53.1", default-features = false, features = ["rt-multi-thread", "macros", "signal", "sync", "time", "fs", "io-util", "process", "net", "test-util", "parking_lot"] }
+tokio-util = { version = "0.7.19", default-features = false, features = ["rt"] }
+toml = "1.1.5"
+tracing = { version = "0.1.44", default-features = false, features = ["std", "attributes", "release_max_level_info"] }
+url = { version = "2.5.8", features = ["serde"] }
 
 [workspace.lints.clippy]
 unwrap_used = "deny"
