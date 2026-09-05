@@ -1,0 +1,53 @@
+import { expect, test } from "@playwright/test";
+
+test("routes, resource details, persistent header, and theme selection", async ({ page }, testInfo) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "System health", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Targets", exact: true })).toBeVisible({ timeout: 20_000 });
+  await page.getByLabel("Appearance", { exact: true }).selectOption("light");
+  await page.screenshot({ path: testInfo.outputPath("overview-light.png"), fullPage: true });
+  await page.getByLabel("Appearance", { exact: true }).selectOption("dark");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await page.screenshot({ path: testInfo.outputPath("overview-dark.png"), fullPage: true });
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await page.getByLabel("Monitoring target").selectOption({ index: 1 });
+  const target = await page.getByLabel("Monitoring target").inputValue();
+  await page.getByRole("navigation").getByRole("link", { name: "Resources" }).click();
+  await expect(page.getByRole("heading", { name: "Resources", exact: true })).toBeVisible();
+  await expect(page.getByLabel("Monitoring target")).toHaveValue(target);
+  await expect(page.locator("tbody tr").first()).toBeVisible();
+  await page.evaluate(() => window.scrollTo(0, 700));
+  const box = await page.locator(".topbar").boundingBox();
+  expect(box?.y).toBe(0);
+  await page.locator("tbody tr").first().getByRole("link").click();
+  await expect(page.getByRole("heading", { name: "Observed facts" })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Observed facts" })).toBeVisible();
+  await page.getByRole("link", { name: "View history" }).click();
+  await expect(page.getByRole("heading", { name: "Finding history" })).toBeVisible();
+  await page.getByLabel("Appearance", { exact: true }).selectOption("light");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  expect(errors).toEqual([]);
+});
+
+test("mobile navigation and stale connection state remain visible", async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Targets", exact: true })).toBeVisible({ timeout: 20_000 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+  await page.screenshot({ path: testInfo.outputPath("overview-mobile.png"), fullPage: true });
+  await page.evaluate(() => window.scrollTo(0, 500));
+  const header = await page.locator(".topbar").boundingBox();
+  expect(header?.y).toBe(104);
+  await page.getByRole("navigation").getByRole("link", { name: "Findings" }).click();
+  await expect(page.getByRole("heading", { name: "Findings", exact: true })).toBeVisible();
+  await expect(page.getByLabel("Appearance", { exact: true })).toBeVisible();
+  await page.context().setOffline(true);
+  await expect(page.getByText("Connection interrupted.", { exact: false })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole("heading", { name: "Findings", exact: true })).toBeVisible();
+  await page.context().setOffline(false);
+  await expect(page.getByText("Connection interrupted.", { exact: false })).not.toBeVisible({ timeout: 20_000 });
+});

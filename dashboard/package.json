@@ -1,0 +1,31 @@
+{
+  "name": "soundpatrol-health-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build:dev": "vite build --mode development",
+    "build": "vite build",
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:browser": "playwright test"
+  },
+  "dependencies": {
+    "@solidjs/router": "2.0.0-next.21",
+    "@solidjs/web": "2.0.0-rc.6",
+    "solid-js": "2.0.0-rc.6",
+    "zod": "4.5.4"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@solidjs/vite-plugin": "3.0.0-next.39",
+    "@types/node": "26.4.1",
+    "typescript": "7.0.2",
+    "vite": "8.2.2",
+    "vitest": "5.0.0"
+  }
+}

@@ -1,0 +1,11 @@
+DROP TABLE health_monitor.history_gap;
+DROP TABLE health_monitor.finding_event;
+DROP TABLE health_monitor.check_run;
+DROP TABLE health_monitor.configuration;
+DROP FUNCTION health_monitor.valid_evidence(text[]);
+DROP TYPE health_monitor.check_kind;
+DROP TYPE health_monitor.confidence;
+DROP TYPE health_monitor.expected;
+DROP TYPE health_monitor.severity;
+DROP TYPE health_monitor.event_kind;
+DROP SCHEMA health_monitor;

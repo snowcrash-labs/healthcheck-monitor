@@ -2,3 +2,10 @@
 /evidence
 /monitor.local.toml
 *.tmp
+/dashboard/node_modules
+/dashboard/dist
+/dashboard/test-results
+/dashboard/playwright-report
+/server.local.toml
+/.env
+/.env.local

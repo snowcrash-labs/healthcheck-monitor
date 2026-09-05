@@ -1,0 +1,19 @@
+[package]
+name = "monitor-runtime"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+monitor-core.workspace = true
+monitor-providers.workspace = true
+chrono.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+tempfile = { version = "3.27.0", default-features = false }

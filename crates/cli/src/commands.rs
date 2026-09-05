@@ -6,6 +6,29 @@ use monitor_core::{
 pub async fn execute(cli: Cli) -> Result<u8, Error> {
     match cli.command {
         Command::Run(options) => crate::runtime::monitor(&cli.config, options, Mode::Once).await,
+        Command::Serve(options) => {
+            let mut config = monitor_server::config::Config::load(options.server_config.as_deref())
+                .map_err(|_| Error::Config("invalid dashboard configuration".into()))?;
+            if let Some(listen) = options.listen {
+                config.listen = listen;
+            }
+            if let Some(assets) = options.assets {
+                config.assets = assets;
+            }
+            let selected = options.watch.options;
+            monitor_server::serve(
+                &cli.config,
+                monitor_runtime::Options {
+                    selection: selected.selection.selection(),
+                    output: selected.output,
+                    strict: selected.strict,
+                },
+                options.watch.duration.map(|duration| duration.duration()),
+                config,
+            )
+            .await
+            .map_err(|error| Error::Config(error.to_string()))
+        }
         Command::Watch(options) => {
             crate::runtime::monitor(
                 &cli.config,

@@ -9,9 +9,16 @@ static ALLOCATOR: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 fn main() -> ExitCode {
     // Fixed filters prevent SDK diagnostics from exposing credentials or payloads.
     tracing_subscriber::fmt().json().with_current_span(true).with_span_list(false).flatten_event(true).with_ansi(false)
-        .with_env_filter("off,healthcheck_monitor=info,monitor_core=info,monitor_integrations=info,monitor_providers=info").init();
+        .with_env_filter("off,healthcheck_monitor=info,monitor_core=info,monitor_integrations=info,monitor_providers=info,monitor_runtime=info,monitor_server=info,monitor_history=info").init();
     // SDK panic payloads may contain provider data; collection records only the operation failure.
-    std::panic::set_hook(Box::new(|_| tracing::error!("Internal task failure")));
+    std::panic::set_hook(Box::new(|info| match info.location() {
+        Some(location) => tracing::error!(
+            file = location.file(),
+            line = location.line(),
+            "Internal task failure"
+        ),
+        None => tracing::error!("Internal task failure"),
+    }));
     let runtime = match tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
