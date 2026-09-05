@@ -32,7 +32,7 @@ pub async fn fetch<S: Source>(
     let mut pending = VecDeque::new();
     let mut queued_bytes = 0usize;
     let queue_limit = job.settings.memory_bytes / 4 / job.settings.concurrency.max(1);
-    let mut budget = monitor_core::collection_budget::Limit::new(&job.settings);
+    let mut budget = crate::scan_budget::limit(job);
     let mut endpoint = endpoint;
     let mut outcome = Ok(0usize);
     let mut pages = 0;
@@ -48,6 +48,7 @@ pub async fn fetch<S: Source>(
                         let size = batch.bytes();
                         if pending.len() >= job.settings.ready_queue
                             || size > queue_limit.saturating_sub(queued_bytes)
+                            || !crate::scan_budget::claim(size)
                         {
                             outcome = Err(Error::Limit);
                             break;
@@ -77,6 +78,7 @@ pub async fn fetch<S: Source>(
                             let size = detail.bytes();
                             if pending.len() >= job.settings.ready_queue
                                 || size > queue_limit.saturating_sub(queued_bytes)
+                                || !crate::scan_budget::claim(size)
                             {
                                 outcome = Err(Error::Limit);
                                 break;
@@ -144,12 +146,16 @@ pub async fn fetch<S: Source>(
             }
         }
     }
-    result.operations.push(operation(
-        &endpoint.id,
-        outcome.as_ref().copied(),
-        pages,
-        job.settings.required,
-    ));
+    budget.operations(
+        &mut result.operations,
+        [operation(
+            &endpoint.id,
+            outcome.as_ref().copied(),
+            pages,
+            job.settings.required,
+        )],
+    );
+    budget.finish(&mut result, job.settings.required);
     result.finished_at = chrono::Utc::now();
     Fetched {
         result,

@@ -1,8 +1,6 @@
 //! Native CloudWatch metric, composite, and log alarms without action payloads or reasons.
 use crate::auth::Auth;
-use aws_sdk_cloudwatch::{
-    error::ProvideErrorMetadata, operation::describe_alarms::DescribeAlarmsOutput, types::AlarmType,
-};
+use aws_sdk_cloudwatch::{operation::describe_alarms::DescribeAlarmsOutput, types::AlarmType};
 use monitor_core::{config::resolve::Job, model::*};
 use monitor_integrations::{
     projection::{observation, operation},
@@ -20,7 +18,7 @@ pub async fn collect(auth: &Auth, job: &Job, cancel: &CancellationToken) -> Chec
         let id = format!("cloudwatch-alarms/{region}");
         let mut pages = 0;
         let mut outcome = Ok(0usize);
-        let client = match clients.cloudwatch(region).await {
+        let client = match clients.cloudwatch(region, &job.settings).await {
             Ok(client) => client,
             Err(error) => {
                 result.operations.push(operation(&id, Err(&error), 0, true));
@@ -32,7 +30,7 @@ pub async fn collect(auth: &Auth, job: &Job, cancel: &CancellationToken) -> Chec
             pages = page + 1;
             let response = tokio::select! {
                 _=cancel.cancelled()=>Err(Error::Cancelled),
-                response=client.describe_alarms().alarm_types(AlarmType::MetricAlarm).alarm_types(AlarmType::CompositeAlarm).alarm_types(AlarmType::LogAlarm).max_records(job.settings.page_size.min(100) as i32).set_next_token(token.clone()).send()=>response.map_err(|error|crate::aws_errors::classify(error.as_service_error().and_then(|error|error.code()))),
+                response=client.describe_alarms().alarm_types(AlarmType::MetricAlarm).alarm_types(AlarmType::CompositeAlarm).alarm_types(AlarmType::LogAlarm).max_records(job.settings.page_size.min(100) as i32).set_next_token(token.clone()).send()=>response.map_err(crate::aws_errors::sdk),
             };
             match response {
                 Ok(response) => {

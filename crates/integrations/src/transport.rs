@@ -5,7 +5,7 @@ use serde_json::Value;
 use std::time::Duration;
 use tokio_util::sync::CancellationToken;
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Clone, Copy, thiserror::Error)]
 pub enum Error {
     #[error("required telemetry was not returned")]
     Missing,
@@ -48,20 +48,26 @@ impl Error {
 #[derive(Clone)]
 pub struct Http {
     client: Client,
+    pub(crate) pools: std::sync::Arc<crate::http_pool::Pools>,
 }
 impl Http {
     pub fn new(settings: &Settings) -> Result<Self, Error> {
-        let client = Client::builder()
-            .https_only(true)
-            .redirect(reqwest::redirect::Policy::none())
-            .connect_timeout(settings.connect_timeout.duration())
-            .timeout(settings.attempt_timeout.duration())
-            .pool_max_idle_per_host(settings.scope_concurrency)
-            .pool_idle_timeout(Duration::from_secs(60))
-            .user_agent("Soundpatrol-healthcheck-monitor/0.1")
-            .build()
-            .map_err(|_| Error::Unavailable)?;
-        Ok(Self { client })
+        Self::shared(
+            std::sync::Arc::new(crate::http_pool::Pools::default()),
+            settings,
+        )
+    }
+    pub fn shared(
+        pools: std::sync::Arc<crate::http_pool::Pools>,
+        settings: &Settings,
+    ) -> Result<Self, Error> {
+        Ok(Self {
+            client: pools.client(settings)?,
+            pools,
+        })
+    }
+    pub fn client_for(&self, settings: &Settings) -> Result<Client, Error> {
+        self.pools.client(settings)
     }
     pub fn client(&self) -> &Client {
         &self.client
@@ -97,17 +103,22 @@ impl Http {
         Err(Error::Unavailable)
     }
     async fn once(&self, request: Request, settings: &Settings) -> Result<Value, Error> {
+        let permit = crate::admission::acquire().await?;
         let registry = request
             .url()
             .host_str()
             .is_some_and(|host| host.ends_with(".azurecr.io"));
-        let response = self.client.execute(request).await.map_err(|error| {
-            if error.is_timeout() {
-                Error::Timeout
-            } else {
-                Error::Unavailable
-            }
-        })?;
+        let response = self
+            .client_for(settings)?
+            .execute(request)
+            .await
+            .map_err(|error| {
+                if error.is_timeout() {
+                    Error::Timeout
+                } else {
+                    Error::Unavailable
+                }
+            })?;
         if response.status() == StatusCode::TOO_MANY_REQUESTS {
             let delay = response
                 .headers()
@@ -115,9 +126,12 @@ impl Http {
                 .and_then(|v| v.to_str().ok())
                 .and_then(|s| s.parse::<u64>().ok())
                 .map(Duration::from_secs);
+            drop(response);
+            drop(permit);
             if let Some(delay) = delay {
                 tokio::time::sleep(delay).await;
             }
+            return Err(Error::Throttled);
         }
         if !response.status().is_success() {
             let code = response.status();

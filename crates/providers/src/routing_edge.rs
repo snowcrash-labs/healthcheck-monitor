@@ -1,5 +1,6 @@
 //! Public endpoint discovery reuses normalized control-plane and Kubernetes reads.
 use crate::router::{Router, Scope, base};
+use futures::{StreamExt, stream};
 use monitor_core::{
     config::{resolve::Job, types::Endpoint},
     model::*,
@@ -57,10 +58,11 @@ impl Router {
                 )),
             }
         }
-        for target in &endpoints {
-            result
-                .observations
-                .push(endpoint::probe(&scope.http, job, target, cancel).await);
+        let mut probes = stream::iter(0..endpoints.len())
+            .map(|index| endpoint::probe(&scope.http, job, &endpoints[index], cancel))
+            .buffer_unordered(monitor_integrations::admission::width(&job.settings));
+        while let Some(observation) = probes.next().await {
+            result.observations.push(observation);
         }
         result.operations.push(operation(
             "endpoints",

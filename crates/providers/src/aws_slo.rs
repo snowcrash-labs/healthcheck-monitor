@@ -1,9 +1,6 @@
 //! Native Application Signals SLO inventory and batches of budget reports.
 use crate::auth::Auth;
-use aws_sdk_applicationsignals::{
-    error::ProvideErrorMetadata,
-    operation::batch_get_service_level_objective_budget_report::BatchGetServiceLevelObjectiveBudgetReportOutput,
-};
+use aws_sdk_applicationsignals::operation::batch_get_service_level_objective_budget_report::BatchGetServiceLevelObjectiveBudgetReportOutput;
 use monitor_core::{config::resolve::Job, model::*};
 use monitor_integrations::{
     projection::{observation, operation},
@@ -23,7 +20,7 @@ pub async fn collect(auth: &Auth, job: &Job, cancel: &CancellationToken) -> Chec
     let mut total = 0;
     for region in &job.target.regions {
         let id = format!("slo-inventory/{region}");
-        let client = match clients.signals(region).await {
+        let client = match clients.signals(region, &job.settings).await {
             Ok(client) => client,
             Err(error) => {
                 result.operations.push(operation(&id, Err(&error), 0, true));
@@ -38,7 +35,7 @@ pub async fn collect(auth: &Auth, job: &Job, cancel: &CancellationToken) -> Chec
             pages = page + 1;
             let response = tokio::select! {
                 _=cancel.cancelled()=>Err(Error::Cancelled),
-                response=client.list_service_level_objectives().include_linked_accounts(false).max_results(job.settings.page_size.min(50) as i32).set_next_token(token.clone()).send()=>response.map_err(|error|crate::aws_errors::classify(error.as_service_error().and_then(|error|error.code()))),
+                response=client.list_service_level_objectives().include_linked_accounts(false).max_results(job.settings.page_size.min(50) as i32).set_next_token(token.clone()).send()=>response.map_err(crate::aws_errors::sdk),
             };
             match response {
                 Ok(response) => {
@@ -92,7 +89,7 @@ pub async fn collect(auth: &Auth, job: &Job, cancel: &CancellationToken) -> Chec
         for batch in ids.chunks(50) {
             let response = tokio::select! {
                 _=cancel.cancelled()=>Err(Error::Cancelled),
-                response=client.batch_get_service_level_objective_budget_report().set_slo_ids(Some(batch.to_vec())).timestamp(aws_smithy_types::DateTime::from_secs(chrono::Utc::now().timestamp())).send()=>response.map_err(|error|crate::aws_errors::classify(error.as_service_error().and_then(|error|error.code()))),
+                response=client.batch_get_service_level_objective_budget_report().set_slo_ids(Some(batch.to_vec())).timestamp(aws_smithy_types::DateTime::from_secs(chrono::Utc::now().timestamp())).send()=>response.map_err(crate::aws_errors::sdk),
             };
             match response {
                 Ok(response) => project(job, region, batch, &response, &mut result),

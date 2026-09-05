@@ -31,6 +31,8 @@ pub(crate) struct Scope {
     pub(crate) nats: Mutex<Option<Nats>>,
 }
 pub struct Router {
+    pub(crate) pools: Arc<monitor_integrations::http_pool::Pools>,
+    pub(crate) remote: monitor_integrations::admission::Limits,
     pub(crate) config: RwLock<Config>,
     revision: RwLock<String>,
     scopes: scc::HashMap<String, Arc<Scope>>,
@@ -102,7 +104,7 @@ impl Router {
                 job.settings.ready_queue,
                 self.cache_bytes.clone(),
             ),
-            http: Http::new(&job.settings)?,
+            http: Http::shared(self.pools.clone(), &job.settings)?,
             auth: Mutex::new(None),
             kube: Mutex::new(None),
             kube_cache: Mutex::new(None),
@@ -224,13 +226,24 @@ impl Collector for Router {
                     .await;
             }
         }
-        let result = tokio::select! {
+        let context = match self.remote.context(job).await {
+            Ok(context) => context,
+            Err(error) => {
+                return CheckResult::failure(
+                    job.target.name.clone(),
+                    job.check,
+                    job.revision.clone(),
+                    error.coverage(),
+                );
+            }
+        };
+        let result = context.run(async { tokio::select! {
             _ = cancel.cancelled() => CheckResult::failure(job.target.name.clone(), job.check, job.revision.clone(), Coverage::Cancelled),
             result = self.execute(&selected, &cancel) => match result {
                 Ok(result) => result,
                 Err(error) => CheckResult::failure(job.target.name.clone(), job.check, job.revision.clone(), error.coverage()),
             }
-        };
+        }}).await;
         if result
             .operations
             .iter()

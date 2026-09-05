@@ -123,7 +123,7 @@ async fn cloudwatch_batches_use_read_only_sdk_requests() -> Result<(), Box<dyn s
     }
     assert_eq!(calls.load(Ordering::SeqCst), 3);
     if let crate::auth::Auth::Aws(clients) = &auth {
-        let client = clients.signals("us-east-1").await?;
+        let client = clients.signals("us-east-1", &job.settings).await?;
         let _ = client
             .list_service_level_objectives()
             .include_linked_accounts(false)
@@ -138,7 +138,7 @@ async fn cloudwatch_batches_use_read_only_sdk_requests() -> Result<(), Box<dyn s
     }
     assert_eq!(calls.load(Ordering::SeqCst), 5);
     if let crate::auth::Auth::Aws(clients) = &auth {
-        let client = clients.cloudwatch("us-east-1").await?;
+        let client = clients.cloudwatch("us-east-1", &job.settings).await?;
         let expected = std::collections::BTreeSet::from(["AWS/SQS".into()]);
         let (queries, operations) =
             crate::aws_metric_discovery::discover(&client, &job, "us-east-1", Some(&expected))

@@ -8,6 +8,8 @@ impl Router {
             .map(|job| job.settings.clone())
             .unwrap_or_default();
         Self {
+            pools: Arc::new(monitor_integrations::http_pool::Pools::default()),
+            remote: monitor_integrations::admission::Limits::new(effective),
             config: RwLock::new(config),
             revision: RwLock::new(effective.revision.clone()),
             scopes: scc::HashMap::new(),
@@ -22,6 +24,7 @@ impl Router {
         let mut current = self.config.write().await;
         *current = config;
         *self.revision.write().await = effective.revision.clone();
+        self.remote.reload(effective).await;
         if let Some(job) = effective.jobs.first() {
             self.cache_bytes.resize(job.settings.memory_bytes / 4);
             self.processes.resize(job.settings.subprocesses);

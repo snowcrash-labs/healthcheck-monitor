@@ -1,9 +1,6 @@
 //! Kubernetes metadata projection through bounded native kube transport.
-use super::{
-    projection::{operation, text},
-    transport::Error,
-};
-use futures::AsyncReadExt;
+use super::transport::Error;
+use http_body_util::BodyExt;
 use monitor_core::{config::resolve::Job, model::*};
 use serde_json::Value;
 use tokio_util::sync::CancellationToken;
@@ -35,142 +32,81 @@ impl Kubernetes {
             )?)),
         })
     }
-    /// request_stream avoids kube's unbounded request_text accumulation.
+    /// Raw native send avoids kube's unbounded error-body collection in request_stream.
     pub async fn json(
         &self,
         path: &str,
         job: &Job,
         cancel: &CancellationToken,
     ) -> Result<Value, Error> {
-        let request = http::Request::get(path)
-            .body(Vec::new())
-            .map_err(|_| Error::Malformed)?;
         let operation = async {
-            let client = self.session.lock().await.client(job, cancel).await?;
-            let stream = client.request_stream(request).await.map_err(|e| match e {
-                kube::Error::Api(response) if response.code == 403 => Error::Denied,
-                kube::Error::Api(response) if response.code == 401 => Error::Authentication,
-                kube::Error::Api(response) if response.code == 404 => Error::Unavailable,
-                _ => Error::Unavailable,
-            })?;
-            let mut bytes = Vec::new();
-            stream
-                .take(job.settings.response_bytes as u64 + 1)
-                .read_to_end(&mut bytes)
+            for attempt in 0..job.settings.attempts {
+                let result = tokio::time::timeout(
+                    job.settings.attempt_timeout.duration(),
+                    self.once(path, job, cancel),
+                )
                 .await
-                .map_err(|_| Error::Unavailable)?;
-            if bytes.len() > job.settings.response_bytes {
-                return Err(Error::Limit);
+                .map_err(|_| Error::Timeout)
+                .and_then(|result| result);
+                match result {
+                    Ok(value) => return Ok(value),
+                    Err(error) if error.retryable() && attempt + 1 < job.settings.attempts => {
+                        tokio::time::sleep(std::time::Duration::from_millis(200 * (1 << attempt)))
+                            .await;
+                    }
+                    Err(error) => return Err(error),
+                }
             }
-            serde_json::from_slice(&bytes).map_err(|_| Error::Malformed)
+            Err(Error::Unavailable)
         };
         tokio::select! {
             _ = cancel.cancelled() => Err(Error::Cancelled),
             result = tokio::time::timeout(job.settings.operation_timeout.duration(), operation) => result.map_err(|_| Error::Timeout).and_then(|r| r),
         }
     }
-    pub async fn collect(&self, job: &Job, cancel: &CancellationToken) -> CheckResult {
-        let mut result = CheckResult::failure(
-            job.target.name.clone(),
-            job.check,
-            job.revision.clone(),
-            Coverage::Missing,
-        );
-        result.operations.clear();
-        let mut budget = monitor_core::collection_budget::Limit::new(&job.settings);
-        for (kind, api) in KINDS {
-            if !required_kind(job, kind) {
-                continue;
-            }
-            if cancel.is_cancelled() {
-                break;
-            }
-            let mut token = String::new();
-            let mut count = 0;
-            let mut outcome = Ok(0);
-            let mut pages = 0;
-            for page in 0..job.settings.max_pages {
-                pages = page + 1;
-                let query = {
-                    let mut query = url::form_urlencoded::Serializer::new(String::new());
-                    query
-                        .append_pair("limit", &job.settings.page_size.to_string())
-                        .append_pair("continue", &token);
-                    if *kind == "events" {
-                        query.append_pair("fieldSelector", "type=Warning");
-                    }
-                    query.finish()
-                };
-                match self.json(&format!("{api}?{query}"), job, cancel).await {
-                    Ok(payload) => {
-                        let Some(items) = payload.get("items").and_then(Value::as_array) else {
-                            outcome = Err(Error::Malformed);
-                            break;
-                        };
-                        for item in items {
-                            if result.observations.len() >= job.settings.max_assets {
-                                outcome = Err(Error::Limit);
-                                break;
-                            }
-                            let projected = super::kube_projection::project(job, kind, item);
-                            let before = result.observations.len();
-                            if !budget.observations(&mut result.observations, projected) {
-                                outcome = Err(Error::Limit);
-                            }
-                            count += result.observations.len() - before;
-                            if outcome.is_err() {
-                                break;
-                            }
-                        }
-                        if outcome.is_err() {
-                            break;
-                        }
-                        outcome = Ok(count);
-                        token = text(&payload, &["/metadata/continue"])
-                            .unwrap_or("")
-                            .to_string();
-                        if token.is_empty() {
-                            break;
-                        }
-                        if page + 1 == job.settings.max_pages {
-                            outcome = Err(Error::Limit);
-                        }
-                    }
-                    Err(error) => {
-                        outcome = Err(error);
-                        break;
-                    }
+    async fn once(
+        &self,
+        path: &str,
+        job: &Job,
+        cancel: &CancellationToken,
+    ) -> Result<Value, Error> {
+        let client = self.session.lock().await.client(job, cancel).await?;
+        let _permit = crate::admission::acquire().await?;
+        let request = http::Request::get(path)
+            .body(kube::client::Body::empty())
+            .map_err(|_| Error::Malformed)?;
+        let response = client.send(request).await.map_err(|_| Error::Unavailable)?;
+        super::transport::status(response.status())?;
+        if response
+            .headers()
+            .get(http::header::CONTENT_LENGTH)
+            .and_then(|length| length.to_str().ok())
+            .and_then(|length| length.parse::<usize>().ok())
+            .is_some_and(|length| length > job.settings.response_bytes)
+        {
+            return Err(Error::Limit);
+        }
+        let mut body = response.into_body();
+        let mut bytes = Vec::new();
+        while let Some(frame) = body.frame().await {
+            let frame = frame.map_err(|_| Error::Unavailable)?;
+            if let Ok(chunk) = frame.into_data() {
+                if chunk.len() > job.settings.response_bytes.saturating_sub(bytes.len()) {
+                    return Err(Error::Limit);
                 }
+                bytes.extend_from_slice(&chunk);
             }
-            let required = !api.contains(".io/")
-                || matches!(outcome, Err(Error::Denied | Error::Authentication));
-            budget.operations(
-                &mut result.operations,
-                [operation(
-                    kind,
-                    outcome.as_ref().copied(),
-                    pages,
-                    required && job.settings.required,
-                )],
-            );
         }
-        if cancel.is_cancelled() {
-            budget.operations(
-                &mut result.operations,
-                [operation(
-                    "collection-cancelled",
-                    Err(&Error::Cancelled),
-                    0,
-                    job.settings.required,
-                )],
-            );
-        }
-        budget.finish(&mut result, job.settings.required);
-        result.finished_at = chrono::Utc::now();
-        result
+        serde_json::from_slice(&bytes).map_err(|_| Error::Malformed)
+    }
+    pub async fn collect(&self, job: &Job, cancel: &CancellationToken) -> CheckResult {
+        crate::kube_collect::collect(self, job, cancel).await
     }
 }
-fn required_kind(job: &Job, kind: &str) -> bool {
+#[cfg(test)]
+#[path = "kube_transport_tests.rs"]
+mod tests;
+pub(crate) fn required_kind(job: &Job, kind: &str) -> bool {
     let requested = &job.requested_checks;
     if requested.contains(&Check::Kubernetes)
         || requested.len() == 1 && requested.contains(&Check::Preflight)
@@ -194,7 +130,7 @@ fn required_kind(job: &Job, kind: &str) -> bool {
         _ => false,
     }
 }
-const KINDS: &[(&str, &str)] = &[
+pub(crate) const KINDS: &[(&str, &str)] = &[
     ("nodes", "/api/v1/nodes"),
     ("pods", "/api/v1/pods"),
     ("deployments", "/apis/apps/v1/deployments"),

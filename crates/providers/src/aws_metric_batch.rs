@@ -1,8 +1,5 @@
 //! Bounded CloudWatch pages retain a result for every requested metric.
-use aws_sdk_cloudwatch::{
-    error::ProvideErrorMetadata,
-    types::{Dimension, Metric, MetricDataQuery, MetricDataResult, MetricStat},
-};
+use aws_sdk_cloudwatch::types::{Dimension, Metric, MetricDataQuery, MetricDataResult, MetricStat};
 use chrono::{DateTime, Utc};
 use monitor_core::{
     config::{
@@ -108,7 +105,7 @@ pub async fn collect(
         pages = page + 1;
         let response = tokio::select! {
             _=cancel.cancelled()=>Err(Error::Cancelled),
-            response=client.get_metric_data().set_metric_data_queries(Some(queries.clone())).start_time(aws_smithy_types::DateTime::from_secs(now-job.settings.metric_window.0 as i64)).end_time(aws_smithy_types::DateTime::from_secs(now)).max_datapoints((point_limit*batch.len()).min(100800) as i32).set_next_token(token.clone()).send()=>response.map_err(|error|crate::aws_errors::classify(error.as_service_error().and_then(|error|error.code()))),
+            response=client.get_metric_data().set_metric_data_queries(Some(queries.clone())).start_time(aws_smithy_types::DateTime::from_secs(now-job.settings.metric_window.0 as i64)).end_time(aws_smithy_types::DateTime::from_secs(now)).max_datapoints((point_limit*batch.len()).min(100800) as i32).set_next_token(token.clone()).send()=>response.map_err(crate::aws_errors::sdk),
         };
         match response {
             Ok(response) => {

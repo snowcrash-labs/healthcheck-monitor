@@ -29,13 +29,38 @@ aws-sdk-sts = { version = "1.114.0", default-features = false, features = ["rt-t
 aws-credential-types = "1.3.0"
 aws-runtime = { version = "1.9.2", default-features = false }
 aws-types = { version = "1.6.0", default-features = false }
-aws-sigv4 = "1.5.1"
 aws-smithy-runtime-api = "1.16.0"
 aws-smithy-types = "1.6.3"
 http = "1.5.0"
 azure_identity = { version = "1.0.0", default-features = false, features = ["tokio"] }
 azure_core = { version = "1.1.0", default-features = false, features = ["reqwest_rustls", "tokio"] }
 aws-sdk-applicationsignals = { version = "1.91.0", default-features = false, features = ["rt-tokio", "default-https-client"] }
+aws-sdk-sqs = { version = "1.109.0", default-features = false, features = ["rt-tokio"] }
+aws-sdk-ecs = { version = "1.143.0", default-features = false, features = ["rt-tokio"] }
+aws-sdk-ecr = { version = "1.127.0", default-features = false, features = ["rt-tokio"] }
+aws-sdk-codebuild = { version = "1.135.0", default-features = false, features = ["rt-tokio"] }
+aws-sdk-codepipeline = { version = "1.120.0", default-features = false, features = ["rt-tokio"] }
+aws-sdk-kms = { version = "1.118.0", default-features = false, features = ["rt-tokio"] }
+aws-sdk-acm = { version = "1.115.0", default-features = false, features = ["rt-tokio"] }
+aws-sdk-secretsmanager = { version = "1.115.0", default-features = false, features = ["rt-tokio"] }
+aws-sdk-servicequotas = { version = "1.111.0", default-features = false, features = ["rt-tokio"] }
+aws-sdk-health = { version = "1.114.0", default-features = false, features = ["rt-tokio"] }
+aws-sdk-organizations = { version = "1.125.0", default-features = false, features = ["rt-tokio"] }
+aws-sdk-dynamodb = { version = "1.124.0", default-features = false, features = ["rt-tokio"] }
+aws-sdk-cloudwatchlogs = { version = "1.150.0", default-features = false, features = ["rt-tokio"] }
+aws-sdk-elasticloadbalancingv2 = { version = "1.124.0", default-features = false, features = ["rt-tokio"] }
+aws-sdk-autoscaling = { version = "1.130.0", default-features = false, features = ["rt-tokio"] }
+aws-sdk-rds = { version = "1.148.0", default-features = false, features = ["rt-tokio"] }
+aws-sdk-elasticache = { version = "1.117.0", default-features = false, features = ["rt-tokio"] }
+aws-sdk-eks = { version = "1.147.0", default-features = false, features = ["rt-tokio"] }
+aws-sdk-lambda = { version = "1.143.0", default-features = false, features = ["rt-tokio"] }
+aws-sdk-s3 = { version = "1.145.0", default-features = false, features = ["rt-tokio"] }
+aws-sdk-backup = { version = "1.122.0", default-features = false, features = ["rt-tokio"] }
+aws-sdk-route53 = { version = "1.122.0", default-features = false, features = ["rt-tokio"] }
+aws-sdk-cloudfront = { version = "1.130.0", default-features = false, features = ["rt-tokio"] }
+aws-sdk-ec2 = { version = "1.254.0", default-features = false, features = ["rt-tokio"] }
+aws-sdk-sns = { version = "1.111.0", default-features = false, features = ["rt-tokio"] }
+aws-sdk-eventbridge = { version = "1.116.0", default-features = false, features = ["rt-tokio"] }
 
 [lints]
 workspace = true

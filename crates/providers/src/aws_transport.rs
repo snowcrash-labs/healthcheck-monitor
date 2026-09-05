@@ -11,9 +11,9 @@ use monitor_core::config::settings::Settings;
 use monitor_integrations::transport::{Error, Http, bounded};
 #[derive(Clone)]
 struct Connector {
-    client: reqwest::Client,
+    http: Http,
     metadata: reqwest::Client,
-    limit: usize,
+    settings: Settings,
 }
 impl std::fmt::Debug for Connector {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -27,15 +27,19 @@ impl HttpConnector for Connector {
     fn call(&self, request: HttpRequest) -> HttpConnectorFuture {
         let connector = self.clone();
         HttpConnectorFuture::new(async move {
+            let settings = monitor_integrations::admission::settings(&connector.settings);
             let body = request.body().bytes().ok_or_else(failure)?;
-            if body.len() > connector.limit {
-                return Err(failure());
+            if body.len() > settings.response_bytes {
+                return Err(ConnectorError::other(Box::new(Error::Limit), None));
             }
             let metadata = metadata_uri(request.uri(), request.method());
             let client = if metadata {
-                &connector.metadata
+                connector.metadata.clone()
             } else {
-                &connector.client
+                connector
+                    .http
+                    .client_for(&settings)
+                    .map_err(|error| ConnectorError::other(Box::new(error), None))?
             };
             let mut builder = client
                 .request(
@@ -43,7 +47,8 @@ impl HttpConnector for Connector {
                         .map_err(|_| failure())?,
                     request.uri(),
                 )
-                .body(body.to_vec());
+                .body(body.to_vec())
+                .timeout(settings.attempt_timeout.duration());
             for (name, value) in request.headers().iter() {
                 builder = builder.header(name, value);
             }
@@ -52,16 +57,28 @@ impl HttpConnector for Connector {
                 && !monitor_integrations::transport::allowed(&request)
                 && !authentication(&request)
             {
-                return Err(failure());
+                return Err(ConnectorError::other(Box::new(Error::Forbidden), None));
             }
-            let response = client.execute(request).await.map_err(|_| failure())?;
+            let _permit = monitor_integrations::admission::acquire()
+                .await
+                .map_err(|error| ConnectorError::other(Box::new(error), None))?;
+            let response = client.execute(request).await.map_err(|error| {
+                ConnectorError::other(
+                    Box::new(if error.is_timeout() {
+                        Error::Timeout
+                    } else {
+                        Error::Unavailable
+                    }),
+                    None,
+                )
+            })?;
             let mut converted = http::Response::builder().status(response.status());
             for (name, value) in response.headers() {
                 converted = converted.header(name, value);
             }
-            let bytes = bounded(response, connector.limit)
+            let bytes = bounded(response, settings.response_bytes)
                 .await
-                .map_err(|_| failure())?;
+                .map_err(|error| ConnectorError::other(Box::new(error), None))?;
             let response = converted
                 .body(SdkBody::from(bytes))
                 .map_err(|_| failure())?;
@@ -117,9 +134,9 @@ pub fn client(http: &Http, settings: &Settings) -> Result<SharedHttpClient, Erro
         .build()
         .map_err(|_| Error::Unavailable)?;
     let connector = SharedHttpConnector::new(Connector {
-        client: http.client().clone(),
+        http: http.clone(),
         metadata,
-        limit: settings.response_bytes,
+        settings: settings.clone(),
     });
     Ok(http_client_fn(move |_, _| connector.clone()))
 }

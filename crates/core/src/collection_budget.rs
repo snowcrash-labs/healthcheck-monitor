@@ -1,11 +1,36 @@
 //! Per-collection admission bounds evidence before pages and provider results accumulate.
 use crate::{config::settings::Settings, model::*};
+use std::sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
+};
+/// A collection-wide charge survives branch completion and transfer into the final result.
+pub struct Shared {
+    used: AtomicUsize,
+    limit: usize,
+}
+impl Shared {
+    pub fn new(settings: &Settings) -> Self {
+        Self {
+            used: AtomicUsize::new(0),
+            limit: settings.memory_bytes / 2 / settings.concurrency.max(1),
+        }
+    }
+    pub fn claim(&self, bytes: usize) -> bool {
+        self.used
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |used| {
+                used.checked_add(bytes).filter(|total| *total <= self.limit)
+            })
+            .is_ok()
+    }
+}
 pub struct Limit {
     used: usize,
     bytes: usize,
     assets: usize,
     operations: usize,
     limited: bool,
+    shared: Option<Arc<Shared>>,
 }
 impl Limit {
     pub fn new(settings: &Settings) -> Self {
@@ -16,7 +41,13 @@ impl Limit {
             assets: settings.max_assets,
             operations: 0,
             limited: false,
+            shared: None,
         }
+    }
+    pub fn with_shared(settings: &Settings, shared: Arc<Shared>) -> Self {
+        let mut limit = Self::new(settings);
+        limit.shared = Some(shared);
+        limit
     }
     pub fn exhausted(&self) -> bool {
         self.used >= self.bytes || self.operations >= self.assets
@@ -31,7 +62,13 @@ impl Limit {
     ) -> bool {
         for observation in incoming {
             let size = crate::bounds::observation_bytes(&observation);
-            if out.len() >= self.assets || size > self.bytes.saturating_sub(self.used) {
+            if out.len() >= self.assets
+                || size > self.bytes.saturating_sub(self.used)
+                || self
+                    .shared
+                    .as_ref()
+                    .is_some_and(|shared| !shared.claim(size))
+            {
                 self.limited = true;
                 return false;
             }
@@ -47,7 +84,13 @@ impl Limit {
     ) -> bool {
         for operation in incoming {
             let size = crate::bounds::operation_bytes(&operation);
-            if self.operations >= self.assets || size > self.bytes.saturating_sub(self.used) {
+            if self.operations >= self.assets
+                || size > self.bytes.saturating_sub(self.used)
+                || self
+                    .shared
+                    .as_ref()
+                    .is_some_and(|shared| !shared.claim(size))
+            {
                 self.limited = true;
                 return false;
             }

@@ -36,6 +36,7 @@ impl Router {
             if let (Some(context), Some(fallback)) =
                 (&job.target.context, &job.target.nats_fallback)
             {
+                let permit = monitor_integrations::admission::acquire().await?;
                 let output = self
                     .processes
                     .run(
@@ -48,6 +49,7 @@ impl Router {
                         cancel,
                     )
                     .await;
+                drop(permit);
                 let parsed = output
                     .and_then(|o| String::from_utf8(o.stdout).map_err(|_| Error::Malformed))
                     .and_then(|text| {
@@ -101,6 +103,7 @@ impl Router {
             return self.github(job, &scope, cancel).await;
         }
         if job.target.provider == Provider::Nats {
+            let _permit = monitor_integrations::admission::acquire().await?;
             let mut nats = scope.nats.lock().await;
             if nats.is_none() {
                 let url = job.target.nats_url.as_ref().ok_or(Error::Authentication)?;

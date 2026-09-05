@@ -4,12 +4,7 @@ use monitor_integrations::transport::Error;
 pub struct AwsClients {
     pub config: SdkConfig,
     pub sts: aws_sdk_sts::Client,
-    regions: scc::HashMap<String, RegionClients>,
-}
-#[derive(Clone)]
-struct RegionClients {
-    cloudwatch: aws_sdk_cloudwatch::Client,
-    signals: aws_sdk_applicationsignals::Client,
+    services: scc::HashCache<String, std::sync::Arc<dyn std::any::Any + Send + Sync>>,
 }
 impl AwsClients {
     pub fn new(mut config: SdkConfig) -> Self {
@@ -26,40 +21,82 @@ impl AwsClients {
         Self {
             sts: aws_sdk_sts::Client::new(&config),
             config,
-            regions: scc::HashMap::new(),
+            services: scc::HashCache::with_capacity(0, 1024),
         }
     }
-    pub async fn cloudwatch(&self, region: &str) -> Result<aws_sdk_cloudwatch::Client, Error> {
-        Ok(self.region(region).await?.cloudwatch)
-    }
-    pub async fn signals(&self, region: &str) -> Result<aws_sdk_applicationsignals::Client, Error> {
-        Ok(self.region(region).await?.signals)
-    }
-    async fn region(&self, region: &str) -> Result<RegionClients, Error> {
-        if let Some(client) = self
-            .regions
-            .read_async(region, |_, client| client.clone())
-            .await
-        {
-            return Ok(client);
-        }
-        // Configured regions plus CloudFront's mandatory global metric region.
-        if self.regions.len() >= 33 {
-            return Err(Error::Limit);
+    /// Client identity includes per-check retry and timeout policy, while transport pools stay shared.
+    pub async fn service<T: Clone + Send + Sync + 'static>(
+        &self,
+        name: &str,
+        region: &str,
+        settings: &monitor_core::config::settings::Settings,
+        build: fn(&SdkConfig) -> T,
+    ) -> Result<T, Error> {
+        let key = format!(
+            "{name}/{region}/{}/{}/{}/{}",
+            settings.connect_timeout.0,
+            settings.attempt_timeout.0,
+            settings.operation_timeout.0,
+            settings.attempts
+        );
+        if let Some(entry) = self.services.get_async(&key).await {
+            return entry
+                .get()
+                .downcast_ref::<T>()
+                .cloned()
+                .ok_or(Error::Malformed);
         }
         let config = self
             .config
             .to_builder()
             .region(aws_config::Region::new(region.to_string()))
+            .timeout_config(
+                aws_config::timeout::TimeoutConfig::builder()
+                    .connect_timeout(settings.connect_timeout.duration())
+                    .operation_timeout(settings.operation_timeout.duration())
+                    .operation_attempt_timeout(settings.attempt_timeout.duration())
+                    .build(),
+            )
+            .retry_config(
+                aws_config::retry::RetryConfig::standard()
+                    .with_max_attempts(settings.attempts as u32),
+            )
             .build();
-        let entry = self
-            .regions
-            .entry_async(region.to_string())
+        let (_, entry) = self
+            .services
+            .entry_async(key)
             .await
-            .or_insert_with(|| RegionClients {
-                cloudwatch: aws_sdk_cloudwatch::Client::new(&config),
-                signals: aws_sdk_applicationsignals::Client::new(&config),
-            });
-        Ok(entry.get().clone())
+            .or_put_with(|| std::sync::Arc::new(build(&config)));
+        entry
+            .get()
+            .downcast_ref::<T>()
+            .cloned()
+            .ok_or(Error::Malformed)
+    }
+    pub async fn cloudwatch(
+        &self,
+        region: &str,
+        settings: &monitor_core::config::settings::Settings,
+    ) -> Result<aws_sdk_cloudwatch::Client, Error> {
+        self.service(
+            "cloudwatch",
+            region,
+            settings,
+            aws_sdk_cloudwatch::Client::new,
+        )
+        .await
+    }
+    pub async fn signals(
+        &self,
+        region: &str,
+        settings: &monitor_core::config::settings::Settings,
+    ) -> Result<aws_sdk_applicationsignals::Client, Error> {
+        self.service(
+            "signals",
+            region,
+            settings,
+            aws_sdk_applicationsignals::Client::new,
+        )
+        .await
     }
 }

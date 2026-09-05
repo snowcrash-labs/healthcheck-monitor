@@ -54,6 +54,25 @@ impl InventoryCache {
             entry.at.elapsed() < job.settings.interval.duration()
                 && !entry.consumers.contains(&job.check)
         }) {
+            let bytes = monitor_core::bounds::result_bytes(&cached.value.result).saturating_add(
+                cached
+                    .value
+                    .followups
+                    .iter()
+                    .map(Endpoint::bytes)
+                    .sum::<usize>(),
+            );
+            if !crate::scan_budget::claim(bytes) {
+                return Fetched {
+                    result: CheckResult::failure(
+                        job.target.name.clone(),
+                        job.check,
+                        job.revision.clone(),
+                        Coverage::Truncated,
+                    ),
+                    followups: vec![],
+                };
+            }
             cached.consumers.insert(job.check);
             return cached.value.clone();
         }

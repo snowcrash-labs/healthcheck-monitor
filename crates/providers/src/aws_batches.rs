@@ -74,6 +74,7 @@ pub async fn fetch<S: Source>(
 ) -> Fetched {
     let mut result = crate::router::base(job);
     let mut followups = Vec::new();
+    let mut budget = crate::scan_budget::limit(job);
     let field = match endpoint.id.split('/').next() {
         Some("batch-build-details") => "ids",
         Some("batch-ecs-services-detail") => "services",
@@ -113,19 +114,18 @@ pub async fn fetch<S: Source>(
                     Some(row) => {
                         let projected = crate::resource_projection::project(job, &item, row);
                         let count = projected.len();
-                        let available = job
-                            .settings
-                            .max_assets
-                            .saturating_sub(result.observations.len());
-                        result
-                            .observations
-                            .extend(projected.into_iter().take(available));
+                        let admitted = budget.observations(&mut result.observations, projected);
+                        let mut bounded = admitted;
                         for next in crate::details::followups(job, &item, row) {
-                            if followups.len() < job.settings.ready_queue {
+                            if followups.len() < job.settings.ready_queue
+                                && crate::scan_budget::claim(next.bytes())
+                            {
                                 followups.push(next);
+                            } else {
+                                bounded = false;
                             }
                         }
-                        if count > available {
+                        if !bounded {
                             Err(Coverage::Truncated)
                         } else {
                             Ok(count)
@@ -150,7 +150,7 @@ pub async fn fetch<S: Source>(
         if let Err(coverage) = outcome {
             op.coverage = coverage;
         }
-        result.operations.push(op);
+        budget.operations(&mut result.operations, [op]);
     }
     if result.operations.is_empty() {
         result
@@ -158,5 +158,6 @@ pub async fn fetch<S: Source>(
             .push(operation(&scope, Err(&Error::Malformed), 1, true));
     }
     result.finished_at = chrono::Utc::now();
+    budget.finish(&mut result, job.settings.required);
     Fetched { result, followups }
 }

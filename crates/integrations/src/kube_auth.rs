@@ -11,6 +11,7 @@ pub(crate) struct Session {
     exec: Option<ExecConfig>,
     legacy: Option<kube::config::AuthProviderConfig>,
     client: Option<kube::Client>,
+    transport: Option<(u64, u64)>,
     expires: Option<DateTime<Utc>>,
     processes: Processes,
 }
@@ -32,6 +33,7 @@ impl Session {
             exec,
             legacy,
             client: None,
+            transport: None,
             expires: None,
             processes,
         })
@@ -41,44 +43,58 @@ impl Session {
         job: &Job,
         cancel: &CancellationToken,
     ) -> Result<kube::Client, Error> {
-        if let Some(client) = self.client.as_ref().filter(|_| {
-            self.expires
-                .is_none_or(|until| until > Utc::now() + chrono::Duration::seconds(30))
-        }) {
+        let fresh = self.client.is_some()
+            && self
+                .expires
+                .is_none_or(|until| until > Utc::now() + chrono::Duration::seconds(30));
+        let transport = (
+            job.settings.connect_timeout.0,
+            job.settings.attempt_timeout.0,
+        );
+        if fresh
+            && self.transport == Some(transport)
+            && let Some(client) = &self.client
+        {
             return Ok(client.clone());
         }
-        if let Some(exec) = &self.exec {
-            let command = command(exec)?;
-            let output = self
-                .processes
-                .run_command(
-                    command,
-                    job.settings.response_bytes.min(65536),
-                    job.settings.attempt_timeout.duration(),
-                    cancel,
-                )
-                .await?;
-            let credential = parse(&output.stdout, exec.api_version.as_deref())?;
-            self.expires = credential.expiration_timestamp;
-            self.config.auth_info.token = credential.token.map(Into::into);
-            self.config.auth_info.token_file = None;
-            self.config.auth_info.client_certificate = None;
-            self.config.auth_info.client_key = None;
-            self.config.auth_info.client_certificate_data = credential
-                .client_certificate_data
-                .map(|value| base64::prelude::BASE64_STANDARD.encode(value));
-            self.config.auth_info.client_key_data = credential
-                .client_key_data
-                .map(|value| base64::prelude::BASE64_STANDARD.encode(value).into());
-        } else if let Some(provider) = &self.legacy {
-            let status = legacy::acquire(provider, &self.processes, job, cancel).await?;
-            self.config.auth_info.token = status.token.map(Into::into);
-            self.config.auth_info.token_file = None;
-            self.expires = status.expiration_timestamp;
+        if !fresh {
+            if let Some(exec) = &self.exec {
+                let command = command(exec)?;
+                let output = self
+                    .processes
+                    .run_command(
+                        command,
+                        job.settings.response_bytes.min(65536),
+                        job.settings.attempt_timeout.duration(),
+                        cancel,
+                    )
+                    .await?;
+                let credential = parse(&output.stdout, exec.api_version.as_deref())?;
+                self.expires = credential.expiration_timestamp;
+                self.config.auth_info.token = credential.token.map(Into::into);
+                self.config.auth_info.token_file = None;
+                self.config.auth_info.client_certificate = None;
+                self.config.auth_info.client_key = None;
+                self.config.auth_info.client_certificate_data = credential
+                    .client_certificate_data
+                    .map(|value| base64::prelude::BASE64_STANDARD.encode(value));
+                self.config.auth_info.client_key_data = credential
+                    .client_key_data
+                    .map(|value| base64::prelude::BASE64_STANDARD.encode(value).into());
+            } else if let Some(provider) = &self.legacy {
+                let status = legacy::acquire(provider, &self.processes, job, cancel).await?;
+                self.config.auth_info.token = status.token.map(Into::into);
+                self.config.auth_info.token_file = None;
+                self.expires = status.expiration_timestamp;
+            }
         }
+        self.config.connect_timeout = Some(job.settings.connect_timeout.duration());
+        self.config.read_timeout = Some(job.settings.attempt_timeout.duration());
+        self.config.write_timeout = Some(job.settings.attempt_timeout.duration());
         let client =
             kube::Client::try_from(self.config.clone()).map_err(|_| Error::Authentication)?;
         self.client = Some(client.clone());
+        self.transport = Some(transport);
         Ok(client)
     }
 }

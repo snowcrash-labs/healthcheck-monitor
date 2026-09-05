@@ -1,0 +1,14 @@
+version = 1
+
+[settings]
+samples = 1
+concurrency = 4
+scope_concurrency = 1
+
+[[targets]]
+name = "dev"
+provider = "gcp"
+scope = "dev-sc-transcription-fa62"
+regions = ["us-central1"]
+context = "gke_dev-sc-transcription-fa62_us-central1_dev-sc-transcription-gke"
+expected = "active"

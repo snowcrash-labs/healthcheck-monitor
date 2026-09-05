@@ -22,7 +22,7 @@ pub async fn with_namespaces(
         if expected.is_some_and(|expected| !expected.contains_key(region)) {
             continue;
         }
-        let client = match clients.cloudwatch(region).await {
+        let client = match clients.cloudwatch(region, &job.settings).await {
             Ok(client) => client,
             Err(error) => {
                 result

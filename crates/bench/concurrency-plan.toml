@@ -1,0 +1,20 @@
+output = "evidence/concurrency-benchmark"
+warmups = 1
+runs = 5
+timeout_seconds = 180
+
+[[variants]]
+name = "serial-kubernetes"
+command = ["target/debug/healthcheck-monitor", "run", "--config", "crates/bench/rust-serial.toml", "--target", "dev", "--check", "kubernetes", "--samples", "1", "--output", "{output}"]
+
+[[variants]]
+name = "parallel-kubernetes"
+command = ["target/debug/healthcheck-monitor", "run", "--config", "crates/bench/rust-dev.toml", "--target", "dev", "--check", "kubernetes", "--samples", "1", "--output", "{output}"]
+
+[[variants]]
+name = "serial-queues"
+command = ["target/debug/healthcheck-monitor", "run", "--config", "crates/bench/rust-serial.toml", "--target", "dev", "--check", "queues", "--samples", "1", "--output", "{output}"]
+
+[[variants]]
+name = "parallel-queues"
+command = ["target/debug/healthcheck-monitor", "run", "--config", "crates/bench/rust-dev.toml", "--target", "dev", "--check", "queues", "--samples", "1", "--output", "{output}"]

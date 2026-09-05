@@ -1,16 +1,14 @@
-//! DNS, trusted TLS, expiry, and HTTP status probes never read response bodies.
+//! DNS, trusted TLS, expiry, and HTTP status from one request without response bodies.
 use super::{
     projection::observation,
     transport::{Error, Http},
 };
-use chrono::{DateTime, Utc};
+use chrono::DateTime;
 use monitor_core::{
     config::{resolve::Job, types::Endpoint},
     model::{Data, Observation},
 };
-use std::{sync::Arc, time::Instant};
-use tokio::net::TcpStream;
-use tokio_rustls::TlsConnector;
+use std::time::Instant;
 use tokio_util::sync::CancellationToken;
 
 pub async fn probe(
@@ -19,66 +17,59 @@ pub async fn probe(
     endpoint: &Endpoint,
     cancel: &CancellationToken,
 ) -> Observation {
-    let start = Instant::now();
-    let host = endpoint.url.host_str().unwrap_or("");
-    let port = endpoint.url.port_or_known_default().unwrap_or(443);
-    let resolver = hickory_resolver::TokioResolver::builder_tokio().and_then(|b| b.build());
-    let dns = match resolver {
-        Ok(resolver) => tokio::time::timeout(
+    let mut start = Instant::now();
+    let mut dns = false;
+    let mut tls = false;
+    let mut status = None;
+    let mut expires_at = None;
+    let work = async {
+        let _permit = crate::admission::acquire().await?;
+        start = Instant::now();
+        let host = endpoint.url.host_str().ok_or(Error::Malformed)?;
+        dns = tokio::time::timeout(
             job.settings.connect_timeout.duration(),
-            resolver.lookup_ip(host),
+            http.pools.network.lookup(host),
         )
         .await
-        .is_ok_and(|r| r.is_ok_and(|addresses| addresses.iter().next().is_some())),
-        Err(_) => false,
+        .is_ok_and(|result| result.is_ok_and(|addresses| addresses.iter().next().is_some()));
+        let response = http
+            .client_for(&job.settings)?
+            .get(endpoint.url.clone())
+            .timeout(job.settings.attempt_timeout.duration())
+            .send()
+            .await
+            .map_err(|_| Error::Unavailable)?;
+        status = Some(response.status().as_u16());
+        // Trust and hostname are checked on the connection that produced the status.
+        // Pooled connections retain the leaf certificate, avoiding a second handshake.
+        if let Some(certificate) = response
+            .extensions()
+            .get::<reqwest::tls::TlsInfo>()
+            .and_then(|info| info.peer_certificate())
+        {
+            let (_, certificate) =
+                x509_parser::parse_x509_certificate(certificate).map_err(|_| Error::Malformed)?;
+            tls = true;
+            expires_at = DateTime::from_timestamp(certificate.validity().not_after.timestamp(), 0);
+        }
+        drop(response);
+        Ok::<_, Error>(())
     };
-    let tls = tokio::select! {
-        _ = cancel.cancelled() => Err(Error::Cancelled),
-        result = tokio::time::timeout(job.settings.attempt_timeout.duration(), certificate(host, port)) => result.map_err(|_| Error::Timeout).and_then(|r| r),
-    };
-    let status = tokio::select! {
-        _ = cancel.cancelled() => None,
-        result = http.client().get(endpoint.url.clone()).send() => result.ok().map(|r| r.status().as_u16()),
-    };
-    let valid_tls = tls.is_ok();
-    let expires_at = tls.ok().flatten();
+    tokio::select! {
+        _ = cancel.cancelled() => {},
+        _ = tokio::time::timeout(job.settings.operation_timeout.duration(), work) => {},
+    }
     observation(
         job,
         "endpoints",
         &endpoint.name,
         Data::Endpoint {
             dns,
-            tls: valid_tls,
+            tls,
             status,
             accepted: endpoint.accepted.clone(),
             latency_ms: start.elapsed().as_millis().min(u64::MAX as u128) as u64,
             expires_at,
         },
     )
-}
-async fn certificate(host: &str, port: u16) -> Result<Option<DateTime<Utc>>, Error> {
-    use rustls_platform_verifier::ConfigVerifierExt;
-    let config = rustls::ClientConfig::with_platform_verifier().map_err(|_| Error::Unavailable)?;
-    let connector = TlsConnector::from(Arc::new(config));
-    let name =
-        rustls::pki_types::ServerName::try_from(host.to_string()).map_err(|_| Error::Malformed)?;
-    let tcp = TcpStream::connect((host, port))
-        .await
-        .map_err(|_| Error::Unavailable)?;
-    let stream = connector
-        .connect(name, tcp)
-        .await
-        .map_err(|_| Error::Unavailable)?;
-    let certificate = stream
-        .get_ref()
-        .1
-        .peer_certificates()
-        .and_then(|c| c.first())
-        .ok_or(Error::Malformed)?;
-    let (_, cert) =
-        x509_parser::parse_x509_certificate(certificate.as_ref()).map_err(|_| Error::Malformed)?;
-    Ok(DateTime::from_timestamp(
-        cert.validity().not_after.timestamp(),
-        0,
-    ))
 }

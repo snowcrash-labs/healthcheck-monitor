@@ -1,13 +1,9 @@
 //! Per-API aggregation preserves unrelated successes when a scan fails.
 use crate::auth::Auth;
 use monitor_core::{config::resolve::Job, model::*};
-use monitor_integrations::{
-    projection::operation,
-    transport::{Error, Http},
-};
+use monitor_integrations::transport::{Error, Http};
 use serde_json::Value;
 use sha2::Digest;
-use std::collections::{BTreeSet, VecDeque};
 use tokio_util::sync::CancellationToken;
 
 pub use crate::endpoint::Endpoint;
@@ -41,6 +37,12 @@ async fn request_inner(
     cancel: &CancellationToken,
     cache: Option<&crate::inventory_cache::InventoryCache>,
 ) -> Result<Value, Error> {
+    if let Some(result) = crate::aws_native::request(auth, endpoint, job).await {
+        return result;
+    }
+    if endpoint.aws.is_some() {
+        return Err(Error::Authentication);
+    }
     if endpoint.id.starts_with("acr-") {
         return crate::azure_registry_auth::request(
             http,
@@ -63,52 +65,24 @@ async fn request_inner(
         )
         .await;
     }
-    let query = endpoint
-        .aws
-        .as_ref()
-        .is_some_and(|(_, _, target)| target.starts_with("query:"));
-    let mut builder = if query {
-        let mut form = url::form_urlencoded::Serializer::new(String::new());
-        if let Some(fields) = endpoint.body.as_ref().and_then(Value::as_object) {
-            for (name, value) in fields {
-                if let Some(value) = value.as_str() {
-                    form.append_pair(name, value);
-                }
-            }
-        }
-        http.client()
-            .post(&endpoint.url)
-            .header("content-type", "application/x-www-form-urlencoded")
-            .body(form.finish())
-    } else if let Some(body) = &endpoint.body {
+    let builder = if let Some(body) = &endpoint.body {
         http.client().post(&endpoint.url).json(body)
     } else {
         http.client().get(&endpoint.url)
     };
-    if let Some((_, _, target)) = &endpoint.aws {
-        if !query && !target.is_empty() {
-            builder = builder
-                .header("x-amz-target", target)
-                .header("content-type", "application/x-amz-json-1.1");
-        }
+    let builder = if endpoint.id.starts_with("kv-") {
+        builder.bearer_auth(auth.vault_bearer().await?)
     } else {
-        builder = if endpoint.id.starts_with("kv-") {
-            builder.bearer_auth(auth.vault_bearer().await?)
-        } else {
-            builder.bearer_auth(
-                auth.bearer_for(
-                    endpoint
-                        .url
-                        .starts_with("https://api.loganalytics.azure.com/"),
-                )
-                .await?,
+        builder.bearer_auth(
+            auth.bearer_for(
+                endpoint
+                    .url
+                    .starts_with("https://api.loganalytics.azure.com/"),
             )
-        };
-    }
-    let mut request = builder.build().map_err(|_| Error::Malformed)?;
-    if let Some((service, region, _)) = &endpoint.aws {
-        auth.sign(&mut request, service, region).await?;
-    }
+            .await?,
+        )
+    };
+    let request = builder.build().map_err(|_| Error::Malformed)?;
     http.json(request, &job.settings, cancel).await
 }
 pub async fn collect(
@@ -182,88 +156,11 @@ pub async fn collect_from<S: Source>(
     endpoints: Vec<Endpoint>,
     cancel: &CancellationToken,
 ) -> CheckResult {
-    let mut result = CheckResult::failure(
-        job.target.name.clone(),
-        job.check,
-        job.revision.clone(),
-        Coverage::Missing,
-    );
-    result.operations.clear();
-    let mut initial = endpoints.into_iter();
-    let mut pending = VecDeque::new();
-    let mut queued_bytes = 0usize;
-    let queue_bytes = job.settings.memory_bytes / 4 / job.settings.concurrency.max(1);
-    let mut budget = monitor_core::collection_budget::Limit::new(&job.settings);
-    let mut visited = BTreeSet::new();
-    loop {
-        if budget.exhausted() {
-            if !pending.is_empty() || initial.len() > 0 {
-                budget.mark_limited();
-            }
-            break;
-        }
-        let endpoint = if let Some(endpoint) = pending.pop_front() {
-            queued_bytes = queued_bytes.saturating_sub(Endpoint::bytes(&endpoint));
-            endpoint
-        } else if let Some(endpoint) = initial.next() {
-            endpoint
-        } else {
-            break;
-        };
-        let key = cache_key(job, &endpoint);
-        if !visited.insert(key.clone()) {
-            continue;
-        }
-        if visited.len() > job.settings.max_assets {
-            budget.mark_limited();
-            break;
-        }
-        if cancel.is_cancelled() {
-            budget.operations(
-                &mut result.operations,
-                [operation(
-                    &endpoint.id,
-                    Err(&Error::Cancelled),
-                    0,
-                    job.settings.required,
-                )],
-            );
-            continue;
-        }
-        let mut fetched = if let Some(cache) = source.cache() {
-            cache.load(source, job, endpoint, cancel, key).await
-        } else {
-            crate::endpoint_scan::fetch(source, job, endpoint, cancel).await
-        };
-        for followup in fetched.followups {
-            let bytes = followup.bytes();
-            if pending.len() >= job.settings.ready_queue
-                || bytes > queue_bytes.saturating_sub(queued_bytes)
-            {
-                for op in &mut fetched.result.operations {
-                    op.coverage = Coverage::Truncated;
-                }
-                break;
-            }
-            queued_bytes += bytes;
-            pending.push_back(followup);
-        }
-        for op in &mut fetched.result.operations {
-            op.required = job.settings.required;
-        }
-        budget.merge(&mut result, fetched.result);
-    }
-    budget.finish(&mut result, job.settings.required);
-    if result.operations.is_empty() {
-        result.operations.push(operation(
-            "not-configured",
-            Err(&Error::Missing),
-            0,
-            job.settings.required,
-        ));
-    }
-    result.finished_at = chrono::Utc::now();
-    result
+    crate::scan_budget::run(
+        job,
+        crate::common_parallel::collect(source, job, endpoints, cancel),
+    )
+    .await
 }
 pub async fn collect_cached(
     http: &Http,
