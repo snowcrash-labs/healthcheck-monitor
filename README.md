@@ -15,6 +15,8 @@ Edit `monitor.toml` or pass `--config`. Collection does not start interactive lo
 
 See the [operations runbook](docs/plans/2026-09-05-monitor-operations.md) for configuration, permissions, evidence and foreground supervision, and the [verification record](docs/plans/2026-09-05-monitor-verification.md) for the source-test crosswalk and validation gaps.
 
+The [persistent service and dashboard assessment](docs/plans/2026-09-05-health-dashboard-assessment.md) describes the proposed server/frontend architecture, implementation effort, operational requirements and comparison with Datadog.
+
 The toolchain is stable Rust with the prebuilt standard library. The workspace passes 225 tests, formatting and Clippy on macOS and Linux ARM64. Development checks use `cargo test --workspace`, `cargo fmt --all --check`, and `cargo clippy --workspace --all-targets -- -D warnings`. Dependency updates use `cargo upgrade --incompatible`; dependency auditing uses `cargo audit`.
 
 No infrastructure mutations, notifications, synthetic transactions, application database connections, secret-value reads, queue-message consumption, or response-body collection for endpoint probes are part of this service.
