@@ -40,3 +40,36 @@ pub fn truncate(result: &mut CheckResult, bytes: usize, assets: usize) {
         }
     }
 }
+
+/// Invalid terminal states and stale timestamps cannot establish complete coverage.
+pub fn validate_source(
+    result: &mut CheckResult,
+    freshness: u64,
+    now: chrono::DateTime<chrono::Utc>,
+) {
+    use crate::model::Data;
+    for observation in &result.observations {
+        if matches!(
+            observation.data,
+            Data::Job {
+                complete: true,
+                failed: true,
+                ..
+            }
+        ) {
+            for operation in &mut result.operations {
+                if operation.id == observation.operation {
+                    operation.coverage = Coverage::Malformed;
+                }
+            }
+        }
+        if (now - observation.observed_at).num_seconds() > freshness as i64 {
+            for operation in &mut result.operations {
+                if operation.id == observation.operation && operation.coverage == Coverage::Complete
+                {
+                    operation.coverage = Coverage::Stale;
+                }
+            }
+        }
+    }
+}

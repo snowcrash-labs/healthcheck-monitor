@@ -19,14 +19,9 @@ pub fn mark_retries(observations: &mut [Observation]) {
             if pipeline.is_empty() || revision.is_empty() || target.is_empty() {
                 continue;
             }
-            let scope = observation.resource.split('/').next().unwrap_or("");
+            let scope = scope(observation);
             success
-                .entry((
-                    scope.to_string(),
-                    pipeline.clone(),
-                    revision.clone(),
-                    target.clone(),
-                ))
+                .entry((scope, pipeline.clone(), revision.clone(), target.clone()))
                 .and_modify(|time: &mut chrono::DateTime<chrono::Utc>| {
                     *time = (*time).max(*created_at)
                 })
@@ -34,6 +29,7 @@ pub fn mark_retries(observations: &mut [Observation]) {
         }
     }
     for observation in observations.iter_mut() {
+        let scope = scope(observation);
         if let Data::Build {
             pipeline,
             revision,
@@ -46,15 +42,20 @@ pub fn mark_retries(observations: &mut [Observation]) {
             let Some(created_at) = created_at else {
                 continue;
             };
-            let scope = observation.resource.split('/').next().unwrap_or("");
             *superseded = success
-                .get(&(
-                    scope.to_string(),
-                    pipeline.clone(),
-                    revision.clone(),
-                    target.clone(),
-                ))
+                .get(&(scope, pipeline.clone(), revision.clone(), target.clone()))
                 .is_some_and(|time| time > created_at);
         }
     }
+}
+fn scope(observation: &Observation) -> String {
+    let target = observation.resource.split('/').next().unwrap_or("");
+    let mut parts = observation.operation.split('/');
+    let family = parts.next().unwrap_or("");
+    let context = if family == "workflows" {
+        parts.take(2).collect::<Vec<_>>().join("/")
+    } else {
+        parts.next().unwrap_or("global").to_owned()
+    };
+    format!("{target}/{context}")
 }

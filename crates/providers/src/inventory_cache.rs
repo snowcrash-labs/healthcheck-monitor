@@ -5,12 +5,13 @@ use crate::{
 };
 use monitor_core::{
     config::resolve::Job,
-    model::{CheckResult, Coverage},
+    model::{Check, CheckResult, Coverage},
 };
 use std::sync::Arc;
 use tokio::sync::{Mutex, OwnedSemaphorePermit, Semaphore};
 use tokio_util::sync::CancellationToken;
 struct Entry {
+    consumers: std::collections::BTreeSet<Check>,
     at: tokio::time::Instant,
     value: Fetched,
     _bytes: OwnedSemaphorePermit,
@@ -46,10 +47,11 @@ impl InventoryCache {
             _=cancel.cancelled()=>return Fetched { result:CheckResult::failure(job.target.name.clone(),job.check,job.revision.clone(),Coverage::Cancelled),followups:vec![] },
             entry=slot.lock()=>entry,
         };
-        if let Some(cached) = entry
-            .as_ref()
-            .filter(|entry| entry.at.elapsed() < job.settings.interval.duration())
-        {
+        if let Some(cached) = entry.as_mut().filter(|entry| {
+            entry.at.elapsed() < job.settings.interval.duration()
+                && !entry.consumers.contains(&job.check)
+        }) {
+            cached.consumers.insert(job.check);
             return cached.value.clone();
         }
         *entry = None;
@@ -71,6 +73,7 @@ impl InventoryCache {
                 && let Ok(permit) = self.bytes.clone().try_acquire_many_owned(bytes)
             {
                 *entry = Some(Entry {
+                    consumers: std::collections::BTreeSet::from([job.check]),
                     at: tokio::time::Instant::now(),
                     value: value.clone(),
                     _bytes: permit,

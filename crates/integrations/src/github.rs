@@ -49,11 +49,13 @@ pub async fn collect(
     result.operations.clear();
     let mut paths = vec![("identity".to_string(), "user".to_string(), None)];
     if job.check != Check::Preflight {
-        paths.push((
-            "repositories".into(),
-            format!("orgs/{}/repos", job.target.scope),
-            None,
-        ));
+        if job.target.provider == Provider::Github {
+            paths.push((
+                "repositories".into(),
+                format!("orgs/{}/repos", job.target.scope),
+                None,
+            ));
+        }
         for repository in &job.target.repositories {
             let repo = if repository.contains('/') {
                 repository.clone()
@@ -127,13 +129,22 @@ pub async fn collect(
                             outcome = Err(Error::Limit);
                             break;
                         }
-                        let name = text(row, &["/full_name", "/name", "/sha"])
-                            .map(String::from)
-                            .or_else(|| {
-                                row.get("id").and_then(Value::as_u64).map(|n| n.to_string())
-                            });
+                        let name = if id.starts_with("workflows/") {
+                            row.get("id")
+                                .and_then(Value::as_u64)
+                                .map(|id| id.to_string())
+                        } else {
+                            text(row, &["/full_name", "/name", "/sha"])
+                                .map(String::from)
+                                .or_else(|| {
+                                    row.get("id").and_then(Value::as_u64).map(|n| n.to_string())
+                                })
+                        };
                         let Some(name) = name else { continue };
-                        let data = if id.starts_with("workflows/") {
+                        let data = if id.starts_with("workflows/")
+                            && text(row, &["/path", "/name"]).is_some_and(|pipeline| {
+                                job.target.build_targets.contains_key(pipeline)
+                            }) {
                             Data::Build {
                                 superseded: false,
                                 pipeline: text(row, &["/path", "/name"])
@@ -142,7 +153,10 @@ pub async fn collect(
                                 revision: text(row, &["/head_sha"])
                                     .map(super::projection::identity)
                                     .unwrap_or_default(),
-                                target: job.target.name.clone(),
+                                target: text(row, &["/path", "/name"])
+                                    .and_then(|pipeline| job.target.build_targets.get(pipeline))
+                                    .cloned()
+                                    .unwrap_or_default(),
                                 state: state(text(row, &["/conclusion", "/status"])),
                                 created_at: timestamp(row, &["/created_at"]),
                             }
@@ -175,7 +189,10 @@ pub async fn collect(
             job.settings.required,
         ));
     }
-    if let (Some(file), Some(repo)) = (&job.target.desired_file, job.target.repositories.first()) {
+    if job.check != Check::Preflight
+        && let (Some(file), Some(repo)) =
+            (&job.target.desired_file, job.target.repositories.first())
+    {
         use base64::Engine;
         let path = format!("https://api.github.com/repos/{repo}/contents/{file}");
         let request = http
@@ -220,6 +237,16 @@ pub async fn collect(
         ));
     }
     result.finished_at = chrono::Utc::now();
+    if job.check != Check::Preflight {
+        let mut remaining = job.clone();
+        remaining.settings.max_assets = job
+            .settings
+            .max_assets
+            .saturating_sub(result.observations.len());
+        let commits = super::github_commits::collect(http, &remaining, token, cancel).await;
+        result.operations.extend(commits.operations);
+        result.observations.extend(commits.observations);
+    }
     if job.target.change.is_some() && job.check != Check::Preflight {
         let changed = super::changes::collect(http, job, token, cancel).await;
         result.operations.extend(changed.operations);

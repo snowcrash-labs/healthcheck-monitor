@@ -256,7 +256,6 @@ pub fn image_parts(
 ) -> (String, Option<String>, Option<String>) {
     let digest = observed
         .and_then(|s| s.split_once('@').map(|(_, d)| d))
-        .or_else(|| image.split_once('@').map(|(_, d)| d))
         .map(super::projection::identity);
     let tag = image
         .rsplit('/')

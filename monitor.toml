@@ -29,6 +29,7 @@ log_entries = 5000
 
 [[targets]]
 name = "dev"
+flows_required = true
 provider = "gcp"
 scope = "dev-sc-transcription-fa62"
 credential = "google"
@@ -47,6 +48,7 @@ deployment = "nats-box"
 
 [[targets]]
 name = "api"
+flows_required = true
 provider = "gcp"
 scope = "api-sc-transcription-4cd1"
 credential = "google"
@@ -109,4 +111,3 @@ credential = "github"
 repositories = ["snowcrash-labs/sc-hiro-backend", "snowcrash-labs/soundpatrol-web", "snowcrash-labs/devops", "snowcrash-labs/soundpatrol-db", "snowcrash-labs/soundpatrol-creatorlab", "snowcrash-labs/c2pa-service", "snowcrash-labs/ghoskey-enforcement"]
 desired_file = "cloudbuild_build.yaml"
 source_ref = "dev"
-

@@ -87,8 +87,46 @@ impl Config {
                 "version must be 1 with 1..128 explicit targets".into(),
             ));
         }
+        if self.discovery.len() > 128
+            || self.credentials.len() > 128
+            || self.profiles.len() > 64
+            || self.severity.len() > 512
+        {
+            return Err(Error::Config(
+                "configuration exceeds registry bounds".into(),
+            ));
+        }
         let mut names = BTreeSet::new();
         for target in &self.targets {
+            if target.repositories.len() > 128
+                || target.resources.len() > 1024
+                || target.watched_secrets.len() > 512
+                || target.repository_refs.len() > 128
+                || target
+                    .repositories
+                    .iter()
+                    .chain(target.repository_refs.keys())
+                    .chain(target.build_repositories.values())
+                    .any(|repo| repo.split('/').count() != 2 || repo.split('/').any(str::is_empty))
+                || target
+                    .repository_refs
+                    .values()
+                    .any(|reference| !identifier(reference))
+            {
+                return Err(Error::Config("repository references need owner/repository identities within configured bounds".into()));
+            }
+            if target.build_targets.len() > 512
+                || target.build_repositories.len() > 512
+                || target
+                    .build_targets
+                    .iter()
+                    .chain(&target.build_repositories)
+                    .any(|(key, value)| !identifier(key) || !identifier(value))
+            {
+                return Err(Error::Config(
+                    "invalid build target or repository mapping".into(),
+                ));
+            }
             if target.slo_goals.len() > 128
                 || target.slo_goals.iter().any(|(name, goal)| {
                     !goal.is_finite()
@@ -133,6 +171,18 @@ impl Config {
                 return Err(Error::Config("at most 16 flows per target".into()));
             }
             for flow in &target.flows {
+                if target.metrics.iter().any(|metric| {
+                    (metric.name == flow.demand
+                        || flow
+                            .stages
+                            .iter()
+                            .any(|stage| stage.progress == metric.name))
+                        && !matches!(metric.aggregation, super::types::Aggregation::Latest)
+                }) {
+                    return Err(Error::Config(
+                        "flow demand and progress metrics must use latest aggregation".into(),
+                    ));
+                }
                 if !identifier(&flow.name)
                     || !identifier(&flow.demand)
                     || flow.stages.is_empty()

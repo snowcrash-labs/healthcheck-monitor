@@ -22,18 +22,20 @@ pub(crate) struct Scope {
     auth: Mutex<Option<Arc<Auth>>>,
     pub(crate) kube: Mutex<Option<Kubernetes>>,
     kube_cache: Mutex<Option<Cached>>,
+    pub(crate) github_cache: Mutex<Option<Cached>>,
     pub(crate) nats: Mutex<Option<Nats>>,
 }
 pub struct Router {
     pub(crate) config: RwLock<Config>,
     scopes: scc::HashMap<String, Arc<Scope>>,
     pub(crate) processes: Processes,
-    cache_bytes: Arc<Semaphore>,
+    pub(crate) cache_bytes: Arc<Semaphore>,
     log_cursors: scc::HashMap<String, chrono::DateTime<chrono::Utc>>,
 }
-struct Cached {
-    result: CheckResult,
-    _bytes: OwnedSemaphorePermit,
+pub(crate) struct Cached {
+    pub(crate) consumers: std::collections::BTreeSet<Check>,
+    pub(crate) result: CheckResult,
+    pub(crate) _bytes: OwnedSemaphorePermit,
 }
 impl Router {
     pub fn new(config: Config, subprocesses: usize) -> Self {
@@ -108,6 +110,7 @@ impl Router {
             auth: Mutex::new(None),
             kube: Mutex::new(None),
             kube_cache: Mutex::new(None),
+            github_cache: Mutex::new(None),
             nats: Mutex::new(None),
         });
         let entry = self
@@ -172,10 +175,12 @@ impl Router {
         cancel: &CancellationToken,
     ) -> Result<CheckResult, Error> {
         let mut cache = scope.kube_cache.lock().await;
-        if let Some(cached) = cache.as_ref().filter(|cached| {
+        if let Some(cached) = cache.as_mut().filter(|cached| {
             cached.result.revision == job.revision
+                && !cached.consumers.contains(&job.check)
                 && (chrono::Utc::now() - cached.result.finished_at).num_seconds() < 30
         }) {
+            cached.consumers.insert(job.check);
             let mut result = cached.result.clone();
             result.check = job.check;
             return Ok(result);
@@ -199,6 +204,7 @@ impl Router {
             && let Ok(permit) = self.cache_bytes.clone().try_acquire_many_owned(bytes)
         {
             *cache = Some(Cached {
+                consumers: std::collections::BTreeSet::from([job.check]),
                 result: result.clone(),
                 _bytes: permit,
             });

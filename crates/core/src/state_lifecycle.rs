@@ -3,6 +3,37 @@ use crate::{config::resolve::Job, model::*, state::State};
 use chrono::{DateTime, Utc};
 use std::collections::{BTreeMap, BTreeSet};
 impl State {
+    pub(crate) fn apply_derived(
+        &mut self,
+        job: &Job,
+        result: CheckResult,
+        now: DateTime<Utc>,
+    ) -> Vec<Transition> {
+        let samples = self.snapshot.samples.get(&job.key).copied();
+        let transitions = self.apply(job, result, now);
+        match samples {
+            Some(samples) => {
+                self.snapshot.samples.insert(job.key.clone(), samples);
+            }
+            None => {
+                self.snapshot.samples.remove(&job.key);
+            }
+        }
+        transitions
+    }
+    /// Reference facts can arrive after runtime inventories during a one-off collection.
+    pub fn refresh_releases(&mut self, jobs: &[Job], now: DateTime<Utc>) -> Vec<Transition> {
+        let mut transitions = Vec::new();
+        for job in jobs
+            .iter()
+            .filter(|job| job.check == Check::Releases && job.target.provider != Provider::Github)
+        {
+            if let Some(result) = self.snapshot.results.get(&job.key).cloned() {
+                transitions.extend(self.apply_derived(job, result, now));
+            }
+        }
+        transitions
+    }
     pub fn new(revision: String, scope: Vec<String>) -> Self {
         Self {
             snapshot: Snapshot {
@@ -68,12 +99,20 @@ impl State {
                 }
             }
             for observation in &result.observations {
-                if (now - observation.observed_at).num_seconds() > limit as i64
+                if ((now - observation.observed_at).num_seconds() > limit as i64
+                    || matches!(observation.data,Data::Provenance{valid_until,..}if valid_until<now))
                     && self.snapshot.health.contains_key(&observation.resource)
                 {
                     self.snapshot
                         .health
                         .insert(observation.resource.clone(), Health::Unknown);
+                    for operation in &mut result.operations {
+                        if operation.id == observation.operation
+                            && operation.coverage == Coverage::Complete
+                        {
+                            operation.coverage = Coverage::Stale;
+                        }
+                    }
                 }
             }
         }
@@ -170,6 +209,11 @@ impl State {
             .health
             .retain(|resource, _| observed.contains(resource));
         self.snapshot.freshness.retain(|key, _| keys.contains(key));
+        for job in jobs {
+            self.snapshot
+                .freshness
+                .insert(job.key.clone(), job.settings.freshness());
+        }
         self.snapshot.samples.retain(|key, _| keys.contains(key));
         self.snapshot.findings.retain(|_, finding| {
             jobs.iter().any(|job| {

@@ -62,3 +62,28 @@ fn earlier_success_cannot_hide_later_failure() {
         }
     ));
 }
+#[test]
+fn another_region_or_repository_cannot_hide_a_failed_build() {
+    for (failed, success) in [
+        (
+            "build-details/us-east-1/failed",
+            "build-details/us-west-2/success",
+        ),
+        ("workflows/org/backend", "workflows/org/frontend"),
+    ] {
+        let mut observations = vec![
+            build("failed", "abc1234", ServiceState::Failed, 0),
+            build("success", "abc1234", ServiceState::Ready, 60),
+        ];
+        observations[0].operation = failed.into();
+        observations[1].operation = success.into();
+        mark_retries(&mut observations);
+        assert!(matches!(
+            observations[0].data,
+            Data::Build {
+                superseded: false,
+                ..
+            }
+        ));
+    }
+}

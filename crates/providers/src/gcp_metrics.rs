@@ -26,7 +26,7 @@ pub async fn collect<S: Source>(source: &S, job: &Job, cancel: &CancellationToke
             )
         })
         .collect();
-    let mut result = collect_from(source, &inventory_job, endpoints, cancel).await;
+    let mut result = collect_from(source, job, endpoints, cancel).await;
     result.check = job.check;
     let mut metrics = job.clone();
     metrics.target.metrics = crate::metric_catalog::gcp()

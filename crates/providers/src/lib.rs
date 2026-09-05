@@ -1,5 +1,6 @@
 //! Native cloud monitoring adapters.
 mod advertisements;
+mod artifact_projection;
 pub mod auth;
 pub mod aws;
 pub mod aws_alarms;
@@ -46,4 +47,5 @@ pub mod resource_projection;
 pub mod router;
 mod routing;
 mod routing_edge;
+mod routing_github;
 mod slo_projection;

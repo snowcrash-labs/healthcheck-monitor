@@ -19,6 +19,10 @@ pub struct Selection {
 #[derive(Debug, Clone, Serialize)]
 pub struct Job {
     #[serde(skip)]
+    pub sampling_explicit: bool,
+    #[serde(skip)]
+    pub interval_explicit: bool,
+    #[serde(skip)]
     pub continuous: bool,
     #[serde(skip)]
     pub log_start: Option<chrono::DateTime<chrono::Utc>>,
@@ -151,7 +155,7 @@ impl Config {
                     checks.insert(Check::Kubernetes);
                 }
             }
-            if checks.contains(&Check::Flows) {
+            if checks.contains(&Check::Flows) && !target.flows.is_empty() {
                 checks.insert(Check::Metrics);
                 if target.context.is_some() {
                     checks.insert(Check::Kubernetes);
@@ -162,7 +166,13 @@ impl Config {
             for check in checks {
                 let mut settings = Settings {
                     interval: super::duration::Span(check.interval_seconds()),
-                    samples: if check == Check::Queues { 5 } else { 1 },
+                    samples: if check == Check::Queues
+                        || check == Check::Flows && !target.flows.is_empty()
+                    {
+                        5
+                    } else {
+                        1
+                    },
                     ..Default::default()
                 };
                 settings.overlay(&self.settings);
@@ -184,6 +194,32 @@ impl Config {
                     target.resources = selection.resources.clone();
                 }
                 jobs.push(Job {
+                    sampling_explicit: [
+                        &self.settings,
+                        &profile.settings,
+                        &target.settings,
+                        self.checks.get(&check).unwrap_or(&SettingsPatch::default()),
+                        target
+                            .checks
+                            .get(&check)
+                            .unwrap_or(&SettingsPatch::default()),
+                        &selection.overrides,
+                    ]
+                    .iter()
+                    .any(|patch| patch.samples.is_some()),
+                    interval_explicit: [
+                        &self.settings,
+                        &profile.settings,
+                        &target.settings,
+                        self.checks.get(&check).unwrap_or(&SettingsPatch::default()),
+                        target
+                            .checks
+                            .get(&check)
+                            .unwrap_or(&SettingsPatch::default()),
+                        &selection.overrides,
+                    ]
+                    .iter()
+                    .any(|patch| patch.interval.is_some()),
                     continuous: false,
                     log_start: None,
                     log_end: None,
@@ -196,6 +232,39 @@ impl Config {
                     flow_settings: None,
                     severity: self.severity.clone(),
                 });
+            }
+        }
+        super::prerequisites::sampling(&mut jobs)?;
+        if jobs.iter().any(|job| {
+            job.check == Check::Releases && job.target.provider != crate::model::Provider::Github
+        }) {
+            let sources: Vec<_> = self
+                .targets
+                .iter()
+                .filter(|target| {
+                    target.provider == crate::model::Provider::Github
+                        && !jobs.iter().any(|job| {
+                            job.target.name == target.name
+                                && matches!(
+                                    job.check,
+                                    Check::Github | Check::Releases | Check::Inventory
+                                )
+                        })
+                })
+                .map(|target| target.name.clone())
+                .collect();
+            if !sources.is_empty() {
+                let mut sources = self.resolve(&Selection {
+                    profile: selection.profile.clone(),
+                    targets: sources,
+                    checks: vec![Check::Github],
+                    resources: vec![],
+                    overrides: selection.overrides.clone(),
+                })?;
+                for job in &mut sources.jobs {
+                    job.revision = revision.clone();
+                }
+                jobs.extend(sources.jobs);
             }
         }
         let flow_settings: std::collections::BTreeMap<_, _> = jobs
@@ -213,37 +282,4 @@ impl Config {
         Ok(Effective { revision, jobs })
     }
 }
-/// Select meaningful checks while preserving explicit unsupported provider outcomes.
-pub fn applicable(target: &Target, check: Check) -> bool {
-    use crate::model::Provider;
-    match check {
-        Check::Slo if target.provider == Provider::Azure => !target.slo_goals.is_empty(),
-        Check::Flows => !target.flows.is_empty(),
-        Check::Preflight => true,
-        Check::Kubernetes => target.context.is_some() || target.provider == Provider::Kubernetes,
-        Check::Edge => {
-            !target.endpoints.is_empty()
-                || matches!(
-                    target.provider,
-                    Provider::Gcp
-                        | Provider::Aws
-                        | Provider::Azure
-                        | Provider::Kubernetes
-                        | Provider::Edge
-                )
-        }
-        Check::Github => target.provider == Provider::Github || !target.repositories.is_empty(),
-        _ => match target.provider {
-            Provider::Edge => false,
-            Provider::Github => {
-                matches!(check, Check::Discovery | Check::Inventory | Check::Releases)
-            }
-            Provider::Kubernetes => matches!(
-                check,
-                Check::Inventory | Check::Queues | Check::Releases | Check::Managed
-            ),
-            Provider::Nats => check == Check::Queues,
-            _ => true,
-        },
-    }
-}
+pub use super::applicability::applicable;

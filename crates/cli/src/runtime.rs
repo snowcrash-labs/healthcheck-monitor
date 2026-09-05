@@ -89,7 +89,8 @@ pub async fn monitor(config_path: &Path, options: Options, mode: Mode) -> Result
                 let Some((job, result)) = result else { break };
                 if !effective.jobs.iter().any(|j| j.key == job.key && j.revision == job.revision) { continue; }
                 tracing::info!(target_name = %job.target.name, check = ?job.check, complete = result.complete(), observations = result.observations.len(), "Check finished");
-                let new = state.apply(&job, result, chrono::Utc::now());
+                let mut new = state.apply(&job, result, chrono::Utc::now());
+                if matches!(job.check,monitor_core::model::Check::Inventory|monitor_core::model::Check::Kubernetes|monitor_core::model::Check::Github|monitor_core::model::Check::Releases) {new.extend(state.refresh_releases(&effective.jobs,chrono::Utc::now()));}
                 let remaining = settings.max_findings.saturating_mul(2).saturating_sub(transitions.len());
                 if new.len() > remaining { state.snapshot.persistence_fault = true; }
                 transitions.extend(new.into_iter().take(remaining));

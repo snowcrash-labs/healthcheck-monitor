@@ -4,6 +4,34 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Data {
+    Artifact {
+        manifest: ManifestKind,
+        children: Vec<String>,
+        image: String,
+        digest: String,
+        tags: Vec<String>,
+        revision: Option<String>,
+        repository: Option<String>,
+        built: bool,
+        created_at: Option<DateTime<Utc>>,
+    },
+    Commit {
+        repository: String,
+        revision: String,
+        reference: Option<String>,
+    },
+    Provenance {
+        valid_until: DateTime<Utc>,
+        observed_digests: Vec<String>,
+        desired_digest: Option<String>,
+        pending: bool,
+        revision: Option<String>,
+        repository: Option<String>,
+        registry_verified: bool,
+        build_verified: bool,
+        commit_verified: bool,
+        mismatch: bool,
+    },
     SloDefinition {
         name: String,
         goal: Option<f64>,
@@ -197,12 +225,21 @@ pub enum LogClass {
     Warning,
     OtherError,
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ManifestKind {
+    Image,
+    Index,
+    Unknown,
+}
 impl Data {
     /// Inventory and collection metadata do not imply resource health.
     pub fn is_health_evidence(&self) -> bool {
         !matches!(
             self,
-            Self::SloDefinition { .. }
+            Self::Artifact { .. }
+                | Self::Commit { .. }
+                | Self::SloDefinition { .. }
                 | Self::LogWorkspace { .. }
                 | Self::LogWindow { .. }
                 | Self::MetricResource { .. }

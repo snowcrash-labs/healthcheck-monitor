@@ -19,6 +19,10 @@ pub fn evaluate(snapshot: &mut Snapshot, job: &Job, now: DateTime<Utc>) -> Check
         job.revision.clone(),
         Coverage::Missing,
     );
+    if job.target.flows.is_empty() {
+        result.operations[0].id = "flow-configuration".into();
+        return result;
+    }
     result.operations.clear();
     for flow in &job.target.flows {
         let operation = format!("flow/{}", flow.name);

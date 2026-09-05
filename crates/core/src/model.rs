@@ -117,7 +117,7 @@ pub struct Observation {
     pub expected: Expected,
     pub data: Data,
 }
-pub use crate::observations::{Data, LogClass, ServiceState};
+pub use crate::observations::{Data, LogClass, ManifestKind, ServiceState};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Finding {
     #[serde(default)]

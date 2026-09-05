@@ -7,6 +7,7 @@ use serde_json::Value;
 pub use crate::projection_rows::rows;
 pub fn project(job: &Job, endpoint: &Endpoint, value: &Value) -> Vec<Observation> {
     let mut result = project_data(job, endpoint, value);
+    result.extend(crate::artifact_projection::built(job, endpoint, value));
     if let Some(url) = crate::advertisements::endpoint(endpoint, value) {
         result.push(observation(
             job,
@@ -18,6 +19,9 @@ pub fn project(job: &Job, endpoint: &Endpoint, value: &Value) -> Vec<Observation
     result
 }
 fn project_data(job: &Job, endpoint: &Endpoint, value: &Value) -> Vec<Observation> {
+    if endpoint.id.starts_with("registry-images/") {
+        return crate::artifact_projection::registry(job, endpoint, value);
+    }
     if job.target.provider == Provider::Gcp
         && let Some(observations) = crate::gcp_operational::project(job, endpoint, value)
     {
@@ -114,34 +118,7 @@ fn project_data(job: &Job, endpoint: &Endpoint, value: &Value) -> Vec<Observatio
             .collect();
     }
     if matches!(family, "builds" | "build-details") {
-        let pipeline = text(value, &["/buildTriggerId", "/projectName"]).unwrap_or("");
-        let revision = text(
-            value,
-            &[
-                "/sourceProvenance/resolvedRepoSource/commitSha",
-                "/substitutions/COMMIT_SHA",
-                "/substitutions/SHORT_SHA",
-                "/resolvedSourceVersion",
-            ],
-        )
-        .unwrap_or("");
-        return vec![obs(Data::Build {
-            superseded: false,
-            pipeline: projection::identity(pipeline),
-            revision: projection::identity(revision),
-            target: text(
-                value,
-                &[
-                    "/substitutions/_APP_NAME",
-                    "/substitutions/_SERVICE_NAME",
-                    "/projectName",
-                ],
-            )
-            .map(projection::identity)
-            .unwrap_or_default(),
-            state: projection::state(text(value, &["/status", "/buildStatus"])),
-            created_at: timestamp(value, &["/createTime", "/startTime"]),
-        })];
+        return crate::artifact_projection::build(job, endpoint, value);
     }
     if matches!(
         family,

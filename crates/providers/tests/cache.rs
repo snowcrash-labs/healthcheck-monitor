@@ -65,9 +65,11 @@ async fn overlapping_checks_share_one_inventory_read() -> Result<(), Box<dyn std
     assert_eq!(source.calls.load(Ordering::SeqCst), 1);
     assert_eq!(a.observations[0].observed_at, b.observations[0].observed_at);
     assert!(!serde_json::to_string(&a)?.contains("discard-this"));
+    let _ = collect_from(&source, &first, vec![endpoint.clone()], &cancel).await;
+    assert_eq!(source.calls.load(Ordering::SeqCst), 2);
     tokio::time::advance(first.settings.interval.duration() + Duration::from_secs(1)).await;
     let _ = collect_from(&source, &first, vec![endpoint], &cancel).await;
-    assert_eq!(source.calls.load(Ordering::SeqCst), 2);
+    assert_eq!(source.calls.load(Ordering::SeqCst), 3);
     Ok(())
 }
 #[tokio::test(start_paused = true)]

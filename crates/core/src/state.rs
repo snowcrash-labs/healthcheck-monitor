@@ -22,6 +22,9 @@ impl State {
         if job.check == Check::Flows {
             result = crate::flows::evaluate(&mut self.snapshot, job, now);
         }
+        if job.check == Check::Releases {
+            crate::releases::enrich(&self.snapshot, job, &mut result, now);
+        }
         let mut transitions = Vec::new();
         crate::partial_results::retain(job, &self.snapshot, &mut result);
         crate::log_recovery::reconcile(job, &self.snapshot, &mut result);
@@ -44,31 +47,7 @@ impl State {
         crate::provenance::mark_retries(&mut result.observations);
         crate::schedule_policy::correlate(&mut result);
         crate::recovery::consolidate(&mut result.observations);
-        for observation in &result.observations {
-            if matches!(
-                observation.data,
-                Data::Job {
-                    complete: true,
-                    failed: true,
-                    ..
-                }
-            ) {
-                for operation in &mut result.operations {
-                    if operation.id == observation.operation {
-                        operation.coverage = Coverage::Malformed;
-                    }
-                }
-            }
-            if (now - observation.observed_at).num_seconds() > job.settings.freshness() as i64 {
-                for operation in &mut result.operations {
-                    if operation.id == observation.operation
-                        && operation.coverage == Coverage::Complete
-                    {
-                        operation.coverage = Coverage::Stale;
-                    }
-                }
-            }
-        }
+        crate::bounds::validate_source(&mut result, job.settings.freshness(), now);
         let old = self.snapshot.results.get(&job.key);
         let mut current = BTreeSet::new();
         let mut evaluated = BTreeSet::new();
@@ -143,6 +122,9 @@ impl State {
                 finding.valid_until = finding
                     .observed_at
                     .checked_add_signed(chrono::Duration::seconds(job.settings.freshness() as i64));
+                if let Data::Provenance { valid_until, .. } = &observation.data {
+                    finding.valid_until = finding.valid_until.map(|at| at.min(*valid_until));
+                }
                 if let Some(severity) = job.severity.get(&finding.rule) {
                     finding.severity = *severity;
                 }
@@ -289,7 +271,7 @@ impl State {
             flow_job.check = Check::Flows;
             flow_job.flows_enabled = false;
             let result = crate::flows::evaluate(&mut self.snapshot, &flow_job, now);
-            transitions.extend(self.apply(&flow_job, result, now));
+            transitions.extend(self.apply_derived(&flow_job, result, now));
         }
         transitions
     }

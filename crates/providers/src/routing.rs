@@ -2,7 +2,6 @@
 use crate::router::{Router, base};
 use monitor_core::{config::resolve::Job, model::*};
 use monitor_integrations::{
-    github,
     nats::Nats,
     process::Helper,
     projection::{observation, operation},
@@ -99,34 +98,7 @@ impl Router {
             return self.edge(job, &scope, cancel).await;
         }
         if job.target.provider == Provider::Github || job.check == Check::Github {
-            let config = self.config.read().await;
-            let env = job
-                .target
-                .credential
-                .as_ref()
-                .and_then(|k| config.credentials.get(k))
-                .and_then(|p| p.token_env.as_deref())
-                .unwrap_or("GH_TOKEN");
-            let token = match std::env::var(env) {
-                Ok(token) => token,
-                Err(_) => {
-                    let output = self
-                        .processes
-                        .run(
-                            Helper::GithubToken,
-                            16384,
-                            job.settings.attempt_timeout.duration(),
-                            cancel,
-                        )
-                        .await?;
-                    String::from_utf8(output.stdout)
-                        .map_err(|_| Error::Authentication)?
-                        .trim()
-                        .to_string()
-                }
-            };
-            drop(config);
-            return Ok(github::collect(&scope.http, job, &token, cancel).await);
+            return self.github(job, &scope, cancel).await;
         }
         if job.target.provider == Provider::Nats {
             let mut nats = scope.nats.lock().await;
@@ -160,7 +132,17 @@ impl Router {
         {
             let mut result = base(job);
             if job.target.provider == Provider::Kubernetes {
-                let _ = self.kube(job, &scope, cancel).await?;
+                let observed = self.kube(job, &scope, cancel).await?;
+                if let Some(failed) = observed.operations.iter().find(|operation| {
+                    operation.required && operation.coverage != Coverage::Complete
+                }) {
+                    return Ok(CheckResult::failure(
+                        job.target.name.clone(),
+                        job.check,
+                        job.revision.clone(),
+                        failed.coverage,
+                    ));
+                }
             }
             result
                 .operations

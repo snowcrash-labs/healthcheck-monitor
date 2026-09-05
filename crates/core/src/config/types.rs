@@ -72,6 +72,12 @@ pub struct Target {
     pub endpoints: Vec<Endpoint>,
     #[serde(default)]
     pub repositories: Vec<String>,
+    #[serde(default)]
+    pub build_targets: BTreeMap<String, String>,
+    #[serde(default)]
+    pub build_repositories: BTreeMap<String, String>,
+    #[serde(default)]
+    pub repository_refs: BTreeMap<String, String>,
     pub desired_file: Option<String>,
     pub source_ref: Option<String>,
     #[serde(default)]
@@ -84,6 +90,8 @@ pub struct Target {
     pub nats_fallback: Option<NatsFallback>,
     #[serde(default)]
     pub flows: Vec<Flow>,
+    #[serde(default)]
+    pub flows_required: bool,
     pub change: Option<ChangeScope>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]

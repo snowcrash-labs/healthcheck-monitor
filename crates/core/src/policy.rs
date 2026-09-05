@@ -64,6 +64,7 @@ pub fn evaluate(
     let error = |rule| fault(obs, rule, Severity::Error, Confidence::Direct);
     let warning = |rule| fault(obs, rule, Severity::Warning, Confidence::Direct);
     match &obs.data {
+        Data::Provenance { .. } => return crate::releases::evaluate(obs, now),
         Data::Slo { .. } => return crate::slo_policy::evaluate(obs, settings),
         Data::Progress {
             state: Health::Unhealthy,
@@ -245,8 +246,22 @@ pub fn evaluate(
         Data::Build {
             state: ServiceState::Failed,
             superseded: false,
+            created_at,
+            target,
             ..
-        } => return warning("deployment-blocked"),
+        } => {
+            if created_at.is_none() {
+                return result(Health::Unknown);
+            }
+            if age(*created_at, now).is_some_and(|age| age > settings.runtime_window.0) {
+                return result(Health::ExpectedInactive);
+            }
+            return warning(if target.is_empty() {
+                "build-failed"
+            } else {
+                "deployment-blocked"
+            });
+        }
         Data::Build {
             state: ServiceState::Ready,
             ..
@@ -255,15 +270,7 @@ pub fn evaluate(
             superseded: true, ..
         } => {}
         Data::Build { .. } => return result(Health::Unknown),
-        Data::Image {
-            observed_digest,
-            revision,
-            ..
-        } => {
-            if observed_digest.is_none() || revision.is_none() {
-                return result(Health::Unknown);
-            }
-        }
+        Data::Image { .. } => return result(Health::Unknown),
         Data::Log {
             signature,
             count,
@@ -278,7 +285,9 @@ pub fn evaluate(
             }
             return result(Health::Unknown);
         }
-        Data::SloDefinition { .. }
+        Data::Artifact { .. }
+        | Data::Commit { .. }
+        | Data::SloDefinition { .. }
         | Data::LogWorkspace { .. }
         | Data::LogWindow { .. }
         | Data::MetricResource { .. }
