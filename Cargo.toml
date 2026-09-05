@@ -1,0 +1,45 @@
+[workspace]
+members = ["crates/core", "crates/integrations", "crates/providers", "crates/cli"]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[workspace.dependencies]
+monitor-core = { path = "crates/core" }
+monitor-integrations = { path = "crates/integrations" }
+monitor-providers = { path = "crates/providers" }
+async-trait = "*"
+chrono = { version = "*", default-features = false, features = ["clock", "serde"] }
+clap = { version = "*", default-features = false, features = ["std", "derive", "help", "usage", "error-context"] }
+futures = { version = "*", default-features = false, features = ["std", "async-await"] }
+humantime = "*"
+reqwest = { version = "*", default-features = false, features = ["rustls", "http2", "gzip", "brotli", "hickory-dns", "json", "query", "stream"] }
+serde = { version = "*", default-features = false, features = ["derive", "std"] }
+serde_json = "*"
+sha2 = "*"
+thiserror = "*"
+tokio = { version = "*", default-features = false, features = ["rt-multi-thread", "macros", "signal", "sync", "time", "fs", "io-util", "process", "net", "test-util", "parking_lot"] }
+tokio-util = { version = "*", default-features = false, features = ["rt"] }
+toml = "*"
+tracing = { version = "*", default-features = false, features = ["std", "attributes", "release_max_level_info"] }
+url = { version = "*", features = ["serde"] }
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+
+[profile.dev]
+debug = 0
+
+[profile.release]
+opt-level = 3
+codegen-units = 1
+debug = false
+incremental = false
+strip = true
+lto = true
+panic = "unwind"
