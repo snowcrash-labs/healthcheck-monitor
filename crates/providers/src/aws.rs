@@ -13,8 +13,32 @@ use tokio_util::sync::CancellationToken;
 
 pub fn endpoints(job: &Job) -> Vec<Endpoint> {
     let mut out = Vec::new();
+    if matches!(job.check, Check::Inventory | Check::Managed | Check::Edge) {
+        for (id, service, path, items) in [
+            (
+                "route53",
+                "route53",
+                "/2013-04-01/hostedzone",
+                "/HostedZones/HostedZone",
+            ),
+            (
+                "cloudfront",
+                "cloudfront",
+                "/2020-05-31/distribution",
+                "/Items/DistributionSummary",
+            ),
+        ] {
+            let mut endpoint =
+                Endpoint::get(id, format!("https://{service}.amazonaws.com{path}"), items);
+            endpoint.aws = Some((service.into(), "us-east-1".into(), "".into()));
+            out.push(endpoint);
+        }
+    }
     for region in &job.target.regions {
         for (name, service, prefix, action, items) in JSON_APIS {
+            if job.check == Check::Edge {
+                continue;
+            }
             if job.check == Check::Alerts && *name != "health" {
                 continue;
             }
@@ -44,6 +68,9 @@ pub fn endpoints(job: &Job) -> Vec<Endpoint> {
             out.push(endpoint);
         }
         for (name, service, action, version, items) in QUERY_APIS {
+            if job.check == Check::Edge && *name != "load-balancers" {
+                continue;
+            }
             if matches!(job.check, Check::Alerts | Check::Releases | Check::Logs) {
                 continue;
             }
@@ -96,14 +123,20 @@ pub async fn collect(
     auth: &Auth,
     job: &Job,
     cancel: &CancellationToken,
+    cache: &crate::inventory_cache::InventoryCache,
 ) -> CheckResult {
+    if job.check == Check::Logs {
+        return crate::cloud_logs::aws(http, auth, job, cancel).await;
+    }
     if job.check == Check::Preflight {
         return identity(auth, job).await;
     }
     if job.check == Check::Metrics || job.check == Check::Queues {
         return crate::metrics::aws(auth, job, cancel).await;
     }
-    common::collect(http, auth, job, endpoints(job), cancel).await
+    let mut result = common::collect_cached(http, auth, job, endpoints(job), cancel, cache).await;
+    crate::quotas::evaluate(auth, job, &mut result, cancel).await;
+    result
 }
 async fn identity(auth: &Auth, job: &Job) -> CheckResult {
     let mut result = CheckResult::failure(
@@ -112,13 +145,10 @@ async fn identity(auth: &Auth, job: &Job) -> CheckResult {
         job.revision.clone(),
         Coverage::Unauthenticated,
     );
-    let Auth::Aws(config) = auth else {
+    let Auth::Aws(clients) = auth else {
         return result;
     };
-    let outcome = aws_sdk_sts::Client::new(config)
-        .get_caller_identity()
-        .send()
-        .await;
+    let outcome = clients.sts.get_caller_identity().send().await;
     match outcome {
         Ok(identity) if identity.account() == Some(job.target.scope.as_str()) => {
             result.operations = vec![operation("caller-identity", Ok(1), 1, true)];
@@ -146,150 +176,4 @@ async fn identity(auth: &Auth, job: &Job) -> CheckResult {
     }
     result
 }
-const JSON_APIS: &[(&str, &str, &str, &str, &str)] = &[
-    (
-        "ecs-clusters",
-        "ecs",
-        "AmazonEC2ContainerServiceV20141113",
-        "ListClusters",
-        "/clusterArns",
-    ),
-    (
-        "ecr",
-        "ecr",
-        "AmazonEC2ContainerRegistry_V20150921",
-        "DescribeRepositories",
-        "/repositories",
-    ),
-    (
-        "dynamodb",
-        "dynamodb",
-        "DynamoDB_20120810",
-        "ListTables",
-        "/TableNames",
-    ),
-    ("sqs", "sqs", "AmazonSQS", "ListQueues", "/QueueUrls"),
-    ("eventbridge", "events", "AWSEvents", "ListRules", "/Rules"),
-    (
-        "codebuild",
-        "codebuild",
-        "CodeBuild_20161006",
-        "ListBuilds",
-        "/ids",
-    ),
-    (
-        "codepipeline",
-        "codepipeline",
-        "CodePipeline_20150709",
-        "ListPipelines",
-        "/pipelines",
-    ),
-    ("kms", "kms", "TrentService", "ListKeys", "/Keys"),
-    (
-        "secrets",
-        "secretsmanager",
-        "secretsmanager",
-        "ListSecrets",
-        "/SecretList",
-    ),
-    (
-        "quotas",
-        "servicequotas",
-        "ServiceQuotasV20190624",
-        "ListServiceQuotas",
-        "/Quotas",
-    ),
-    (
-        "health",
-        "health",
-        "AWSHealth_20160804",
-        "DescribeEvents",
-        "/events",
-    ),
-    (
-        "logs",
-        "logs",
-        "Logs_20140328",
-        "DescribeLogGroups",
-        "/logGroups",
-    ),
-];
-const QUERY_APIS: &[(&str, &str, &str, &str, &str)] = &[
-    (
-        "ec2",
-        "ec2",
-        "DescribeInstances",
-        "2016-11-15",
-        "/reservationSet/item",
-    ),
-    (
-        "instance-status",
-        "ec2",
-        "DescribeInstanceStatus",
-        "2016-11-15",
-        "/instanceStatusSet/item",
-    ),
-    (
-        "ebs",
-        "ec2",
-        "DescribeVolumes",
-        "2016-11-15",
-        "/volumeSet/item",
-    ),
-    (
-        "autoscaling",
-        "autoscaling",
-        "DescribeAutoScalingGroups",
-        "2011-01-01",
-        "/DescribeAutoScalingGroupsResult/AutoScalingGroups/member",
-    ),
-    (
-        "load-balancers",
-        "elasticloadbalancing",
-        "DescribeLoadBalancers",
-        "2015-12-01",
-        "/DescribeLoadBalancersResult/LoadBalancers/member",
-    ),
-    (
-        "target-groups",
-        "elasticloadbalancing",
-        "DescribeTargetGroups",
-        "2015-12-01",
-        "/DescribeTargetGroupsResult/TargetGroups/member",
-    ),
-    (
-        "rds",
-        "rds",
-        "DescribeDBInstances",
-        "2014-10-31",
-        "/DescribeDBInstancesResult/DBInstances/DBInstance",
-    ),
-    (
-        "aurora",
-        "rds",
-        "DescribeDBClusters",
-        "2014-10-31",
-        "/DescribeDBClustersResult/DBClusters/DBCluster",
-    ),
-    (
-        "elasticache",
-        "elasticache",
-        "DescribeCacheClusters",
-        "2015-02-02",
-        "/DescribeCacheClustersResult/CacheClusters/CacheCluster",
-    ),
-    (
-        "replication-groups",
-        "elasticache",
-        "DescribeReplicationGroups",
-        "2015-02-02",
-        "/DescribeReplicationGroupsResult/ReplicationGroups/ReplicationGroup",
-    ),
-    (
-        "sns",
-        "sns",
-        "ListTopics",
-        "2010-03-31",
-        "/ListTopicsResult/Topics/member",
-    ),
-];
+use crate::aws_catalog::{JSON_APIS, QUERY_APIS};

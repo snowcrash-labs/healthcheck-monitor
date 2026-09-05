@@ -19,7 +19,22 @@ pub async fn collect(
         job.revision.clone(),
         Coverage::Missing,
     );
-    result.operations = snapshot.operations.clone();
+    result.operations = snapshot
+        .operations
+        .iter()
+        .filter(|operation| {
+            matches!(
+                operation.id.as_str(),
+                "pods"
+                    | "deployments"
+                    | "statefulsets"
+                    | "replicasets"
+                    | "scaledobjects"
+                    | "horizontalpodautoscalers"
+            )
+        })
+        .cloned()
+        .collect();
     let mut count = 0;
     for source in &snapshot.observations {
         let Data::Scaler {
@@ -65,8 +80,27 @@ pub async fn collect(
                         .push(operation(&id, Err(&Error::Malformed), 1, true));
                     continue;
                 };
-                let (desired, ready, crash_loop) =
-                    worker_state(&snapshot.observations, namespace, worker);
+                let Some((desired, ready, crash_loop)) =
+                    worker_state(&snapshot.observations, namespace, worker)
+                else {
+                    result.observations.push(observation(
+                        job,
+                        &id,
+                        worker,
+                        Data::Metric {
+                            name: metric.clone(),
+                            value: backlog,
+                            capacity: None,
+                            warning: None,
+                            error: None,
+                            window_seconds: 0,
+                        },
+                    ));
+                    result
+                        .operations
+                        .push(operation(&id, Err(&Error::Missing), 1, true));
+                    continue;
+                };
                 result.observations.push(observation(
                     job,
                     &id,
@@ -99,14 +133,12 @@ pub fn worker_state(
     observations: &[Observation],
     namespace: &str,
     worker: &str,
-) -> (u32, u32, bool) {
+) -> Option<(u32, u32, bool)> {
     let suffix = format!("/{namespace}/{worker}");
     let resource = observations.iter().find(|o| {
         o.resource.ends_with(&suffix) && matches!(o.data, Data::Workload { node: false, .. })
     });
-    let Some(workload) = resource else {
-        return (0, 0, false);
-    };
+    let workload = resource?;
     let (desired, ready) = match workload.data {
         Data::Workload { desired, ready, .. } => (desired, ready),
         _ => (0, 0),
@@ -137,5 +169,5 @@ pub fn worker_state(
     let crash = observations
         .iter()
         .any(|o| matches!(&o.data,Data::Pod{uid,crash_loop:true,..}if owners.contains(uid)));
-    (desired, ready, crash)
+    Some((desired, ready, crash))
 }

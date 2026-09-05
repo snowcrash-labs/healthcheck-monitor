@@ -11,7 +11,6 @@ license = "MIT"
 monitor-core = { path = "crates/core" }
 monitor-integrations = { path = "crates/integrations" }
 monitor-providers = { path = "crates/providers" }
-async-trait = "0.1.92"
 chrono = { version = "0.4.45", default-features = false, features = ["clock", "serde"] }
 clap = { version = "4.6.6", default-features = false, features = ["std", "derive", "help", "usage", "error-context"] }
 futures = { version = "0.3.34", default-features = false, features = ["std", "async-await"] }

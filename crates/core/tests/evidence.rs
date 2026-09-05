@@ -87,7 +87,9 @@ fn denied_or_truncated_success_cannot_clear_findings() -> Result<(), Box<dyn std
 }
 #[test]
 fn two_complete_inventories_confirm_removal() -> Result<(), Box<dyn std::error::Error>> {
-    let job = job()?;
+    let mut job = job()?;
+    job.check = Check::Inventory;
+    job.key = "dev/Inventory".into();
     let now = Utc::now();
     let mut state = State::new(job.revision.clone(), vec![job.key.clone()]);
     state.apply(&job, result(&job, false, now, Coverage::Complete), now);

@@ -22,6 +22,21 @@ pub fn rows<'a>(payload: &'a Value, path: &str) -> Vec<&'a Value> {
     }
 }
 pub fn project(job: &Job, endpoint: &Endpoint, value: &Value) -> Vec<Observation> {
+    let mut result = project_data(job, endpoint, value);
+    if let Some(url) = crate::advertisements::endpoint(endpoint, value) {
+        result.push(observation(
+            job,
+            &endpoint.id,
+            &url,
+            Data::AdvertisedEndpoint { url: url.clone() },
+        ));
+    }
+    result
+}
+fn project_data(job: &Job, endpoint: &Endpoint, value: &Value) -> Vec<Observation> {
+    if endpoint.id.starts_with("quotas/") && job.target.provider == Provider::Aws {
+        return crate::quotas::project(job, endpoint, value);
+    }
     let id = endpoint.id.as_str();
     let family = id.split('/').next().unwrap_or(id);
     let name = text(
@@ -53,6 +68,10 @@ pub fn project(job: &Job, endpoint: &Endpoint, value: &Value) -> Vec<Observation
             "/TopicArn",
             "/projectId",
             "/subscriptionId",
+            "/Id",
+            "/CertificateArn",
+            "/BackupVaultName",
+            "/ResourceArn",
         ],
     )
     .or_else(|| value.as_str())
@@ -67,6 +86,21 @@ pub fn project(job: &Job, endpoint: &Endpoint, value: &Value) -> Vec<Observation
         return vec![];
     }
     let obs = |data| observation(job, id, name, data);
+    if matches!(family, "secret-versions" | "kms-versions") {
+        return vec![obs(Data::Inventory {
+            family: format!(
+                "{family}/{}",
+                projection::identity(text(value, &["/state"]).unwrap_or("UNKNOWN"))
+            ),
+            supported: true,
+        })];
+    }
+    if family == "resource-graph" {
+        return vec![obs(Data::Inventory {
+            family: projection::identity(text(value, &["/type"]).unwrap_or("unknown")),
+            supported: false,
+        })];
+    }
     if let Some(instances) = value
         .pointer("/instancesSet/item")
         .and_then(Value::as_array)
@@ -103,8 +137,7 @@ pub fn project(job: &Job, endpoint: &Endpoint, value: &Value) -> Vec<Observation
             .map(projection::identity)
             .unwrap_or_default(),
             state: projection::state(text(value, &["/status", "/buildStatus"])),
-            created_at: timestamp(value, &["/createTime", "/startTime"])
-                .unwrap_or_else(chrono::Utc::now),
+            created_at: timestamp(value, &["/createTime", "/startTime"]),
         })];
     }
     if matches!(

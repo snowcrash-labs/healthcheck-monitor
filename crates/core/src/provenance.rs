@@ -13,6 +13,9 @@ pub fn mark_retries(observations: &mut [Observation]) {
             ..
         } = &observation.data
         {
+            let Some(created_at) = created_at else {
+                continue;
+            };
             if pipeline.is_empty() || revision.is_empty() || target.is_empty() {
                 continue;
             }
@@ -40,6 +43,9 @@ pub fn mark_retries(observations: &mut [Observation]) {
             superseded,
         } = &mut observation.data
         {
+            let Some(created_at) = created_at else {
+                continue;
+            };
             let scope = observation.resource.split('/').next().unwrap_or("");
             *superseded = success
                 .get(&(

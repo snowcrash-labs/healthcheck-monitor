@@ -12,27 +12,35 @@ use monitor_integrations::{
     transport::{Error, Http},
 };
 use std::sync::Arc;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::{Mutex, OwnedSemaphorePermit, RwLock, Semaphore};
 use tokio_util::sync::CancellationToken;
 
 pub(crate) struct Scope {
+    pub(crate) inventory: crate::inventory_cache::InventoryCache,
     pub(crate) http: Http,
     auth: Mutex<Option<Arc<Auth>>>,
     pub(crate) kube: Mutex<Option<Kubernetes>>,
-    kube_cache: Mutex<Option<CheckResult>>,
+    kube_cache: Mutex<Option<Cached>>,
     pub(crate) nats: Mutex<Option<Nats>>,
 }
 pub struct Router {
     pub(crate) config: RwLock<Config>,
     scopes: scc::HashMap<String, Arc<Scope>>,
     pub(crate) processes: Processes,
+    cache_bytes: Arc<Semaphore>,
+}
+struct Cached {
+    result: CheckResult,
+    _bytes: OwnedSemaphorePermit,
 }
 impl Router {
     pub fn new(config: Config, subprocesses: usize) -> Self {
+        let bytes = config.settings.memory_bytes.unwrap_or(256 * 1024 * 1024) / 4;
         Self {
             config: RwLock::new(config),
             scopes: scc::HashMap::new(),
             processes: Processes::new(subprocesses),
+            cache_bytes: Arc::new(Semaphore::new(bytes)),
         }
     }
     pub async fn reload(&self, config: Config) {
@@ -59,6 +67,10 @@ impl Router {
             return Err(Error::Limit);
         }
         let scope = Arc::new(Scope {
+            inventory: crate::inventory_cache::InventoryCache::new(
+                job.settings.ready_queue,
+                self.cache_bytes.clone(),
+            ),
             http: Http::new(&job.settings)?,
             auth: Mutex::new(None),
             kube: Mutex::new(None),
@@ -91,6 +103,7 @@ impl Router {
                 job.target.provider,
                 profile.as_ref(),
                 job.target.regions.first().map(String::as_str),
+                &job.target.scope,
                 &scope.http,
                 &job.settings,
             ),
@@ -108,12 +121,11 @@ impl Router {
         cancel: &CancellationToken,
     ) -> Result<CheckResult, Error> {
         let mut cache = scope.kube_cache.lock().await;
-        if let Some(result) = cache.as_ref().filter(|r| {
-            r.complete()
-                && r.revision == job.revision
-                && (chrono::Utc::now() - r.finished_at).num_seconds() < 30
+        if let Some(cached) = cache.as_ref().filter(|cached| {
+            cached.result.revision == job.revision
+                && (chrono::Utc::now() - cached.result.finished_at).num_seconds() < 30
         }) {
-            let mut result = result.clone();
+            let mut result = cached.result.clone();
             result.check = job.check;
             return Ok(result);
         }
@@ -130,12 +142,20 @@ impl Router {
         }
         let kube = kube.as_ref().ok_or(Error::Authentication)?.clone();
         let result = kube.collect(job, cancel).await;
-        *cache = Some(result.clone());
+        *cache = None;
+        let bytes = monitor_core::bounds::result_bytes(&result);
+        if let Ok(bytes) = u32::try_from(bytes)
+            && let Ok(permit) = self.cache_bytes.clone().try_acquire_many_owned(bytes)
+        {
+            *cache = Some(Cached {
+                result: result.clone(),
+                _bytes: permit,
+            });
+        }
         Ok(result)
     }
 }
 
-#[async_trait::async_trait]
 impl Collector for Router {
     async fn collect(&self, job: &Job, cancel: CancellationToken) -> CheckResult {
         tokio::select! {

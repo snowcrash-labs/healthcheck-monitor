@@ -1,5 +1,4 @@
 //! Fake-time scheduling checks independent of provider availability.
-use async_trait::async_trait;
 use monitor_core::{
     config::{resolve::Selection, types::Config},
     model::*,
@@ -20,7 +19,6 @@ struct Fake {
     max: AtomicUsize,
     delay: Duration,
 }
-#[async_trait]
 impl Collector for Fake {
     async fn collect(
         &self,

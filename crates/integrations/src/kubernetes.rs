@@ -85,10 +85,16 @@ impl Kubernetes {
             let mut pages = 0;
             for page in 0..job.settings.max_pages {
                 pages = page + 1;
-                let query: String = url::form_urlencoded::Serializer::new(String::new())
-                    .append_pair("limit", &job.settings.page_size.to_string())
-                    .append_pair("continue", &token)
-                    .finish();
+                let query = {
+                    let mut query = url::form_urlencoded::Serializer::new(String::new());
+                    query
+                        .append_pair("limit", &job.settings.page_size.to_string())
+                        .append_pair("continue", &token);
+                    if *kind == "events" {
+                        query.append_pair("fieldSelector", "type=Warning");
+                    }
+                    query.finish()
+                };
                 match self.json(&format!("{api}?{query}"), job, cancel).await {
                     Ok(payload) => {
                         let Some(items) = payload.get("items").and_then(Value::as_array) else {

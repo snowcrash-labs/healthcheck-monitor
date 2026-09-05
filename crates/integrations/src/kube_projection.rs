@@ -56,6 +56,22 @@ pub fn project(job: &Job, kind: &str, value: &Value) -> Vec<Observation> {
             last_success: timestamp(value, &["/status/lastSuccessfulTime"]),
         },
         "deployments" | "statefulsets" | "daemonsets" | "nodes" => {
+            let created_at = value
+                .pointer("/status/conditions")
+                .and_then(Value::as_array)
+                .and_then(|conditions| {
+                    conditions.iter().find(|condition| {
+                        text(condition, &["/type"]) == Some("Progressing")
+                            && matches!(
+                                text(condition, &["/reason"]),
+                                Some("NewReplicaSetCreated" | "ReplicaSetUpdated")
+                            )
+                    })
+                })
+                .and_then(|condition| {
+                    timestamp(condition, &["/lastUpdateTime", "/lastTransitionTime"])
+                })
+                .or(created_at);
             let node = kind == "nodes";
             let desired = if node {
                 1

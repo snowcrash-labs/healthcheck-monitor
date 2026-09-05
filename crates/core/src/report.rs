@@ -31,11 +31,26 @@ fn safe(value: &str) -> String {
         .replace(['|', '<', '>', '`'], "_")
 }
 pub fn markdown(snapshot: &Snapshot) -> String {
+    let mut states = std::collections::BTreeMap::new();
+    for health in snapshot.health.values() {
+        *states.entry(format!("{health:?}")).or_insert(0usize) += 1;
+    }
     let mut out = format!(
         "# Health check\n\nObserved: {}\n\nSelected scope: {} checks. This report covers only the selected scope.\n\n| Check | Collection coverage | Observations |\n| --- | --- | --- |\n",
         snapshot.captured_at.to_rfc3339(),
         snapshot.selected_scope.len()
     );
+    let health_summary = states
+        .into_iter()
+        .map(|(state, count)| format!("{state}: {count}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    if !health_summary.is_empty() {
+        out.insert_str(
+            out.find("| Check").unwrap_or(out.len()),
+            &format!("Observed resource states: {health_summary}.\n\n"),
+        );
+    }
     for key in &snapshot.selected_scope {
         match snapshot.results.get(key) {
             Some(result) => {
@@ -76,6 +91,7 @@ pub fn diff(old: &Snapshot, new: &Snapshot) -> Vec<Transition> {
     let mut transitions = Vec::new();
     for (id, finding) in &new.findings {
         let kind = match old.findings.get(id) {
+            None if old.retired.contains_key(id) => Some(TransitionKind::Reappeared),
             None => Some(TransitionKind::New),
             Some(prior) if !prior.stale && finding.stale => Some(TransitionKind::Stale),
             Some(prior) if prior.stale && !finding.stale => Some(TransitionKind::Reappeared),
@@ -96,11 +112,9 @@ pub fn diff(old: &Snapshot, new: &Snapshot) -> Vec<Transition> {
         .keys()
         .filter(|id| !new.findings.contains_key(*id))
     {
-        transitions.push(Transition {
-            at: new.captured_at,
-            finding: id.clone(),
-            kind: TransitionKind::Removed,
-        });
+        if let Some(transition) = new.retired.get(id) {
+            transitions.push(transition.clone());
+        }
     }
     transitions
 }

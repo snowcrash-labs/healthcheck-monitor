@@ -69,13 +69,14 @@ impl Http {
     /// The caller authorizes credentials, but cannot widen the wire-level operation policy.
     pub async fn json(
         &self,
-        request: Request,
+        mut request: Request,
         settings: &Settings,
         cancel: &CancellationToken,
     ) -> Result<Value, Error> {
         if !allowed(&request) {
             return Err(Error::Forbidden);
         }
+        *request.timeout_mut() = Some(settings.attempt_timeout.duration());
         let deadline = tokio::time::Instant::now() + settings.operation_timeout.duration();
         for attempt in 0..settings.attempts {
             let request = request.try_clone().ok_or(Error::Forbidden)?;
@@ -103,7 +104,22 @@ impl Http {
                 Error::Unavailable
             }
         })?;
-        status(response.status())?;
+        if response.status() == StatusCode::TOO_MANY_REQUESTS {
+            let delay = response
+                .headers()
+                .get("retry-after")
+                .and_then(|v| v.to_str().ok())
+                .and_then(|s| s.parse::<u64>().ok())
+                .map(Duration::from_secs);
+            if let Some(delay) = delay {
+                tokio::time::sleep(delay).await;
+            }
+        }
+        if !response.status().is_success() {
+            let code = response.status();
+            let bytes = bounded(response, settings.response_bytes.min(65536)).await?;
+            return Err(response_error(code, &bytes));
+        }
         let bytes = bounded(response, settings.response_bytes).await?;
         if bytes.first() == Some(&b'<') {
             super::xml::decode(&bytes)
@@ -123,6 +139,53 @@ pub fn status(status: StatusCode) -> Result<(), Error> {
         _ => Err(Error::Malformed),
     }
 }
+/// Only a fixed error vocabulary crosses the provider boundary; response messages are discarded.
+pub fn response_error(status_code: StatusCode, bytes: &[u8]) -> Error {
+    let payload = if bytes.first() == Some(&b'<') {
+        super::xml::decode(bytes).ok()
+    } else {
+        serde_json::from_slice::<Value>(bytes).ok()
+    };
+    let code = payload
+        .as_ref()
+        .and_then(|value| {
+            super::projection::text(
+                value,
+                &[
+                    "/__type",
+                    "/code",
+                    "/error/code",
+                    "/error/status",
+                    "/Error/Code",
+                    "/Code",
+                ],
+            )
+        })
+        .and_then(|code| code.rsplit('#').next())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    match code.as_str() {
+        "expiredtoken"
+        | "expiredtokenexception"
+        | "invalidclienttokenid"
+        | "unrecognizedclientexception"
+        | "unauthenticated"
+        | "authenticationfailed"
+        | "invalidauthenticationtoken" => Error::Authentication,
+        "accessdenied" | "accessdeniedexception" | "authorizationfailed" | "permission_denied" => {
+            Error::Denied
+        }
+        "throttling"
+        | "throttlingexception"
+        | "toomanyrequestsexception"
+        | "resource_exhausted" => Error::Throttled,
+        "subscriptionrequiredexception"
+        | "subscriptionnotenabled"
+        | "unsupportedoperation"
+        | "featurenotsupportedexception" => Error::Unavailable,
+        _ => status(status_code).err().unwrap_or(Error::Malformed),
+    }
+}
 pub async fn bounded(mut response: Response, limit: usize) -> Result<Vec<u8>, Error> {
     if response.content_length().is_some_and(|n| n > limit as u64) {
         return Err(Error::Limit);
@@ -136,112 +199,4 @@ pub async fn bounded(mut response: Response, limit: usize) -> Result<Vec<u8>, Er
     }
     Ok(bytes)
 }
-/// Deny secret retrieval, message consumption, object bodies, and arbitrary POST calls.
-pub fn allowed(request: &Request) -> bool {
-    let path = request.url().path().to_ascii_lowercase();
-    if request.url().scheme() != "https"
-        || path.contains(":access")
-        || path.contains(":decrypt")
-        || path.contains("/exec")
-        || path.contains("/attach")
-        || path.contains("/proxy")
-        || path.contains(":pull")
-        || path.contains(":acknowledge")
-        || path.contains("/listkeys")
-        || path.contains("/listsecrets")
-    {
-        return false;
-    }
-    match *request.method() {
-        reqwest::Method::GET | reqwest::Method::HEAD => {
-            let query = request.url().query().unwrap_or("").to_ascii_lowercase();
-            !query.contains("alt=media")
-                && !path.contains("/objects/")
-                && !path.contains("/secrets/")
-                || path.ends_with("/versions")
-        }
-        reqwest::Method::POST => {
-            if request
-                .headers()
-                .get("content-type")
-                .and_then(|v| v.to_str().ok())
-                == Some("application/x-www-form-urlencoded")
-            {
-                let body = request.body().and_then(|b| b.as_bytes()).unwrap_or(&[]);
-                let action = url::form_urlencoded::parse(body)
-                    .find(|(k, _)| k == "Action")
-                    .map(|(_, v)| v.into_owned())
-                    .unwrap_or_default();
-                return [
-                    "DescribeInstances",
-                    "DescribeInstanceStatus",
-                    "DescribeVolumes",
-                    "DescribeAutoScalingGroups",
-                    "DescribeLoadBalancers",
-                    "DescribeTargetGroups",
-                    "DescribeTargetHealth",
-                    "DescribeDBInstances",
-                    "DescribeDBClusters",
-                    "DescribeCacheClusters",
-                    "DescribeReplicationGroups",
-                    "ListTopics",
-                    "GetTopicAttributes",
-                    "DescribeRegions",
-                    "DescribeAccountAttributes",
-                ]
-                .contains(&action.as_str());
-            }
-            if path == "/v2/entries:list"
-                || path.ends_with("/providers/microsoft.resourcegraph/resources")
-                || path.ends_with("/gethealth")
-            {
-                return true;
-            }
-            let target = request
-                .headers()
-                .get("x-amz-target")
-                .and_then(|s| s.to_str().ok())
-                .unwrap_or("");
-            let action = target.rsplit('.').next().unwrap_or("");
-            const READS: &[&str] = &[
-                "DescribeTable",
-                "ListTables",
-                "DescribeClusters",
-                "DescribeServices",
-                "ListClusters",
-                "ListServices",
-                "ListFunctions",
-                "DescribeLogGroups",
-                "FilterLogEvents",
-                "ListQueues",
-                "GetQueueAttributes",
-                "ListRules",
-                "ListEventBuses",
-                "ListEventSourceMappings",
-                "DescribeAlarms",
-                "GetMetricData",
-                "ListAccounts",
-                "DescribeOrganization",
-                "DescribeRepositories",
-                "ListImages",
-                "DescribeImages",
-                "ListBuilds",
-                "BatchGetBuilds",
-                "ListPipelines",
-                "GetPipelineState",
-                "ListBackupVaults",
-                "ListRecoveryPointsByBackupVault",
-                "ListKeys",
-                "DescribeKey",
-                "ListSecrets",
-                "ListServiceQuotas",
-                "ListServices",
-                "DescribeEvents",
-                "DescribeAffectedEntities",
-                "DescribeSubscriptionFilters",
-            ];
-            READS.contains(&action)
-        }
-        _ => false,
-    }
-}
+pub use crate::read_policy::allowed;

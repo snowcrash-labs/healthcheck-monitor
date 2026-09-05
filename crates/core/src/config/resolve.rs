@@ -23,6 +23,7 @@ pub struct Job {
     pub check: Check,
     pub settings: Settings,
     pub revision: String,
+    pub flows_enabled: bool,
     pub severity: std::collections::BTreeMap<String, crate::model::Severity>,
 }
 impl Job {
@@ -132,9 +133,18 @@ impl Config {
                     checks.insert(Check::Kubernetes);
                 }
             }
+            if checks.contains(&Check::Flows) {
+                checks.insert(Check::Metrics);
+                if target.context.is_some() {
+                    checks.insert(Check::Kubernetes);
+                    checks.insert(Check::Queues);
+                }
+            }
+            let flows_enabled = checks.contains(&Check::Flows);
             for check in checks {
                 let mut settings = Settings {
                     interval: super::duration::Span(check.interval_seconds()),
+                    samples: if check == Check::Queues { 5 } else { 1 },
                     ..Default::default()
                 };
                 settings.overlay(&self.settings);
@@ -147,9 +157,6 @@ impl Config {
                     settings.overlay(patch);
                 }
                 settings.overlay(&selection.overrides);
-                if check != Check::Queues {
-                    settings.samples = 1;
-                }
                 settings.validate()?;
                 if !settings.enabled {
                     continue;
@@ -164,6 +171,7 @@ impl Config {
                     check,
                     settings,
                     revision: revision.clone(),
+                    flows_enabled,
                     severity: self.severity.clone(),
                 });
             }
@@ -178,13 +186,18 @@ impl Config {
 pub fn applicable(target: &Target, check: Check) -> bool {
     use crate::model::Provider;
     match check {
+        Check::Flows => !target.flows.is_empty(),
         Check::Preflight => true,
         Check::Kubernetes => target.context.is_some() || target.provider == Provider::Kubernetes,
         Check::Edge => {
             !target.endpoints.is_empty()
                 || matches!(
                     target.provider,
-                    Provider::Gcp | Provider::Kubernetes | Provider::Edge
+                    Provider::Gcp
+                        | Provider::Aws
+                        | Provider::Azure
+                        | Provider::Kubernetes
+                        | Provider::Edge
                 )
         }
         Check::Github => target.provider == Provider::Github || !target.repositories.is_empty(),

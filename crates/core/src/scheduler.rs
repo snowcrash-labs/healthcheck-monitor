@@ -3,7 +3,6 @@ use crate::{
     config::resolve::{Effective, Job},
     model::{CheckResult, Coverage},
 };
-use async_trait::async_trait;
 use futures::FutureExt;
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -17,9 +16,12 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
-#[async_trait]
 pub trait Collector: Send + Sync {
-    async fn collect(&self, job: &Job, cancel: CancellationToken) -> CheckResult;
+    fn collect(
+        &self,
+        job: &Job,
+        cancel: CancellationToken,
+    ) -> impl std::future::Future<Output = CheckResult> + Send;
 }
 #[derive(Debug, Clone, Copy)]
 pub enum Mode {
@@ -32,10 +34,22 @@ struct Entry {
     samples: u32,
     cancel: CancellationToken,
 }
+fn cadence(interval: Duration, percent: u8, key: &str, cycle: u32) -> Duration {
+    let spread = interval.as_secs().saturating_mul(u64::from(percent)) / 100;
+    if spread == 0 {
+        return interval;
+    }
+    let hash = key.bytes().fold(u64::from(cycle), |hash, byte| {
+        hash.wrapping_mul(1099511628211)
+            .wrapping_add(u64::from(byte))
+    });
+    let delta = (hash % (spread * 2 + 1)) as i64 - spread as i64;
+    Duration::from_secs(interval.as_secs().saturating_add_signed(delta).max(1))
+}
 
 /// A scope is admitted before spawning; throttled scopes cannot occupy waiting workers.
-pub async fn drive(
-    collector: Arc<dyn Collector>,
+pub async fn drive<C: Collector + 'static>(
+    collector: Arc<C>,
     mut config: watch::Receiver<Effective>,
     mode: Mode,
     output: mpsc::Sender<(Job, CheckResult)>,
@@ -91,8 +105,18 @@ pub async fn drive(
                 Mode::Once => job.settings.sample_interval.duration(),
                 Mode::Watch { .. } => job.settings.interval.duration(),
             };
-            entry.due = now + next_interval;
-            entry.samples += 1;
+            let jittered = if matches!(mode, Mode::Watch { .. }) {
+                cadence(
+                    next_interval,
+                    job.settings.jitter_percent,
+                    &job.key,
+                    entry.samples,
+                )
+            } else {
+                next_interval
+            };
+            entry.due = now + jittered;
+            entry.samples = entry.samples.saturating_add(1);
             tasks.spawn(async move {
                 let started = chrono::Utc::now();
                 let result = tokio::select! {
@@ -147,6 +171,7 @@ pub async fn drive(
                 if let Some(Ok((job, result))) = completed {
                     running.remove(&job.key);
                     if let Some(count) = scopes.get_mut(&job.scope()) { *count = count.saturating_sub(1); }
+                    if scopes.get(&job.scope()) == Some(&0) { scopes.remove(&job.scope()); }
                     if entries.iter().any(|e| e.job.key == job.key && e.job.revision == job.revision)
                         && output.send((job, result)).await.is_err() { break; }
                 }

@@ -61,7 +61,7 @@ pub async fn execute(cli: Cli) -> Result<u8, Error> {
                 let result = router
                     .collect(job, tokio_util::sync::CancellationToken::new())
                     .await;
-                tracing::info!(target = %job.target.name, authenticated = result.complete(), "Authentication status");
+                tracing::info!(target_name = %job.target.name, authenticated = result.complete(), "Authentication status");
                 if !result.complete() {
                     code = 3;
                 }

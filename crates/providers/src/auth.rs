@@ -7,7 +7,7 @@ use std::sync::Arc;
 pub enum Auth {
     Gcp(google_cloud_auth::credentials::AccessTokenCredentials),
     Azure(Arc<dyn TokenCredential>),
-    Aws(Box<aws_config::SdkConfig>),
+    Aws(Box<crate::aws_clients::AwsClients>),
     None,
 }
 impl Auth {
@@ -15,6 +15,7 @@ impl Auth {
         provider: Provider,
         profile: Option<&Credential>,
         region: Option<&str>,
+        scope: &str,
         http: &monitor_integrations::transport::Http,
         settings: &monitor_core::config::settings::Settings,
     ) -> Result<Self, Error> {
@@ -27,30 +28,50 @@ impl Auth {
                 Ok(Self::Gcp(credentials))
             }
             Provider::Azure => {
-                let credential: Arc<dyn TokenCredential> =
-                    if profile.and_then(|c| c.profile.as_deref()) == Some("managed_identity") {
-                        azure_identity::ManagedIdentityCredential::new(None)
-                            .map_err(|_| Error::Authentication)?
-                    } else {
-                        azure_identity::AzureCliCredential::new(None)
-                            .map_err(|_| Error::Authentication)?
-                    };
+                let credential: Arc<dyn TokenCredential> = if profile
+                    .and_then(|c| c.profile.as_deref())
+                    == Some("managed_identity")
+                {
+                    azure_identity::ManagedIdentityCredential::new(None)
+                        .map_err(|_| Error::Authentication)?
+                } else if profile.and_then(|c| c.profile.as_deref()) == Some("workload_identity") {
+                    azure_identity::WorkloadIdentityCredential::new(Some(
+                        azure_identity::WorkloadIdentityCredentialOptions {
+                            tenant_id: profile.and_then(|p| p.tenant.clone()),
+                            ..Default::default()
+                        },
+                    ))
+                    .map_err(|_| Error::Authentication)?
+                } else {
+                    azure_identity::AzureCliCredential::new(Some(
+                        azure_identity::AzureCliCredentialOptions {
+                            tenant_id: profile.and_then(|p| p.tenant.clone()),
+                            ..Default::default()
+                        },
+                    ))
+                    .map_err(|_| Error::Authentication)?
+                };
                 Ok(Self::Azure(credential))
             }
             Provider::Aws => {
                 let mut loader = aws_config::defaults(aws_config::BehaviorVersion::latest())
-                    .http_client(crate::aws_transport::client(http, settings))
+                    // Buffered requests allow body caps to apply before transmission.
+                    .disable_request_compression(true)
+                    .http_client(crate::aws_transport::client(http, settings)?)
                     .region(aws_config::Region::new(
                         region.unwrap_or("us-east-1").to_string(),
                     ))
                     .timeout_config(
                         aws_config::timeout::TimeoutConfig::builder()
-                            .connect_timeout(std::time::Duration::from_secs(10))
-                            .operation_timeout(std::time::Duration::from_secs(90))
-                            .operation_attempt_timeout(std::time::Duration::from_secs(30))
+                            .connect_timeout(settings.connect_timeout.duration())
+                            .operation_timeout(settings.operation_timeout.duration())
+                            .operation_attempt_timeout(settings.attempt_timeout.duration())
                             .build(),
                     )
-                    .retry_config(aws_config::retry::RetryConfig::standard().with_max_attempts(3));
+                    .retry_config(
+                        aws_config::retry::RetryConfig::standard()
+                            .with_max_attempts(settings.attempts as u32),
+                    );
                 if let Some(name) = profile.and_then(|p| p.profile.as_ref()) {
                     loader = loader.profile_name(name);
                 }
@@ -70,12 +91,31 @@ impl Auth {
                         )
                         .build();
                 }
-                Ok(Self::Aws(Box::new(config)))
+                let clients = crate::aws_clients::AwsClients::new(config);
+                let identity = clients
+                    .sts
+                    .get_caller_identity()
+                    .send()
+                    .await
+                    .map_err(|_| Error::Authentication)?;
+                if identity.account() != Some(scope) {
+                    return Err(Error::Forbidden);
+                }
+                if profile
+                    .and_then(|profile| profile.expected_identity.as_deref())
+                    .is_some_and(|expected| identity.arn() != Some(expected))
+                {
+                    return Err(Error::Forbidden);
+                }
+                Ok(Self::Aws(Box::new(clients)))
             }
             _ => Ok(Self::None),
         }
     }
     pub async fn bearer(&self) -> Result<String, Error> {
+        self.bearer_for(false).await
+    }
+    pub async fn bearer_for(&self, logs: bool) -> Result<String, Error> {
         match self {
             Self::Gcp(credentials) => credentials
                 .access_token()
@@ -83,7 +123,14 @@ impl Auth {
                 .map(|t| t.token)
                 .map_err(|_| Error::Authentication),
             Self::Azure(credentials) => credentials
-                .get_token(&["https://management.azure.com/.default"], None)
+                .get_token(
+                    &[if logs {
+                        "https://api.loganalytics.io/.default"
+                    } else {
+                        "https://management.azure.com/.default"
+                    }],
+                    None,
+                )
                 .await
                 .map(|t| t.token.secret().to_string())
                 .map_err(|_| Error::Authentication),
@@ -102,10 +149,11 @@ impl Auth {
             http_request::{SignableBody, SignableRequest, SigningSettings, sign},
             sign::v4,
         };
-        let Self::Aws(config) = self else {
+        let Self::Aws(clients) = self else {
             return Err(Error::Authentication);
         };
-        let identity = config
+        let identity = clients
+            .config
             .credentials_provider()
             .ok_or(Error::Authentication)?
             .provide_credentials()

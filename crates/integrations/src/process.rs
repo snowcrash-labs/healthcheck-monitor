@@ -13,6 +13,12 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 
 pub enum Helper {
+    #[cfg(test)]
+    Fixture {
+        script: &'static str,
+    },
+    #[cfg(test)]
+    Missing,
     GithubToken,
     NatsReport {
         context: String,
@@ -27,12 +33,20 @@ pub struct Output {
     pub stderr: Vec<u8>,
 }
 struct Group(i32);
+impl Group {
+    fn terminate(&mut self) {
+        if self.0 > 0 {
+            // Kill while the group leader is still owned, before its PID can be reused.
+            unsafe {
+                libc::kill(-self.0, libc::SIGKILL);
+            }
+            self.0 = 0;
+        }
+    }
+}
 impl Drop for Group {
     fn drop(&mut self) {
-        // A dedicated process group also covers grandchildren started by credential helpers.
-        unsafe {
-            libc::kill(-self.0, libc::SIGKILL);
-        }
+        self.terminate();
     }
 }
 pub struct Processes {
@@ -62,7 +76,7 @@ impl Processes {
             .kill_on_drop(true)
             .process_group(0);
         let mut child = command.spawn().map_err(|_| Error::Unavailable)?;
-        let _group = Group(child.id().ok_or(Error::Unavailable)? as i32);
+        let mut group = Group(child.id().ok_or(Error::Unavailable)? as i32);
         let stdout = child.stdout.take().ok_or(Error::Unavailable)?;
         let stderr = child.stderr.take().ok_or(Error::Unavailable)?;
         let collect = async {
@@ -80,8 +94,11 @@ impl Processes {
             result = tokio::time::timeout(timeout, collect) => result.map_err(|_| Error::Timeout).and_then(|r| r),
         };
         if outcome.is_err() {
+            group.terminate();
             let _ = child.kill().await;
             let _ = child.wait().await;
+        } else {
+            group.0 = 0;
         }
         drop(permit);
         outcome
@@ -101,6 +118,10 @@ async fn read<R: AsyncRead + Unpin>(reader: R, limit: usize) -> Result<Vec<u8>, 
 }
 fn command(helper: Helper) -> Result<(&'static str, Vec<String>), Error> {
     match helper {
+        #[cfg(test)]
+        Helper::Fixture { script } => Ok(("/bin/sh", vec!["-c".into(), script.into()])),
+        #[cfg(test)]
+        Helper::Missing => Ok(("healthcheck-monitor-missing-fixture", vec![])),
         Helper::GithubToken => Ok(("gh", vec!["auth".into(), "token".into()])),
         Helper::NatsReport { context, fallback } => {
             for value in [&context, &fallback.namespace, &fallback.deployment] {

@@ -82,7 +82,7 @@ pub async fn monitor(config_path: &Path, options: Options, mode: Mode) -> Result
             result = results.recv() => {
                 let Some((job, result)) = result else { break };
                 if !effective.jobs.iter().any(|j| j.key == job.key && j.revision == job.revision) { continue; }
-                tracing::info!(target = %job.target.name, check = ?job.check, complete = result.complete(), observations = result.observations.len(), "Check finished");
+                tracing::info!(target_name = %job.target.name, check = ?job.check, complete = result.complete(), observations = result.observations.len(), "Check finished");
                 let new = state.apply(&job, result, chrono::Utc::now());
                 let remaining = settings.max_findings.saturating_mul(2).saturating_sub(transitions.len());
                 if new.len() > remaining { state.snapshot.persistence_fault = true; }
@@ -108,6 +108,7 @@ async fn publish(
 ) {
     let store = store.clone();
     let mut snapshot = state.snapshot.clone();
+    snapshot.captured_at = chrono::Utc::now();
     snapshot.persistence_fault = false;
     let events = transitions.clone();
     let settings = settings.clone();

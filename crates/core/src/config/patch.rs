@@ -27,6 +27,8 @@ pub struct SettingsPatch {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ready_queue: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub jitter_percent: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub max_assets: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_findings: Option<usize>,

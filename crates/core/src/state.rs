@@ -14,8 +14,13 @@ impl State {
                 revision,
                 captured_at: Utc::now(),
                 selected_scope: scope,
+                selectors: BTreeMap::new(),
+                freshness: BTreeMap::new(),
                 results: BTreeMap::new(),
                 findings: BTreeMap::new(),
+                health: BTreeMap::new(),
+                progress: BTreeMap::new(),
+                retired: BTreeMap::new(),
                 confirmations: BTreeMap::new(),
                 persistence_fault: false,
             },
@@ -28,9 +33,42 @@ impl State {
         mut result: CheckResult,
         now: DateTime<Utc>,
     ) -> Vec<Transition> {
+        if job.check == Check::Flows {
+            result = crate::flows::evaluate(&mut self.snapshot, job, now);
+        }
         let mut transitions = Vec::new();
+        self.snapshot
+            .freshness
+            .insert(job.key.clone(), job.settings.freshness());
+        let other_bytes = self
+            .snapshot
+            .results
+            .iter()
+            .filter(|(key, _)| *key != &job.key)
+            .fold(0usize, |total, (_, result)| {
+                total.saturating_add(crate::bounds::result_bytes(result))
+            });
+        crate::bounds::truncate(
+            &mut result,
+            (job.settings.memory_bytes / 2).saturating_sub(other_bytes),
+            job.settings.max_assets,
+        );
         crate::provenance::mark_retries(&mut result.observations);
         for observation in &result.observations {
+            if matches!(
+                observation.data,
+                Data::Job {
+                    complete: true,
+                    failed: true,
+                    ..
+                }
+            ) {
+                for operation in &mut result.operations {
+                    if operation.id == observation.operation {
+                        operation.coverage = Coverage::Malformed;
+                    }
+                }
+            }
             if (now - observation.observed_at).num_seconds() > job.settings.freshness() as i64 {
                 for operation in &mut result.operations {
                     if operation.id == observation.operation
@@ -67,6 +105,18 @@ impl State {
                     .find(|o| o.resource == observation.resource)
             });
             let evaluation = evaluate(observation, prior, &job.settings, now);
+            if !matches!(
+                observation.data,
+                Data::Quota { .. } | Data::Owner { .. }
+                    | Data::Inventory { .. }
+                    | Data::Identity { .. }
+                    | Data::Scaler { .. }
+                    | Data::AdvertisedEndpoint { .. }
+            ) {
+                self.snapshot
+                    .health
+                    .insert(observation.resource.clone(), evaluation.health);
+            }
             if result
                 .operations
                 .iter()
@@ -83,6 +133,9 @@ impl State {
                 ));
             }
             for mut finding in evaluation.findings {
+                finding.valid_until = finding
+                    .observed_at
+                    .checked_add_signed(chrono::Duration::seconds(job.settings.freshness() as i64));
                 if let Some(severity) = job.severity.get(&finding.rule) {
                     finding.severity = *severity;
                 }
@@ -97,6 +150,9 @@ impl State {
                     continue;
                 }
                 let transition = match previous {
+                    None if self.snapshot.retired.contains_key(&finding.id) => {
+                        Some(TransitionKind::Reappeared)
+                    }
                     None => Some(TransitionKind::New),
                     Some(old) if old.stale => Some(TransitionKind::Reappeared),
                     Some(old) if finding.severity > old.severity => Some(TransitionKind::Worsened),
@@ -110,6 +166,7 @@ impl State {
                     });
                 }
                 finding.clear_count = 0;
+                self.snapshot.retired.remove(&finding.id);
                 self.snapshot.findings.insert(finding.id.clone(), finding);
             }
         }
@@ -121,6 +178,10 @@ impl State {
         let new_resources: BTreeSet<_> = result.observations.iter().map(|o| &o.resource).collect();
         let mut removed = Vec::new();
         for (id, finding) in &mut self.snapshot.findings {
+            let confirmation_key = format!("{}|{id}", job.key);
+            if new_resources.contains(&finding.resource) {
+                self.snapshot.confirmations.remove(&confirmation_key);
+            }
             if current.contains(id) {
                 continue;
             }
@@ -131,74 +192,104 @@ impl State {
             }) {
                 finding.clear_count = finding.clear_count.saturating_add(1);
                 finding.observed_at = *at;
+                finding.valid_until = at
+                    .checked_add_signed(chrono::Duration::seconds(job.settings.freshness() as i64));
+                finding.stale = false;
                 if finding.clear_count >= job.settings.recover_confirmations {
                     transitions.push(Transition {
                         at: now,
                         finding: id.clone(),
                         kind: TransitionKind::Recovered,
                     });
-                    removed.push(id.clone());
+                    removed.push((id.clone(), TransitionKind::Recovered));
                 }
-            } else if result.complete()
+            } else if matches!(job.check, Check::Inventory | Check::Kubernetes)
+                && result.complete()
                 && (old_resources.contains(&finding.resource)
-                    || self.snapshot.confirmations.contains_key(id))
+                    || self.snapshot.confirmations.contains_key(&confirmation_key))
                 && !new_resources.contains(&finding.resource)
                 && finding
                     .resource
                     .starts_with(&format!("{}/", job.target.name))
             {
-                let count = self.snapshot.confirmations.entry(id.clone()).or_insert(0);
-                *count = count.saturating_add(1);
-                if *count >= job.settings.removal_confirmations {
+                let observed_at = result
+                    .operations
+                    .iter()
+                    .filter(|operation| finding.evidence.contains(&operation.id))
+                    .map(|operation| operation.observed_at)
+                    .max()
+                    .unwrap_or(result.started_at);
+                let confirmation = self
+                    .snapshot
+                    .confirmations
+                    .entry(confirmation_key)
+                    .or_insert(RemovalConfirmation {
+                        count: 0,
+                        last_at: finding.observed_at,
+                    });
+                if observed_at > confirmation.last_at {
+                    confirmation.count = confirmation.count.saturating_add(1);
+                    confirmation.last_at = observed_at;
+                }
+                if confirmation.count >= job.settings.removal_confirmations {
                     transitions.push(Transition {
                         at: now,
                         finding: id.clone(),
                         kind: TransitionKind::Removed,
                     });
-                    removed.push(id.clone());
+                    removed.push((id.clone(), TransitionKind::Removed));
                 }
             }
         }
-        for id in removed {
+        for (id, kind) in removed {
             self.snapshot.findings.remove(&id);
-            self.snapshot.confirmations.remove(&id);
-        }
-        self.snapshot.results.insert(job.key.clone(), result);
-        self.snapshot.captured_at = now;
-        self.snapshot.revision = job.revision.clone();
-        transitions.extend(self.expire(job.settings.freshness(), now));
-        transitions
-    }
-    pub fn expire(&mut self, freshness: u64, now: DateTime<Utc>) -> Vec<Transition> {
-        let mut transitions = Vec::new();
-        for finding in self.snapshot.findings.values_mut() {
-            if !finding.stale && (now - finding.observed_at).num_seconds() > freshness as i64 {
-                finding.stale = true;
-                transitions.push(Transition {
+            self.snapshot
+                .confirmations
+                .retain(|key, _| !key.ends_with(&format!("|{id}")));
+            self.snapshot.retired.insert(
+                id.clone(),
+                Transition {
                     at: now,
-                    finding: finding.id.clone(),
-                    kind: TransitionKind::Stale,
-                });
+                    finding: id,
+                    kind,
+                },
+            );
+        }
+        while self.snapshot.retired.len() > job.settings.max_findings {
+            let oldest = self
+                .snapshot
+                .retired
+                .iter()
+                .min_by_key(|(_, transition)| transition.at)
+                .map(|(key, _)| key.clone());
+            if let Some(oldest) = oldest {
+                self.snapshot.retired.remove(&oldest);
+            } else {
+                break;
             }
         }
-        transitions
-    }
-    pub fn retain_scope(&mut self, jobs: &[Job]) {
-        let keys: BTreeSet<_> = jobs.iter().map(|j| &j.key).collect();
-        self.snapshot.results.retain(|k, _| keys.contains(k));
-        let resources: BTreeSet<_> = self
+        self.snapshot.results.insert(job.key.clone(), result);
+        let observed: BTreeSet<_> = self
             .snapshot
             .results
             .values()
-            .flat_map(|r| &r.observations)
+            .flat_map(|result| &result.observations)
             .map(|o| &o.resource)
             .collect();
         self.snapshot
-            .findings
-            .retain(|_, finding| resources.contains(&finding.resource));
-        self.snapshot
-            .confirmations
-            .retain(|id, _| self.snapshot.findings.contains_key(id));
-        self.snapshot.selected_scope = jobs.iter().map(|j| j.key.clone()).collect();
+            .health
+            .retain(|resource, _| observed.contains(resource));
+        self.snapshot.captured_at = now;
+        self.snapshot.revision = job.revision.clone();
+        transitions.extend(self.expire(job.settings.freshness(), now));
+        if job.flows_enabled && job.check != Check::Flows {
+            let result = crate::flows::evaluate(&mut self.snapshot, job, now);
+            let mut flow_job = job.clone();
+            flow_job.key = format!("{}/Flows", job.target.name);
+            flow_job.check = Check::Flows;
+            flow_job.flows_enabled = false;
+            transitions.extend(self.apply(&flow_job, result, now));
+        }
+        transitions
     }
 }

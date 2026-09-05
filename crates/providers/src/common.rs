@@ -2,10 +2,11 @@
 use crate::auth::Auth;
 use monitor_core::{config::resolve::Job, model::*};
 use monitor_integrations::{
-    projection::{operation, text},
+    projection::operation,
     transport::{Error, Http},
 };
 use serde_json::Value;
+use sha2::Digest;
 use std::collections::{BTreeSet, VecDeque};
 use tokio_util::sync::CancellationToken;
 
@@ -29,6 +30,18 @@ impl Endpoint {
     }
 }
 pub async fn request(
+    http: &Http,
+    auth: &Auth,
+    endpoint: &Endpoint,
+    job: &Job,
+    cancel: &CancellationToken,
+) -> Result<Value, Error> {
+    tokio::select! {
+        _ = cancel.cancelled() => Err(Error::Cancelled),
+        result = tokio::time::timeout(job.settings.operation_timeout.duration(), request_inner(http, auth, endpoint, job, cancel)) => result.map_err(|_| Error::Timeout).and_then(|r| r),
+    }
+}
+async fn request_inner(
     http: &Http,
     auth: &Auth,
     endpoint: &Endpoint,
@@ -79,6 +92,53 @@ pub async fn collect(
     endpoints: Vec<Endpoint>,
     cancel: &CancellationToken,
 ) -> CheckResult {
+    let source = NativeSource {
+        http,
+        auth,
+        cache: None,
+    };
+    collect_from(&source, job, endpoints, cancel).await
+}
+
+pub trait Source: Send + Sync {
+    fn cache(&self) -> Option<&crate::inventory_cache::InventoryCache> {
+        None
+    }
+    fn request(
+        &self,
+        endpoint: &Endpoint,
+        job: &Job,
+        cancel: &CancellationToken,
+    ) -> impl std::future::Future<Output = Result<Value, Error>> + Send;
+}
+
+struct NativeSource<'a> {
+    http: &'a Http,
+    auth: &'a Auth,
+    cache: Option<&'a crate::inventory_cache::InventoryCache>,
+}
+impl Source for NativeSource<'_> {
+    fn cache(&self) -> Option<&crate::inventory_cache::InventoryCache> {
+        self.cache
+    }
+    async fn request(
+        &self,
+        endpoint: &Endpoint,
+        job: &Job,
+        cancel: &CancellationToken,
+    ) -> Result<Value, Error> {
+        tokio::select! {
+            _ = cancel.cancelled() => Err(Error::Cancelled),
+            result = tokio::time::timeout(job.settings.operation_timeout.duration(), request(self.http, self.auth, endpoint, job, cancel)) => result.map_err(|_| Error::Timeout).and_then(|r| r),
+        }
+    }
+}
+pub async fn collect_from<S: Source>(
+    source: &S,
+    job: &Job,
+    endpoints: Vec<Endpoint>,
+    cancel: &CancellationToken,
+) -> CheckResult {
     let mut result = CheckResult::failure(
         job.target.name.clone(),
         job.check,
@@ -89,8 +149,14 @@ pub async fn collect(
     let mut pending: VecDeque<_> = endpoints.into();
     let mut visited = BTreeSet::new();
     while let Some(endpoint) = pending.pop_front() {
-        let request_key = format!("{}:{:?}", endpoint.url, endpoint.body);
-        if !visited.insert(request_key) {
+        let key: String = sha2::Sha256::digest(format!(
+            "{}:{}:{}:{:?}",
+            job.revision, endpoint.id, endpoint.url, endpoint.body
+        ))
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
+        if !visited.insert(key.clone()) {
             continue;
         }
         if visited.len() > job.settings.max_assets {
@@ -108,152 +174,66 @@ pub async fn collect(
             ));
             continue;
         }
-        let mut endpoint = endpoint;
-        let mut outcome = Ok(0usize);
-        let mut pages = 0;
-        let mut previous_token = String::new();
-        for page in 0..job.settings.max_pages {
-            pages = page + 1;
-            match request(http, auth, &endpoint, job, cancel).await {
-                Ok(payload) => {
-                    let rows = crate::resource_projection::rows(&payload, &endpoint.items);
-                    if !rows.is_empty() {
-                        for row in &rows {
-                            if result.observations.len() >= job.settings.max_assets {
-                                outcome = Err(Error::Limit);
-                                break;
-                            }
-                            let projected =
-                                crate::resource_projection::project(job, &endpoint, row);
-                            let available = job
-                                .settings
-                                .max_assets
-                                .saturating_sub(result.observations.len());
-                            if projected.len() > available {
-                                outcome = Err(Error::Limit);
-                            }
-                            result
-                                .observations
-                                .extend(projected.into_iter().take(available));
-                            for detail in crate::details::followups(job, &endpoint, row) {
-                                if pending.len() >= job.settings.ready_queue {
-                                    outcome = Err(Error::Limit);
-                                    break;
-                                }
-                                pending.push_back(detail);
-                            }
-                        }
-                        outcome = outcome.map(|n| n + rows.len());
-                    } else if endpoint.items.is_empty() {
-                        result
-                            .observations
-                            .extend(crate::resource_projection::project(
-                                job, &endpoint, &payload,
-                            ));
-                        outcome = Ok(1);
-                    } else if payload.as_object().is_some_and(|m| m.is_empty())
-                        || payload.pointer(&endpoint.items).is_some_and(|v| {
-                            v.as_array().is_some_and(|a| a.is_empty()) || v.as_str() == Some("")
-                        })
-                    {
-                        outcome = Ok(0);
-                    } else {
-                        outcome = Err(Error::Malformed);
-                    }
-                    if outcome.is_err() {
-                        break;
-                    }
-                    let token = text(
-                        &payload,
-                        &[
-                            "/nextPageToken",
-                            "/nextToken",
-                            "/NextToken",
-                            "/nextLink",
-                            "/NextMarker",
-                        ],
-                    )
-                    .unwrap_or("");
-                    if token.is_empty() {
-                        break;
-                    }
-                    if token == previous_token || page + 1 == job.settings.max_pages {
-                        outcome = Err(Error::Limit);
-                        break;
-                    }
-                    previous_token = token.into();
-                    if token.starts_with("https://") {
-                        let next = url::Url::parse(token).map_err(|_| Error::Malformed);
-                        let old = url::Url::parse(&endpoint.url).map_err(|_| Error::Malformed);
-                        match (next, old) {
-                            (Ok(next), Ok(old))
-                                if next.origin() == old.origin()
-                                    && next.path().starts_with(&format!(
-                                        "/subscriptions/{}/",
-                                        job.target.scope
-                                    )) =>
-                            {
-                                endpoint.url = next.into()
-                            }
-                            _ => {
-                                outcome = Err(Error::Forbidden);
-                                break;
-                            }
-                        }
-                    } else if let Some(body) = &mut endpoint.body {
-                        let field = if endpoint.aws.is_some() {
-                            if payload.get("NextToken").is_some() {
-                                "NextToken"
-                            } else {
-                                "nextToken"
-                            }
-                        } else {
-                            "pageToken"
-                        };
-                        body[field] = Value::String(token.into());
-                    } else {
-                        let Ok(mut url) = url::Url::parse(&endpoint.url) else {
-                            outcome = Err(Error::Malformed);
-                            break;
-                        };
-                        let field = if job.target.provider == Provider::Gcp {
-                            "pageToken"
-                        } else {
-                            "NextToken"
-                        };
-                        let pairs: Vec<_> = url
-                            .query_pairs()
-                            .filter(|(k, _)| k != field)
-                            .map(|(k, v)| (k.into_owned(), v.into_owned()))
-                            .collect();
-                        url.query_pairs_mut()
-                            .clear()
-                            .extend_pairs(pairs)
-                            .append_pair(field, token);
-                        endpoint.url = url.into();
-                    }
-                }
-                Err(error) => {
-                    outcome = Err(error);
-                    break;
+        let mut fetched = if let Some(cache) = source.cache() {
+            cache.load(source, job, endpoint, cancel, key).await
+        } else {
+            crate::endpoint_scan::fetch(source, job, endpoint, cancel).await
+        };
+        let remaining = job
+            .settings
+            .max_assets
+            .saturating_sub(result.observations.len());
+        if fetched.result.observations.len() > remaining {
+            fetched.result.observations.truncate(remaining);
+            for op in &mut fetched.result.operations {
+                if op.coverage == Coverage::Complete {
+                    op.coverage = Coverage::Truncated;
                 }
             }
         }
-        result.operations.push(operation(
-            &endpoint.id,
-            outcome.as_ref().copied(),
-            pages,
-            job.settings.required,
-        ));
+        for followup in fetched.followups {
+            if pending.len() >= job.settings.ready_queue {
+                for op in &mut fetched.result.operations {
+                    op.coverage = Coverage::Truncated;
+                }
+                break;
+            }
+            pending.push_back(followup);
+        }
+        for op in &mut fetched.result.operations {
+            op.required = job.settings.required;
+        }
+        result.operations.extend(fetched.result.operations);
+        result.observations.extend(fetched.result.observations);
     }
     if result.operations.is_empty() {
         result.operations.push(operation(
             "not-configured",
-            Err(&Error::Unavailable),
+            Err(&Error::Missing),
             0,
             job.settings.required,
         ));
     }
     result.finished_at = chrono::Utc::now();
     result
+}
+pub async fn collect_cached(
+    http: &Http,
+    auth: &Auth,
+    job: &Job,
+    endpoints: Vec<Endpoint>,
+    cancel: &CancellationToken,
+    cache: &crate::inventory_cache::InventoryCache,
+) -> CheckResult {
+    collect_from(
+        &NativeSource {
+            http,
+            auth,
+            cache: Some(cache),
+        },
+        job,
+        endpoints,
+        cancel,
+    )
+    .await
 }

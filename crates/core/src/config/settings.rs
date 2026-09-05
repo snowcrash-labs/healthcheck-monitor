@@ -15,6 +15,7 @@ pub struct Settings {
     pub scope_concurrency: usize,
     pub subprocesses: usize,
     pub ready_queue: usize,
+    pub jitter_percent: u8,
     pub max_assets: usize,
     pub max_findings: usize,
     pub memory_bytes: usize,
@@ -58,6 +59,7 @@ impl Default for Settings {
             scope_concurrency: 4,
             subprocesses: 2,
             ready_queue: 1024,
+            jitter_percent: 10,
             max_assets: 50_000,
             max_findings: 10_000,
             memory_bytes: 256 * 1024 * 1024,
@@ -93,6 +95,9 @@ pub use super::patch::SettingsPatch;
 impl Settings {
     /// Apply only explicitly provided values.
     pub fn overlay(&mut self, patch: &SettingsPatch) {
+        if let Some(value) = patch.jitter_percent {
+            self.jitter_percent = value;
+        }
         if let Some(value) = patch.interval {
             self.interval = value;
         }

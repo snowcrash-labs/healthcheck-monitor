@@ -4,6 +4,10 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Data {
+    Quota { region: String, code: String, limit: f64, usage: Option<crate::config::types::MetricQuery> },
+    Progress {
+        state: crate::model::Health,
+    },
     Scaler {
         namespace: String,
         name: String,
@@ -89,7 +93,7 @@ pub enum Data {
         revision: String,
         target: String,
         state: ServiceState,
-        created_at: DateTime<Utc>,
+        created_at: Option<DateTime<Utc>>,
     },
     Image {
         desired: String,

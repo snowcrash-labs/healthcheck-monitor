@@ -7,12 +7,12 @@ license.workspace = true
 [dependencies]
 monitor-core.workspace = true
 monitor-integrations.workspace = true
-async-trait.workspace = true
 chrono.workspace = true
 futures.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
 scc.workspace = true
 thiserror.workspace = true
 tokio.workspace = true

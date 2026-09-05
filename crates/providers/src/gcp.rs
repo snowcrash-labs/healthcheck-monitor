@@ -54,6 +54,9 @@ pub fn endpoints(job: &Job) -> Vec<Endpoint> {
         .collect();
     let mut endpoints = Vec::new();
     for (id, template, items) in CATALOG {
+        if job.check == Check::Edge && *id != "cloud-run" {
+            continue;
+        }
         if job.check == Check::Releases
             && !matches!(
                 *id,
@@ -107,6 +110,7 @@ pub async fn collect(
     auth: &Auth,
     job: &Job,
     cancel: &CancellationToken,
+    cache: &crate::inventory_cache::InventoryCache,
 ) -> CheckResult {
     if job.check == Check::Metrics || job.check == Check::Queues {
         let mut job = job.clone();
@@ -118,7 +122,7 @@ pub async fn collect(
     if job.check == Check::Logs {
         return logs(http, auth, job, cancel).await;
     }
-    common::collect(http, auth, job, endpoints(job), cancel).await
+    common::collect_cached(http, auth, job, endpoints(job), cancel, cache).await
 }
 async fn logs(http: &Http, auth: &Auth, job: &Job, cancel: &CancellationToken) -> CheckResult {
     let mut result = CheckResult::failure(
@@ -188,7 +192,19 @@ async fn logs(http: &Http, auth: &Auth, job: &Job, cancel: &CancellationToken) -
                                     &["/timestamp"],
                                 )
                                 .unwrap_or(result.started_at);
-                                groups.add(message, time);
+                                let namespace = text(row, &["/resource/labels/namespace_name"])
+                                    .unwrap_or("project");
+                                let workload = text(
+                                    row,
+                                    &[
+                                        "/labels/k8s-pod~1app",
+                                        "/resource/labels/container_name",
+                                        "/resource/labels/service_name",
+                                        "/resource/labels/function_name",
+                                    ],
+                                )
+                                .unwrap_or("unknown");
+                                groups.add_for(&format!("{namespace}/{workload}"), message, time);
                             }
                             count += 1;
                         }
@@ -210,10 +226,10 @@ async fn logs(http: &Http, auth: &Auth, job: &Job, cancel: &CancellationToken) -
                 }
             }
         }
-        for (index, data) in groups.finish().into_iter().enumerate() {
+        for (signature, data) in groups.finish_scoped() {
             result
                 .observations
-                .push(observation(job, id, &index.to_string(), data));
+                .push(observation(job, id, &signature, data));
         }
         result.operations.push(operation(
             id,

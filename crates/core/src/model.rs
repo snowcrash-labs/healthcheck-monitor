@@ -30,9 +30,10 @@ pub enum Check {
     Logs,
     Alerts,
     Slo,
+    Flows,
 }
 impl Check {
-    pub const ALL: [Self; 13] = [
+    pub const ALL: [Self; 14] = [
         Self::Preflight,
         Self::Discovery,
         Self::Inventory,
@@ -46,10 +47,11 @@ impl Check {
         Self::Logs,
         Self::Alerts,
         Self::Slo,
+        Self::Flows,
     ];
     pub fn interval_seconds(self) -> u64 {
         match self {
-            Self::Preflight | Self::Kubernetes | Self::Edge | Self::Queues => 30,
+            Self::Preflight | Self::Kubernetes | Self::Edge | Self::Queues | Self::Flows => 30,
             Self::Inventory | Self::Managed => 900,
             Self::Discovery => 3600,
             _ => 300,
@@ -128,6 +130,8 @@ pub struct Finding {
     pub confidence: Confidence,
     pub stale: bool,
     pub clear_count: u32,
+    #[serde(default)]
+    pub valid_until: Option<DateTime<Utc>>,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -181,9 +185,19 @@ pub struct Snapshot {
     pub revision: String,
     pub captured_at: DateTime<Utc>,
     pub selected_scope: Vec<String>,
+    #[serde(default)]
+    pub selectors: BTreeMap<String, Vec<String>>,
+    #[serde(default)]
+    pub freshness: BTreeMap<String, u64>,
     pub results: BTreeMap<String, CheckResult>,
     pub findings: BTreeMap<String, Finding>,
-    pub confirmations: BTreeMap<String, u32>,
+    #[serde(default)]
+    pub health: BTreeMap<String, Health>,
+    #[serde(default)]
+    pub progress: BTreeMap<String, crate::flows::Progress>,
+    #[serde(default)]
+    pub retired: BTreeMap<String, Transition>,
+    pub confirmations: BTreeMap<String, RemovalConfirmation>,
     pub persistence_fault: bool,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -201,4 +215,9 @@ pub struct Transition {
     pub at: DateTime<Utc>,
     pub finding: String,
     pub kind: TransitionKind,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RemovalConfirmation {
+    pub count: u32,
+    pub last_at: DateTime<Utc>,
 }

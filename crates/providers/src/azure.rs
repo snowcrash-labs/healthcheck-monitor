@@ -20,7 +20,23 @@ pub fn endpoints(job: &Job) -> Vec<Endpoint> {
         )];
     }
     let mut out = Vec::new();
+    if job.check == Check::Inventory {
+        let mut graph = Endpoint::get(
+            "resource-graph",
+            "https://management.azure.com/providers/Microsoft.ResourceGraph/resources?api-version=2024-04-01",
+            "/data",
+        );
+        graph.body = Some(
+            serde_json::json!({"subscriptions":[job.target.scope],"query":"Resources | project id, name, type, location, state=tostring(properties.provisioningState)","options":{"resultFormat":"objectArray","$top":job.settings.page_size}}),
+        );
+        out.push(graph);
+    }
     for (name, namespace, api) in CATALOG {
+        if job.check == Check::Edge
+            && !matches!(*name, "container-apps" | "app-service" | "front-door")
+        {
+            continue;
+        }
         if job.check == Check::Alerts
             && !matches!(
                 *name,
@@ -36,7 +52,11 @@ pub fn endpoints(job: &Job) -> Vec<Endpoint> {
         }
         out.push(Endpoint::get(
             *name,
-            format!("{root}/providers/{namespace}?api-version={api}"),
+            if *name == "resource-groups" {
+                format!("{root}/resourcegroups?api-version={api}")
+            } else {
+                format!("{root}/providers/{namespace}?api-version={api}")
+            },
             "/value",
         ));
     }
@@ -47,11 +67,15 @@ pub async fn collect(
     auth: &Auth,
     job: &Job,
     cancel: &CancellationToken,
+    cache: &crate::inventory_cache::InventoryCache,
 ) -> CheckResult {
+    if job.check == Check::Logs {
+        return crate::cloud_logs::azure(http, auth, job, cancel).await;
+    }
     if job.check == Check::Metrics || job.check == Check::Queues {
         return crate::metrics::azure(http, auth, job, cancel).await;
     }
-    common::collect(http, auth, job, endpoints(job), cancel).await
+    common::collect_cached(http, auth, job, endpoints(job), cancel, cache).await
 }
 const CATALOG: &[(&str, &str, &str)] = &[
     (

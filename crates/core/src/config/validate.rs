@@ -4,7 +4,8 @@ use crate::error::Error;
 use std::collections::BTreeSet;
 impl Settings {
     pub fn validate(&self) -> Result<(), Error> {
-        let invalid = self.concurrency == 0
+        let invalid = self.jitter_percent > 50
+            || self.concurrency == 0
             || self.concurrency > 256
             || self.scope_concurrency == 0
             || self.scope_concurrency > self.concurrency
@@ -81,6 +82,43 @@ impl Config {
         }
         let mut names = BTreeSet::new();
         for target in &self.targets {
+            if target.expectations.len() > 128
+                || target.expectations.keys().any(|key| !identifier(key))
+            {
+                return Err(Error::Config("invalid resource expectations".into()));
+            }
+            if let Some(change) = &target.change
+                && (!identifier(&change.repository)
+                    || !identifier(&change.base)
+                    || !identifier(&change.head)
+                    || change.paths.is_empty()
+                    || change.paths.len() > 128
+                    || change.paths.iter().any(|path| !identifier(path))
+                    || change.workloads.len() > 1024
+                    || change
+                        .workloads
+                        .iter()
+                        .any(|(path, workload)| !identifier(path) || !identifier(workload)))
+            {
+                return Err(Error::Config("invalid repository change scope".into()));
+            }
+            if target.flows.len() > 16 {
+                return Err(Error::Config("at most 16 flows per target".into()));
+            }
+            for flow in &target.flows {
+                if !identifier(&flow.name)
+                    || !identifier(&flow.demand)
+                    || flow.stages.is_empty()
+                    || flow.stages.len() > 16
+                    || flow.stages.iter().any(|stage| {
+                        !identifier(&stage.name)
+                            || !identifier(&stage.progress)
+                            || stage.workload.as_ref().is_some_and(|w| !identifier(w))
+                    })
+                {
+                    return Err(Error::Config("invalid flow or stage configuration".into()));
+                }
+            }
             if !identifier(&target.name)
                 || !identifier(&target.scope)
                 || !names.insert(&target.name)

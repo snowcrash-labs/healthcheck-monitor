@@ -12,7 +12,7 @@ pub fn number(value: &Value, paths: &[&str]) -> Option<f64> {
         value.pointer(p).and_then(|v| {
             v.as_f64()
                 .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
-        })
+        }).filter(|value| value.is_finite())
     })
 }
 pub fn boolean(value: &Value, paths: &[&str]) -> Option<bool> {
@@ -24,9 +24,22 @@ pub fn boolean(value: &Value, paths: &[&str]) -> Option<bool> {
     })
 }
 pub fn timestamp(value: &Value, paths: &[&str]) -> Option<DateTime<Utc>> {
-    text(value, paths)
-        .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
-        .map(|t| t.to_utc())
+    paths.iter().find_map(|path| {
+        let value = value.pointer(path)?;
+        if let Some(text) = value.as_str() {
+            return DateTime::parse_from_rfc3339(text)
+                .ok()
+                .map(|time| time.to_utc());
+        }
+        let seconds = value.as_f64()?;
+        if !seconds.is_finite() {
+            return None;
+        }
+        DateTime::from_timestamp(
+            seconds.floor() as i64,
+            ((seconds - seconds.floor()) * 1_000_000_000.0) as u32,
+        )
+    })
 }
 pub fn identity(value: &str) -> String {
     value
@@ -56,11 +69,19 @@ pub fn state(value: Option<&str>) -> ServiceState {
     }
 }
 pub fn observation(job: &Job, operation: &str, name: &str, data: Data) -> Observation {
+    let resource = format!("{}/{}/{}", job.target.name, operation, identity(name));
+    let expected = job
+        .target
+        .expectations
+        .iter()
+        .filter(|(selector, _)| resource.contains(selector.as_str()))
+        .max_by_key(|(selector, _)| selector.len())
+        .map_or(job.target.expected, |(_, expected)| *expected);
     Observation {
-        resource: format!("{}/{}/{}", job.target.name, operation, identity(name)),
+        resource,
         operation: operation.into(),
         observed_at: Utc::now(),
-        expected: job.target.expected,
+        expected,
         data,
     }
 }

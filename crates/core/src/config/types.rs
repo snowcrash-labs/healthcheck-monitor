@@ -60,6 +60,8 @@ pub struct Target {
     #[serde(default)]
     pub expected: Expected,
     #[serde(default)]
+    pub expectations: BTreeMap<String, Expected>,
+    #[serde(default)]
     pub resources: Vec<String>,
     #[serde(default)]
     pub settings: SettingsPatch,
@@ -77,6 +79,41 @@ pub struct Target {
     pub metrics: Vec<MetricQuery>,
     pub nats_url: Option<Url>,
     pub nats_fallback: Option<NatsFallback>,
+    #[serde(default)]
+    pub flows: Vec<Flow>,
+    pub change: Option<ChangeScope>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ChangeScope {
+    pub repository: String,
+    pub base: String,
+    pub head: String,
+    pub paths: Vec<String>,
+    #[serde(default)]
+    pub workloads: BTreeMap<String, String>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Flow {
+    pub name: String,
+    pub demand: String,
+    pub idle_after: super::duration::Span,
+    pub stages: Vec<FlowStage>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FlowStage {
+    pub name: String,
+    pub progress: String,
+    pub mode: SignalMode,
+    pub workload: Option<String>,
+}
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SignalMode {
+    Counter,
+    Rate,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -88,6 +125,8 @@ pub struct Endpoint {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct MetricQuery {
+    #[serde(default)]
+    pub aggregation: Aggregation,
     pub name: String,
     pub namespace: String,
     pub metric: String,
@@ -97,6 +136,16 @@ pub struct MetricQuery {
     pub capacity: Option<f64>,
     pub warning: Option<f64>,
     pub error: Option<f64>,
+}
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Aggregation {
+    #[default]
+    Minimum,
+    Maximum,
+    Average,
+    Sum,
+    Latest,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

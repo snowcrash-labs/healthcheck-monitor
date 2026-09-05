@@ -2711,7 +2711,6 @@ dependencies = [
 name = "monitor-core"
 version = "0.1.0"
 dependencies = [
- "async-trait",
  "chrono",
  "futures",
  "humantime",
@@ -2732,7 +2731,6 @@ name = "monitor-integrations"
 version = "0.1.0"
 dependencies = [
  "async-nats",
- "async-trait",
  "base64 0.23.1",
  "chrono",
  "futures",
@@ -2763,7 +2761,6 @@ dependencies = [
 name = "monitor-providers"
 version = "0.1.0"
 dependencies = [
- "async-trait",
  "aws-config",
  "aws-credential-types",
  "aws-sdk-cloudwatch",
@@ -2785,6 +2782,7 @@ dependencies = [
  "scc",
  "serde",
  "serde_json",
+ "sha2 0.11.0",
  "thiserror",
  "tokio",
  "tokio-util",

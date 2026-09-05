@@ -28,24 +28,50 @@ pub fn classify(message: &str) -> LogClass {
 }
 #[derive(Default)]
 pub struct Groups {
-    entries: BTreeMap<LogClass, (u64, DateTime<Utc>, DateTime<Utc>)>,
+    entries: BTreeMap<(String, LogClass), Group>,
+}
+struct Group {
+    count: u64,
+    first: DateTime<Utc>,
+    last: DateTime<Utc>,
 }
 impl Groups {
     pub fn add(&mut self, message: &str, at: DateTime<Utc>) {
-        let entry = self.entries.entry(classify(message)).or_insert((0, at, at));
-        entry.0 = entry.0.saturating_add(1);
-        entry.1 = entry.1.min(at);
-        entry.2 = entry.2.max(at);
+        self.add_for("unknown", message, at);
+    }
+    pub fn add_for(&mut self, scope: &str, message: &str, at: DateTime<Utc>) {
+        let entry = self
+            .entries
+            .entry((super::projection::identity(scope), classify(message)))
+            .or_insert(Group {
+                count: 0,
+                first: at,
+                last: at,
+            });
+        entry.count = entry.count.saturating_add(1);
+        entry.first = entry.first.min(at);
+        entry.last = entry.last.max(at);
     }
     pub fn finish(self) -> Vec<Data> {
+        self.finish_scoped()
+            .into_iter()
+            .map(|(_, data)| data)
+            .collect()
+    }
+    pub fn finish_scoped(self) -> Vec<(String, Data)> {
         self.entries
             .into_iter()
-            .map(|(signature, (count, first_seen, last_seen))| Data::Log {
-                signature,
-                count,
-                first_seen,
-                last_seen,
-                sampled: true,
+            .map(|((scope, signature), group)| {
+                (
+                    format!("{scope}/{signature:?}"),
+                    Data::Log {
+                        signature,
+                        count: group.count,
+                        first_seen: group.first,
+                        last_seen: group.last,
+                        sampled: true,
+                    },
+                )
             })
             .collect()
     }

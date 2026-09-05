@@ -36,6 +36,7 @@ pub(crate) fn fault(
             confidence,
             stale: false,
             clear_count: 0,
+            valid_until: None,
         }],
     }
 }
@@ -56,6 +57,10 @@ pub fn evaluate(
     let error = |rule| fault(obs, rule, Severity::Error, Confidence::Direct);
     let warning = |rule| fault(obs, rule, Severity::Warning, Confidence::Direct);
     match &obs.data {
+        Data::Progress {
+            state: Health::Unhealthy,
+        } => return fault(obs, "flow-stalled", Severity::Error, Confidence::Correlated),
+        Data::Progress { state } => return result(*state),
         Data::Endpoint {
             dns,
             tls,
@@ -210,62 +215,8 @@ pub fn evaluate(
             }
         }
         Data::Queue { .. } => return crate::queue_policy::evaluate(obs, previous, settings),
-        Data::Service {
-            state,
-            backup_enabled,
-            encrypted,
-            ..
-        } => {
-            if inactive && *state == ServiceState::Stopped {
-                return result(Health::ExpectedInactive);
-            }
-            match state {
-                ServiceState::Failed | ServiceState::Stopped => {
-                    return error("service-unavailable");
-                }
-                ServiceState::Starting | ServiceState::Unknown => return result(Health::Unknown),
-                ServiceState::Ready => {}
-            }
-            if *encrypted == Some(false) {
-                return warning("encryption-disabled");
-            }
-            if *backup_enabled == Some(false) {
-                return warning("backup-disabled");
-            }
-        }
-        Data::Metric {
-            value,
-            capacity,
-            warning: warn,
-            error: err,
-            window_seconds,
-            ..
-        } => {
-            if !value.is_finite() {
-                return result(Health::Unknown);
-            }
-            let (value, warn, err) =
-                if let Some(capacity) = capacity.filter(|c| *c > 0.0 && c.is_finite()) {
-                    (
-                        *value / capacity * 100.0,
-                        Some(settings.capacity_warning),
-                        Some(settings.capacity_error),
-                    )
-                } else {
-                    (*value, *warn, *err)
-                };
-            if warn.is_none() && err.is_none() {
-                return result(Health::Unknown);
-            }
-            if *window_seconds < settings.capacity_sustain.0 {
-                return result(Health::Unknown);
-            }
-            if err.is_some_and(|t| value >= t) {
-                return error("metric-threshold");
-            }
-            if warn.is_some_and(|t| value >= t) {
-                return warning("metric-threshold");
-            }
+        Data::Service { .. } | Data::Metric { .. } => {
+            return crate::resource_policy::evaluate(obs, settings);
         }
         Data::Build {
             state: ServiceState::Failed,
@@ -297,7 +248,7 @@ pub fn evaluate(
             }
             return result(Health::Unknown);
         }
-        Data::Inventory { .. }
+        Data::Quota { .. } | Data::Inventory { .. }
         | Data::Scaler { .. }
         | Data::Owner { .. }
         | Data::AdvertisedEndpoint { .. } => return result(Health::Unknown),

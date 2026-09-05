@@ -36,6 +36,7 @@ impl Store {
             .truncate(false)
             .mode(0o600)
             .open(lock_path)?;
+        lock.set_permissions(fs::Permissions::from_mode(0o600))?;
         lock.try_lock().map_err(|_| Error::Locked)?;
         Ok(Self {
             path: path.to_path_buf(),
@@ -59,17 +60,30 @@ impl Store {
             .captured_at
             .format("%Y%m%dT%H%M%S%.9fZ")
             .to_string();
-        self.atomic("monitor-latest.json", &encoded)?;
-        self.atomic("monitor-report.md", markdown(snapshot).as_bytes())?;
-        self.atomic(&format!("monitor-snapshot-{stamp}.json"), &encoded)?;
+        let report = markdown(snapshot);
         let mut events = Vec::new();
         for transition in transitions {
             serde_json::to_writer(&mut events, transition)?;
             events.push(b'\n');
         }
+        let reserve = encoded
+            .len()
+            .saturating_mul(2)
+            .saturating_add(report.len())
+            .saturating_add(events.len()) as u64;
+        if reserve > settings.history_bytes {
+            return Err(Error::Evidence);
+        }
+        let mut reserved = settings.clone();
+        reserved.history_bytes = settings.history_bytes - reserve;
+        self.retain(&reserved, snapshot.captured_at)?;
+        self.atomic(&format!("monitor-snapshot-{stamp}.json"), &encoded)?;
         if !events.is_empty() {
             self.atomic(&format!("monitor-events-{stamp}.ndjson"), &events)?;
         }
+        self.atomic("monitor-report.md", report.as_bytes())?;
+        // The latest snapshot is the publication marker; leave it intact if any earlier write fails.
+        self.atomic("monitor-latest.json", &encoded)?;
         self.retain(settings, snapshot.captured_at)?;
         Ok(())
     }
@@ -84,6 +98,7 @@ impl Store {
             .truncate(true)
             .mode(0o600)
             .open(&temp)?;
+        file.set_permissions(fs::Permissions::from_mode(0o600))?;
         file.write_all(bytes)?;
         file.sync_all()?;
         fs::rename(&temp, target)?;
@@ -92,6 +107,7 @@ impl Store {
     }
     pub fn latest(&self, limit: usize) -> Result<Option<Snapshot>, Error> {
         let latest = self.path.join("monitor-latest.json");
+        reject_symlink(&latest)?;
         if !latest.exists() {
             return Ok(None);
         }
@@ -102,9 +118,9 @@ impl Store {
                     .filter_map(Result::ok)
                     .map(|e| e.path())
                     .filter(|p| {
-                        p.file_name().and_then(|s| s.to_str()).is_some_and(|s| {
-                            s.starts_with("monitor-snapshot-") && s.ends_with(".json")
-                        })
+                        p.file_name()
+                            .and_then(|s| s.to_str())
+                            .is_some_and(|s| owned(s) == Some(true))
                     })
                     .take(10001)
                     .collect();
@@ -120,16 +136,18 @@ impl Store {
     }
     fn retain(&self, settings: &Settings, now: DateTime<Utc>) -> Result<(), Error> {
         let mut files = Vec::new();
-        let mut bytes = 0u64;
+        let mut bytes = ["monitor-latest.json", "monitor-report.md", "monitor.lock"]
+            .iter()
+            .filter_map(|name| fs::metadata(self.path.join(name)).ok())
+            .map(|meta| meta.len())
+            .sum::<u64>();
         for entry in fs::read_dir(&self.path)? {
             let entry = entry?;
             let name = entry.file_name();
             let name = name.to_string_lossy();
-            if !(name.starts_with("monitor-snapshot-") && name.ends_with(".json")
-                || name.starts_with("monitor-events-") && name.ends_with(".ndjson"))
-            {
+            let Some(snapshot) = owned(&name) else {
                 continue;
-            }
+            };
             let meta = entry.metadata()?;
             if !meta.is_file() {
                 continue;
@@ -145,7 +163,7 @@ impl Store {
                 stamp.to_string(),
                 entry.path(),
                 meta.len(),
-                name.starts_with("monitor-snapshot-"),
+                snapshot,
                 meta.modified()?,
             ));
             if files.len() > 20002 {
@@ -178,6 +196,22 @@ fn reject_symlink(path: &Path) -> Result<(), Error> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(error) => Err(Error::Io(error)),
     }
+}
+fn owned(name: &str) -> Option<bool> {
+    let (snapshot, stamp) = if let Some(stamp) = name
+        .strip_prefix("monitor-snapshot-")
+        .and_then(|s| s.strip_suffix(".json"))
+    {
+        (true, stamp)
+    } else {
+        let stamp = name
+            .strip_prefix("monitor-events-")
+            .and_then(|s| s.strip_suffix(".ndjson"))?;
+        (false, stamp)
+    };
+    chrono::NaiveDateTime::parse_from_str(stamp, "%Y%m%dT%H%M%S%.fZ")
+        .ok()
+        .map(|_| snapshot)
 }
 pub fn read(path: &Path, limit: usize) -> Result<Snapshot, Error> {
     reject_symlink(path)?;

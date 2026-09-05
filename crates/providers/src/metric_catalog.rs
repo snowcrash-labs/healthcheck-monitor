@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 pub fn gcp() -> Vec<MetricQuery> {
     GCP.iter()
         .map(|(name, namespace, metric, capacity)| MetricQuery {
+            aggregation: Default::default(),
             name: (*name).into(),
             namespace: (*namespace).into(),
             metric: (*metric).into(),

@@ -15,6 +15,9 @@ pub fn followups(job: &Job, parent: &Endpoint, row: &Value) -> Vec<Endpoint> {
             "/TableName",
             "/repositoryName",
             "/TargetGroupArn",
+            "/Id",
+            "/CertificateArn",
+            "/BackupVaultName",
         ],
     )
     .or_else(|| row.as_str());

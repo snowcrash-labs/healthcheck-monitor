@@ -2,7 +2,7 @@
 use crate::router::{Router, base};
 use monitor_core::{config::resolve::Job, model::*};
 use monitor_integrations::{
-    endpoint, github,
+    github,
     nats::Nats,
     process::Helper,
     projection::{observation, operation},
@@ -16,6 +16,13 @@ impl Router {
         cancel: &CancellationToken,
     ) -> Result<CheckResult, Error> {
         let scope = self.scope(job).await?;
+        if job.check == Check::Flows {
+            let mut result = base(job);
+            result
+                .operations
+                .push(operation("flow-inputs", Err(&Error::Missing), 0, true));
+            return Ok(result);
+        }
         if job.check == Check::Queues && job.target.context.is_some() {
             let snapshot = self.kube(job, &scope, cancel).await?;
             let kube = scope
@@ -89,51 +96,7 @@ impl Router {
             return self.kube(job, &scope, cancel).await;
         }
         if job.check == Check::Edge {
-            let mut result = base(job);
-            let mut endpoints = job.target.endpoints.clone();
-            if job.target.context.is_some() {
-                match self.kube(job, &scope, cancel).await {
-                    Ok(snapshot) => {
-                        for obs in snapshot.observations {
-                            if let Data::AdvertisedEndpoint { url } = obs.data
-                                && let Ok(url) = url::Url::parse(&url)
-                                && endpoints.len() < 256
-                                && !endpoints.iter().any(|e| e.url == url)
-                            {
-                                endpoints.push(monitor_core::config::types::Endpoint {
-                                    name: obs.resource,
-                                    url,
-                                    accepted: vec![],
-                                });
-                            }
-                        }
-                        result.operations.extend(snapshot.operations);
-                    }
-                    Err(error) => result.operations.push(operation(
-                        "endpoint-discovery",
-                        Err(&error),
-                        0,
-                        true,
-                    )),
-                }
-            }
-            for endpoint in &endpoints {
-                result
-                    .observations
-                    .push(endpoint::probe(&scope.http, job, endpoint, cancel).await);
-            }
-            result.operations.push(operation(
-                "endpoints",
-                if result.observations.is_empty() {
-                    Err(&Error::Unavailable)
-                } else {
-                    Ok(result.observations.len())
-                },
-                1,
-                true,
-            ));
-            result.finished_at = chrono::Utc::now();
-            return Ok(result);
+            return self.edge(job, &scope, cancel).await;
         }
         if job.target.provider == Provider::Github || job.check == Check::Github {
             let config = self.config.read().await;
@@ -218,9 +181,15 @@ impl Router {
             return Ok(crate::discovery::collect(&scope.http, &auth, job, &roots, cancel).await);
         }
         Ok(match job.target.provider {
-            Provider::Gcp => crate::gcp::collect(&scope.http, &auth, job, cancel).await,
-            Provider::Aws => crate::aws::collect(&scope.http, &auth, job, cancel).await,
-            Provider::Azure => crate::azure::collect(&scope.http, &auth, job, cancel).await,
+            Provider::Gcp => {
+                crate::gcp::collect(&scope.http, &auth, job, cancel, &scope.inventory).await
+            }
+            Provider::Aws => {
+                crate::aws::collect(&scope.http, &auth, job, cancel, &scope.inventory).await
+            }
+            Provider::Azure => {
+                crate::azure::collect(&scope.http, &auth, job, cancel, &scope.inventory).await
+            }
             _ => CheckResult::failure(
                 job.target.name.clone(),
                 job.check,

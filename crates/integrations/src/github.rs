@@ -144,8 +144,7 @@ pub async fn collect(
                                     .unwrap_or_default(),
                                 target: job.target.name.clone(),
                                 state: state(text(row, &["/conclusion", "/status"])),
-                                created_at: timestamp(row, &["/created_at"])
-                                    .unwrap_or(result.started_at),
+                                created_at: timestamp(row, &["/created_at"]),
                             }
                         } else {
                             Data::Inventory {
@@ -221,5 +220,10 @@ pub async fn collect(
         ));
     }
     result.finished_at = chrono::Utc::now();
+    if job.target.change.is_some() && job.check != Check::Preflight {
+        let changed = super::changes::collect(http, job, token, cancel).await;
+        result.operations.extend(changed.operations);
+        result.observations.extend(changed.observations);
+    }
     result
 }

@@ -12,6 +12,7 @@ use monitor_integrations::transport::{Error, Http, bounded};
 #[derive(Clone)]
 struct Connector {
     client: reqwest::Client,
+    metadata: reqwest::Client,
     limit: usize,
 }
 impl std::fmt::Debug for Connector {
@@ -30,8 +31,13 @@ impl HttpConnector for Connector {
             if body.len() > connector.limit {
                 return Err(failure());
             }
-            let mut builder = connector
-                .client
+            let metadata = metadata_uri(request.uri(), request.method());
+            let client = if metadata {
+                &connector.metadata
+            } else {
+                &connector.client
+            };
+            let mut builder = client
                 .request(
                     reqwest::Method::from_bytes(request.method().as_bytes())
                         .map_err(|_| failure())?,
@@ -41,7 +47,14 @@ impl HttpConnector for Connector {
             for (name, value) in request.headers().iter() {
                 builder = builder.header(name, value);
             }
-            let response = builder.send().await.map_err(|_| failure())?;
+            let request = builder.build().map_err(|_| failure())?;
+            if !metadata
+                && !monitor_integrations::transport::allowed(&request)
+                && !authentication(&request)
+            {
+                return Err(failure());
+            }
+            let response = client.execute(request).await.map_err(|_| failure())?;
             let mut converted = http::Response::builder().status(response.status());
             for (name, value) in response.headers() {
                 converted = converted.header(name, value);
@@ -56,10 +69,78 @@ impl HttpConnector for Connector {
         })
     }
 }
-pub fn client(http: &Http, settings: &Settings) -> SharedHttpClient {
+pub(crate) fn authentication(request: &reqwest::Request) -> bool {
+    let host = request.url().host_str().unwrap_or("");
+    if request.url().scheme() != "https" || !host.ends_with(".amazonaws.com") {
+        return false;
+    }
+    if host.starts_with("oidc.") && request.url().path() == "/token" {
+        return true;
+    }
+    if !(host == "sts.amazonaws.com" || host.starts_with("sts.")) {
+        return false;
+    }
+    if request
+        .url()
+        .path()
+        .strip_prefix("/service/AWSSecurityTokenServiceV20110615/operation/")
+        .is_some_and(|operation| {
+            matches!(
+                operation,
+                "GetCallerIdentity" | "AssumeRole" | "AssumeRoleWithWebIdentity"
+            )
+        })
+    {
+        return true;
+    }
+    let action = request
+        .body()
+        .and_then(|body| body.as_bytes())
+        .and_then(|body| {
+            url::form_urlencoded::parse(body)
+                .find(|(key, _)| key == "Action")
+                .map(|(_, value)| value.into_owned())
+        });
+    action.is_some_and(|action| {
+        matches!(
+            action.as_str(),
+            "GetCallerIdentity" | "AssumeRole" | "AssumeRoleWithWebIdentity"
+        )
+    })
+}
+pub fn client(http: &Http, settings: &Settings) -> Result<SharedHttpClient, Error> {
+    let metadata = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .connect_timeout(settings.connect_timeout.duration())
+        .timeout(settings.attempt_timeout.duration())
+        .pool_max_idle_per_host(2)
+        .build()
+        .map_err(|_| Error::Unavailable)?;
     let connector = SharedHttpConnector::new(Connector {
         client: http.client().clone(),
+        metadata,
         limit: settings.response_bytes,
     });
-    http_client_fn(move |_, _| connector.clone())
+    Ok(http_client_fn(move |_, _| connector.clone()))
+}
+fn metadata_uri(uri: &str, method: &str) -> bool {
+    let Ok(url) = url::Url::parse(uri) else {
+        return false;
+    };
+    if url.scheme() != "http" {
+        return false;
+    }
+    match url.host_str() {
+        Some("169.254.169.254") => {
+            method == "PUT" && url.path() == "/latest/api/token"
+                || method == "GET"
+                    && (url.path().starts_with("/latest/meta-data/iam/")
+                        || url.path() == "/latest/dynamic/instance-identity/document")
+        }
+        Some(
+            "169.254.170.2" | "169.254.170.23" | "[fd00:ec2::23]" | "127.0.0.1" | "[::1]"
+            | "localhost",
+        ) => method == "GET" && url.path().contains("credentials"),
+        _ => false,
+    }
 }
