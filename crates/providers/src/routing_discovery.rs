@@ -53,7 +53,7 @@ impl Router {
                     && root.scope.len() == 12
                     && root.scope.bytes().all(|byte| byte.is_ascii_digit()))
                 .then_some(root.scope.as_str());
-                let loaded = tokio::select! {_ =cancel.cancelled()=>Err(Error::Cancelled),loaded=tokio::time::timeout(job.settings.operation_timeout.duration(),Auth::new(root.provider,profile.as_ref(),job.target.regions.first().map(String::as_str),account,&scope.http,&job.settings))=>loaded.map_err(|_|Error::Timeout).and_then(|result|result)};
+                let loaded = tokio::select! {_ =cancel.cancelled()=>Err(Error::Cancelled),loaded=tokio::time::timeout(job.settings.operation_timeout.duration(),Auth::new(root.provider,profile.as_ref(),job.target.regions.first().map(String::as_str),account,&scope.http,&job.settings,&self.processes))=>loaded.map_err(|_|Error::Timeout).and_then(|result|result)};
                 match loaded {
                     Ok(auth) => *cached = Some(Arc::new(auth)),
                     Err(error) => {

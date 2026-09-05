@@ -138,6 +138,7 @@ impl Router {
                 Some(&job.target.scope),
                 &scope.http,
                 &job.settings,
+                &self.processes,
             ),
         )
         .await
@@ -186,7 +187,7 @@ impl Router {
             *kube = Some(
                 tokio::time::timeout(
                     job.settings.operation_timeout.duration(),
-                    Kubernetes::new(job.target.context.as_deref()),
+                    Kubernetes::new(job.target.context.as_deref(), self.processes.clone()),
                 )
                 .await
                 .map_err(|_| Error::Timeout)??,

@@ -24,6 +24,7 @@ mod aws_tests;
 pub mod aws_transport;
 pub mod azure;
 pub mod azure_activity;
+mod azure_auth;
 mod azure_details;
 pub mod azure_logs;
 mod azure_metric_discovery;

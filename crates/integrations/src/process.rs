@@ -48,6 +48,7 @@ impl Drop for Group {
         self.terminate();
     }
 }
+#[derive(Clone)]
 pub struct Processes {
     permits: std::sync::Arc<monitor_core::budget::Budget>,
 }
@@ -59,6 +60,9 @@ impl Processes {
     }
     pub fn resize(&self, limit: usize) {
         self.permits.resize(limit);
+    }
+    pub fn budget(&self) -> std::sync::Arc<monitor_core::budget::Budget> {
+        self.permits.clone()
     }
     /// Explicit authentication inherits the foreground terminal so browser/device prompts work.
     pub async fn login(&self, credential: Credential, timeout: Duration) -> Result<(), Error> {
@@ -98,11 +102,22 @@ impl Processes {
         timeout: Duration,
         cancel: &CancellationToken,
     ) -> Result<Output, Error> {
-        let permit = tokio::select! { _ = cancel.cancelled() => return Err(Error::Cancelled), permit = self.permits.acquire() => permit.map_err(|_| Error::Unavailable)? };
         let (executable, args) = command(helper)?;
         let mut command = Command::new(executable);
+        command.args(args);
+        self.run_command(command, limit, timeout, cancel).await
+    }
+    /// Only fixed collection helpers and configured credential plugins call this internal runner.
+    pub async fn run_command(
+        &self,
+        mut command: Command,
+        limit: usize,
+        timeout: Duration,
+        cancel: &CancellationToken,
+    ) -> Result<Output, Error> {
+        let deadline = tokio::time::Instant::now() + timeout;
+        let permit = tokio::select! {_=cancel.cancelled()=>return Err(Error::Cancelled),permit=tokio::time::timeout_at(deadline,self.permits.acquire())=>permit.map_err(|_|Error::Timeout)?.map_err(|_|Error::Unavailable)?};
         command
-            .args(args)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -124,7 +139,7 @@ impl Processes {
         };
         let outcome = tokio::select! {
             _ = cancel.cancelled() => Err(Error::Cancelled),
-            result = tokio::time::timeout(timeout, collect) => result.map_err(|_| Error::Timeout).and_then(|r| r),
+            result = tokio::time::timeout_at(deadline, collect) => result.map_err(|_| Error::Timeout).and_then(|r| r),
         };
         if outcome.is_err() {
             group.terminate();

@@ -3,6 +3,7 @@ pub mod changes;
 pub mod endpoint;
 pub mod github;
 mod github_commits;
+mod kube_auth;
 pub mod kube_links;
 pub mod kube_projection;
 pub mod kubernetes;

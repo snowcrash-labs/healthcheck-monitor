@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 pub enum Auth {
     Gcp(google_cloud_auth::credentials::AccessTokenCredentials),
-    Azure(Arc<dyn TokenCredential>),
+    Azure(Box<crate::azure_auth::Credential>),
     Aws(Box<crate::aws_clients::AwsClients>),
     None,
 }
@@ -18,6 +18,7 @@ impl Auth {
         scope: Option<&str>,
         http: &monitor_integrations::transport::Http,
         settings: &monitor_core::config::settings::Settings,
+        processes: &monitor_integrations::process::Processes,
     ) -> Result<Self, Error> {
         match provider {
             Provider::Gcp => {
@@ -52,21 +53,26 @@ impl Auth {
                     azure_identity::AzureCliCredential::new(Some(
                         azure_identity::AzureCliCredentialOptions {
                             tenant_id: profile.and_then(|p| p.tenant.clone()),
-                            ..Default::default()
+                            subscription: scope.map(String::from),
+                            executor: Some(Arc::new(crate::azure_auth::Executor {
+                                processes: processes.clone(),
+                                timeout: settings.attempt_timeout.duration(),
+                                limit: settings.response_bytes.min(65536),
+                            })),
                         },
                     ))
                     .map_err(|_| Error::Authentication)?
                 };
+                let credential = crate::azure_auth::Credential::new(credential);
                 if let Some(expected) =
                     profile.and_then(|profile| profile.expected_identity.as_deref())
                 {
                     let token = credential
-                        .get_token(&["https://management.azure.com/.default"], None)
-                        .await
-                        .map_err(|_| Error::Authentication)?;
-                    crate::auth_identity::azure(token.token.secret(), expected)?;
+                        .bearer(crate::azure_auth::Audience::Management)
+                        .await?;
+                    crate::auth_identity::azure(&token, expected)?;
                 }
-                Ok(Self::Azure(credential))
+                Ok(Self::Azure(Box::new(credential)))
             }
             Provider::Aws => {
                 let mut loader = aws_config::defaults(aws_config::BehaviorVersion::latest())
@@ -135,20 +141,14 @@ impl Auth {
             return Err(Error::Authentication);
         };
         credentials
-            .get_token(&["https://containerregistry.azure.net/.default"], None)
+            .bearer(crate::azure_auth::Audience::Registry)
             .await
-            .map(|token| token.token.secret().to_string())
-            .map_err(|_| Error::Authentication)
     }
     pub async fn vault_bearer(&self) -> Result<String, Error> {
         let Self::Azure(credentials) = self else {
             return Err(Error::Authentication);
         };
-        credentials
-            .get_token(&["https://vault.azure.net/.default"], None)
-            .await
-            .map(|token| token.token.secret().to_string())
-            .map_err(|_| Error::Authentication)
+        credentials.bearer(crate::azure_auth::Audience::Vault).await
     }
     pub async fn bearer_for(&self, logs: bool) -> Result<String, Error> {
         match self {
@@ -157,18 +157,15 @@ impl Auth {
                 .await
                 .map(|t| t.token)
                 .map_err(|_| Error::Authentication),
-            Self::Azure(credentials) => credentials
-                .get_token(
-                    &[if logs {
-                        "https://api.loganalytics.io/.default"
+            Self::Azure(credentials) => {
+                credentials
+                    .bearer(if logs {
+                        crate::azure_auth::Audience::Logs
                     } else {
-                        "https://management.azure.com/.default"
-                    }],
-                    None,
-                )
-                .await
-                .map(|t| t.token.secret().to_string())
-                .map_err(|_| Error::Authentication),
+                        crate::azure_auth::Audience::Management
+                    })
+                    .await
+            }
             _ => Err(Error::Authentication),
         }
     }

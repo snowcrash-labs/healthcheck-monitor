@@ -10,10 +10,13 @@ use tokio_util::sync::CancellationToken;
 
 #[derive(Clone)]
 pub struct Kubernetes {
-    client: kube::Client,
+    session: std::sync::Arc<tokio::sync::Mutex<crate::kube_auth::Session>>,
 }
 impl Kubernetes {
-    pub async fn new(context: Option<&str>) -> Result<Self, Error> {
+    pub async fn new(
+        context: Option<&str>,
+        processes: crate::process::Processes,
+    ) -> Result<Self, Error> {
         let config = if let Some(context) = context {
             kube::Config::from_kubeconfig(&kube::config::KubeConfigOptions {
                 context: Some(context.into()),
@@ -27,7 +30,9 @@ impl Kubernetes {
                 .map_err(|_| Error::Authentication)?
         };
         Ok(Self {
-            client: kube::Client::try_from(config).map_err(|_| Error::Authentication)?,
+            session: std::sync::Arc::new(tokio::sync::Mutex::new(crate::kube_auth::Session::new(
+                config, processes,
+            )?)),
         })
     }
     /// request_stream avoids kube's unbounded request_text accumulation.
@@ -41,16 +46,13 @@ impl Kubernetes {
             .body(Vec::new())
             .map_err(|_| Error::Malformed)?;
         let operation = async {
-            let stream = self
-                .client
-                .request_stream(request)
-                .await
-                .map_err(|e| match e {
-                    kube::Error::Api(response) if response.code == 403 => Error::Denied,
-                    kube::Error::Api(response) if response.code == 401 => Error::Authentication,
-                    kube::Error::Api(response) if response.code == 404 => Error::Unavailable,
-                    _ => Error::Unavailable,
-                })?;
+            let client = self.session.lock().await.client(job, cancel).await?;
+            let stream = client.request_stream(request).await.map_err(|e| match e {
+                kube::Error::Api(response) if response.code == 403 => Error::Denied,
+                kube::Error::Api(response) if response.code == 401 => Error::Authentication,
+                kube::Error::Api(response) if response.code == 404 => Error::Unavailable,
+                _ => Error::Unavailable,
+            })?;
             let mut bytes = Vec::new();
             stream
                 .take(job.settings.response_bytes as u64 + 1)
