@@ -10,7 +10,7 @@ pub async fn aws(auth: &Auth, job: &Job, cancel: &CancellationToken) -> CheckRes
         return result;
     };
     result.operations.clear();
-    for region in &job.target.regions {
+    for region in &crate::aws_metric_plan::regions(job) {
         let client = match clients.cloudwatch(region).await {
             Ok(client) => client,
             Err(error) => {
@@ -21,11 +21,12 @@ pub async fn aws(auth: &Auth, job: &Job, cancel: &CancellationToken) -> CheckRes
             }
         };
         let queries = if job.target.metrics.is_empty() {
-            let (queries, operations) = crate::aws_metric_discovery::discover(&client, job).await;
+            let (queries, operations) =
+                crate::aws_metric_discovery::discover(&client, job, region).await;
             result.operations.extend(operations);
             queries
         } else {
-            job.target.metrics.clone()
+            crate::aws_metric_plan::configured(job, region)
         };
         for batch in queries.chunks(500) {
             let remaining = job

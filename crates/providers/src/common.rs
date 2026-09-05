@@ -110,14 +110,18 @@ async fn request_inner(
                 .header("content-type", "application/x-amz-json-1.1");
         }
     } else {
-        builder = builder.bearer_auth(
-            auth.bearer_for(
-                endpoint
-                    .url
-                    .starts_with("https://api.loganalytics.azure.com/"),
+        builder = if endpoint.id.starts_with("kv-") {
+            builder.bearer_auth(auth.vault_bearer().await?)
+        } else {
+            builder.bearer_auth(
+                auth.bearer_for(
+                    endpoint
+                        .url
+                        .starts_with("https://api.loganalytics.azure.com/"),
+                )
+                .await?,
             )
-            .await?,
-        );
+        };
     }
     let mut request = builder.build().map_err(|_| Error::Malformed)?;
     if let Some((service, region, _)) = &endpoint.aws {

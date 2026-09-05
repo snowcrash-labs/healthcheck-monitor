@@ -143,3 +143,42 @@ fn keda_projection_excludes_auth_and_environment_metadata() -> Result<(), Box<dy
     assert!(!encoded.contains("customer-secret"));
     Ok(())
 }
+#[test]
+fn external_secret_sync_age_and_nonperiodic_modes_are_distinct()
+-> Result<(), Box<dyn std::error::Error>> {
+    let now = chrono::Utc::now();
+    let mut value = json!({"metadata":{"name":"credential","namespace":"jobs"},"spec":{"refreshInterval":"1h"},"status":{"refreshTime":(now-chrono::Duration::hours(3)).to_rfc3339(),"conditions":[{"type":"Ready","status":"True"}]}});
+    let settings = monitor_core::config::settings::Settings::default();
+    let observations = kube_projection::project(&job()?, "externalsecrets", &value);
+    let observation = observations
+        .iter()
+        .find(|observation| matches!(observation.data, Data::Synchronization { .. }))
+        .ok_or("missing synchronization")?;
+    assert_eq!(
+        monitor_core::policy::evaluate(observation, None, &settings, now).health,
+        Health::Degraded
+    );
+    for interval in ["0", "0s", "0m"] {
+        value["spec"]["refreshInterval"] = json!(interval);
+        let observations = kube_projection::project(&job()?, "externalsecrets", &value);
+        assert!(observations.iter().any(|observation| matches!(
+            observation.data,
+            Data::Synchronization {
+                interval_seconds: None,
+                ready: Some(true),
+                ..
+            }
+        )));
+    }
+    value["spec"]["refreshInterval"] = json!("1h");
+    value["spec"]["refreshPolicy"] = json!("OnChange");
+    let observations = kube_projection::project(&job()?, "externalsecrets", &value);
+    assert!(observations.iter().any(|observation| matches!(
+        observation.data,
+        Data::Synchronization {
+            interval_seconds: None,
+            ..
+        }
+    )));
+    Ok(())
+}

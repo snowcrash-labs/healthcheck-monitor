@@ -7,6 +7,7 @@ use serde_json::Value;
 pub use crate::projection_rows::rows;
 pub fn project(job: &Job, endpoint: &Endpoint, value: &Value) -> Vec<Observation> {
     let mut result = project_data(job, endpoint, value);
+    result.extend(crate::metadata_fields::project(job, endpoint, value));
     if job.target.provider == Provider::Azure && endpoint.id == "registries" {
         result.extend(crate::azure_projection::registry(job, endpoint, value));
     }
@@ -20,9 +21,20 @@ pub fn project(job: &Job, endpoint: &Endpoint, value: &Value) -> Vec<Observation
             Data::AdvertisedEndpoint { url: url.clone() },
         ));
     }
+    if !job.target.resources.is_empty() {
+        result.retain(|observation| {
+            job.target
+                .resources
+                .iter()
+                .any(|selector| observation.resource.contains(selector))
+        });
+    }
     result
 }
 fn project_data(job: &Job, endpoint: &Endpoint, value: &Value) -> Vec<Observation> {
+    if endpoint.id.starts_with("kv-") {
+        return crate::key_vault::project(job, endpoint, value);
+    }
     if endpoint.id.starts_with("registry-manifest/") {
         return crate::registry_manifests::project(job, endpoint, value);
     }
@@ -201,29 +213,6 @@ fn project_data(job: &Job, endpoint: &Endpoint, value: &Value) -> Vec<Observatio
                 .map(|v| matches!(v, "ISSUED" | "Succeeded")),
         })];
     }
-    if family == "cloud-run" {
-        let conditions = value
-            .pointer("/terminalCondition")
-            .or_else(|| value.pointer("/status/conditions"));
-        let state = conditions
-            .and_then(|v| text(v, &["/state"]))
-            .map(|s| {
-                if s == "CONDITION_SUCCEEDED" {
-                    ServiceState::Ready
-                } else if s == "CONDITION_FAILED" {
-                    ServiceState::Failed
-                } else {
-                    ServiceState::Starting
-                }
-            })
-            .unwrap_or(ServiceState::Unknown);
-        return vec![obs(Data::Service {
-            state,
-            replicas: None,
-            backup_enabled: None,
-            encrypted: None,
-        })];
-    }
     if family == "autoscaling" {
         let desired = number(value, &["/DesiredCapacity"]).unwrap_or(0.0) as u32;
         let ready = value
@@ -231,13 +220,16 @@ fn project_data(job: &Job, endpoint: &Endpoint, value: &Value) -> Vec<Observatio
             .and_then(Value::as_array)
             .map_or(0, |a| {
                 a.iter()
-                    .filter(|v| text(v, &["/HealthStatus"]) == Some("Healthy"))
+                    .filter(|v| {
+                        text(v, &["/HealthStatus"]) == Some("Healthy")
+                            && text(v, &["/LifecycleState"]) == Some("InService")
+                    })
                     .count() as u32
             });
         return vec![obs(Data::Workload {
             desired,
             ready,
-            created_at: None,
+            created_at: timestamp(value, &["/CreatedTime"]),
             draining: false,
             node: false,
         })];

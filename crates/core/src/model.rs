@@ -209,6 +209,8 @@ pub struct Snapshot {
     pub retired: BTreeMap<String, Transition>,
     pub confirmations: BTreeMap<String, RemovalConfirmation>,
     pub persistence_fault: bool,
+    #[serde(default)]
+    pub dropped_transitions: u64,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

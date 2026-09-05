@@ -4,6 +4,28 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Data {
+    NetworkPolicy {
+        direction: Option<String>,
+        allows_public: Option<bool>,
+        protocols: Vec<String>,
+        ports: Vec<String>,
+        priority: Option<u32>,
+    },
+    KeyMetadata {
+        enabled: Option<bool>,
+        purpose: Option<String>,
+        rotates_at: Option<DateTime<Utc>>,
+        expires_at: Option<DateTime<Utc>>,
+    },
+    Maintenance {
+        window: Option<String>,
+        pending: bool,
+    },
+    Synchronization {
+        ready: Option<bool>,
+        last_sync: Option<DateTime<Utc>>,
+        interval_seconds: Option<u64>,
+    },
     Registry {
         host: String,
     },
@@ -240,7 +262,10 @@ impl Data {
     pub fn is_health_evidence(&self) -> bool {
         !matches!(
             self,
-            Self::Registry { .. }
+            Self::NetworkPolicy { .. }
+                | Self::KeyMetadata { .. }
+                | Self::Maintenance { .. }
+                | Self::Registry { .. }
                 | Self::Artifact { .. }
                 | Self::Commit { .. }
                 | Self::SloDefinition { .. }

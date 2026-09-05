@@ -4,6 +4,7 @@ use monitor_core::{
     config::types::Config,
     error::Error,
     model::Transition,
+    publication::Publisher,
     report::exit_code,
     scheduler::{Mode, drive},
     state::State,
@@ -51,6 +52,12 @@ pub async fn monitor(config_path: &Path, options: Options, mode: Mode) -> Result
         router.restore_logs(&state.snapshot).await;
     }
     let stop = CancellationToken::new();
+    let expiry = match mode {
+        Mode::Watch {
+            duration: Some(duration),
+        } => Some(tokio::time::Instant::now() + duration),
+        _ => None,
+    };
     let (updates, receiver) = watch::channel(effective.clone());
     let (sender, mut results) = mpsc::channel(settings.concurrency);
     let task = tokio::spawn(drive(router.clone(), receiver, mode, sender, stop.clone()));
@@ -61,12 +68,18 @@ pub async fn monitor(config_path: &Path, options: Options, mode: Mode) -> Result
     history.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     history.tick().await;
     let mut transitions: Vec<Transition> = Vec::new();
+    let mut publisher = Publisher::new(store);
+    let mut disk_tick = tokio::time::interval(std::time::Duration::from_secs(1));
+    disk_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     let mut cancelled = false;
+    let mut cleanup_deadline = None;
     loop {
         tokio::select! {
-            _ = interrupt.recv(), if !cancelled => { cancelled = true; stop.cancel(); },
-            _ = terminate.recv(), if !cancelled => { cancelled = true; stop.cancel(); },
-            _ = reload.recv(), if matches!(mode, Mode::Watch { .. }) && !cancelled => {
+            _ = interrupt.recv(), if cleanup_deadline.is_none() => { cancelled = true; stop.cancel(); cleanup_deadline = Some(tokio::time::Instant::now() + std::time::Duration::from_secs(4)); },
+            _ = terminate.recv(), if cleanup_deadline.is_none() => { cancelled = true; stop.cancel(); cleanup_deadline = Some(tokio::time::Instant::now() + std::time::Duration::from_secs(4)); },
+            _ = until(expiry), if cleanup_deadline.is_none() => { stop.cancel(); cleanup_deadline = Some(tokio::time::Instant::now() + std::time::Duration::from_secs(4)); },
+            _ = until(cleanup_deadline) => { task.abort(); break; },
+            _ = reload.recv(), if matches!(mode, Mode::Watch { .. }) && cleanup_deadline.is_none() => {
                 match load(config_path).and_then(|config| config.resolve(&selection).map(|e| (config, e))) {
                     Ok((config, replacement)) => {
                         router.reload(config).await;
@@ -81,9 +94,19 @@ pub async fn monitor(config_path: &Path, options: Options, mode: Mode) -> Result
                     Err(_) => tracing::warn!("Configuration reload rejected; previous configuration retained"),
                 }
             },
-            _ = history.tick(), if matches!(mode, Mode::Watch { .. }) => {
-                transitions.extend(state.expire(settings.freshness(), chrono::Utc::now()));
-                publish(&store, &mut state, &mut transitions, &settings).await;
+            _ = history.tick(), if matches!(mode, Mode::Watch { .. }) && cleanup_deadline.is_none() => {
+                let expired = state.expire(settings.freshness(), chrono::Utc::now());
+                append(&mut transitions, expired, &settings, &mut state);
+                publisher.request();
+                publisher.start(&state.snapshot, &transitions, &settings);
+            },
+            _ = disk_tick.tick(), if matches!(mode, Mode::Watch { .. }) && cleanup_deadline.is_none() => {
+                match publisher.poll().await {
+                    Some(Ok(count)) => { transitions.drain(..count.min(transitions.len())); state.snapshot.persistence_fault = false; },
+                    Some(Err(())) => { state.snapshot.persistence_fault = true; tracing::error!("Persistence failed; retry scheduled while collection continues"); },
+                    None => {},
+                }
+                publisher.start(&state.snapshot, &transitions, &settings);
             },
             result = results.recv() => {
                 let Some((job, result)) = result else { break };
@@ -91,14 +114,27 @@ pub async fn monitor(config_path: &Path, options: Options, mode: Mode) -> Result
                 tracing::info!(target_name = %job.target.name, check = ?job.check, complete = result.complete(), observations = result.observations.len(), "Check finished");
                 let mut new = state.apply(&job, result, chrono::Utc::now());
                 if matches!(job.check,monitor_core::model::Check::Inventory|monitor_core::model::Check::Kubernetes|monitor_core::model::Check::Github|monitor_core::model::Check::Releases) {new.extend(state.refresh_releases(&effective.jobs,chrono::Utc::now()));}
-                let remaining = settings.max_findings.saturating_mul(2).saturating_sub(transitions.len());
-                if new.len() > remaining { state.snapshot.persistence_fault = true; }
-                transitions.extend(new.into_iter().take(remaining));
+                append(&mut transitions, new, &settings, &mut state);
             }
         }
     }
-    task.await.map_err(|_| Error::Evidence)?;
-    publish(&store, &mut state, &mut transitions, &settings).await;
+    if let Err(error) = task.await
+        && !error.is_cancelled()
+    {
+        return Err(Error::Evidence);
+    }
+    state.snapshot.persistence_fault = !publisher
+        .finish(
+            &state.snapshot,
+            &mut transitions,
+            &settings,
+            cleanup_deadline
+                .unwrap_or_else(|| tokio::time::Instant::now() + std::time::Duration::from_secs(4)),
+        )
+        .await;
+    if state.snapshot.persistence_fault {
+        tracing::error!("Final evidence publication failed or exceeded cleanup deadline");
+    }
     if cancelled {
         return Ok(130);
     }
@@ -107,26 +143,32 @@ pub async fn monitor(config_path: &Path, options: Options, mode: Mode) -> Result
         Mode::Watch { .. } => 0,
     })
 }
-async fn publish(
-    store: &Arc<Store>,
-    state: &mut State,
-    transitions: &mut Vec<Transition>,
-    settings: &monitor_core::config::settings::Settings,
-) {
-    let store = store.clone();
-    let mut snapshot = state.snapshot.clone();
-    snapshot.captured_at = chrono::Utc::now();
-    snapshot.persistence_fault = false;
-    let events = transitions.clone();
-    let settings = settings.clone();
-    match tokio::task::spawn_blocking(move || store.publish(&snapshot, &events, &settings)).await {
-        Ok(Ok(())) => {
-            state.snapshot.persistence_fault = false;
-            transitions.clear();
-        }
-        _ => {
-            state.snapshot.persistence_fault = true;
-            tracing::error!("Persistence failed; collection continues within configured bounds");
-        }
+async fn until(deadline: Option<tokio::time::Instant>) {
+    match deadline {
+        Some(deadline) => tokio::time::sleep_until(deadline).await,
+        None => std::future::pending().await,
     }
+}
+fn append(
+    transitions: &mut Vec<Transition>,
+    incoming: Vec<Transition>,
+    settings: &monitor_core::config::settings::Settings,
+    state: &mut State,
+) {
+    let remaining = settings
+        .max_findings
+        .saturating_mul(2)
+        .saturating_sub(transitions.len());
+    if incoming.len() > remaining {
+        state.snapshot.dropped_transitions = state
+            .snapshot
+            .dropped_transitions
+            .saturating_add((incoming.len() - remaining) as u64);
+        state.snapshot.persistence_fault = true;
+        tracing::error!(
+            discarded = incoming.len() - remaining,
+            "Transition retention limit reached"
+        );
+    }
+    transitions.extend(incoming.into_iter().take(remaining));
 }

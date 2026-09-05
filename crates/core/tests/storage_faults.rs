@@ -88,3 +88,27 @@ fn retention_bounds_all_published_service_artifacts() -> Result<(), Box<dyn std:
     assert!(total <= settings.history_bytes);
     Ok(())
 }
+#[test]
+fn restart_removes_owned_partial_files_and_recovers_without_latest_marker()
+-> Result<(), Box<dyn std::error::Error>> {
+    let directory = tempfile::tempdir()?;
+    let snapshot = State::new("restart".into(), vec![]).snapshot;
+    {
+        let store = Store::open(directory.path())?;
+        store.publish(&snapshot, &[], &Settings::default())?;
+    }
+    std::fs::remove_file(directory.path().join("monitor-latest.json"))?;
+    let partial = directory
+        .path()
+        .join(".monitor-snapshot-20260905T120000.000000000Z.json.tmp");
+    let operator = directory.path().join(".monitor-snapshot-notes.json.tmp");
+    std::fs::write(&partial, b"partial")?;
+    std::fs::write(&operator, b"keep")?;
+    let store = Store::open(directory.path())?;
+    assert!(!partial.exists());
+    assert!(operator.exists());
+    let recovered = store.latest(1024 * 1024)?.ok_or("missing fallback")?;
+    assert_eq!(recovered.captured_at, snapshot.captured_at);
+    assert_eq!(recovered.revision, "restart");
+    Ok(())
+}

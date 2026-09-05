@@ -38,6 +38,24 @@ impl Store {
             .open(lock_path)?;
         lock.set_permissions(fs::Permissions::from_mode(0o600))?;
         lock.try_lock().map_err(|_| Error::Locked)?;
+        for entry in fs::read_dir(path)? {
+            let entry = entry?;
+            let name = entry.file_name();
+            let Some(name) = name
+                .to_str()
+                .and_then(|name| name.strip_prefix('.'))
+                .and_then(|name| name.strip_suffix(".tmp"))
+            else {
+                continue;
+            };
+            if matches!(name, "monitor-latest.json" | "monitor-report.md") || owned(name).is_some()
+            {
+                reject_symlink(&entry.path())?;
+                if entry.file_type()?.is_file() {
+                    fs::remove_file(entry.path())?;
+                }
+            }
+        }
         Ok(Self {
             path: path.to_path_buf(),
             _lock: lock,
@@ -92,25 +110,29 @@ impl Store {
         let temp = self.path.join(format!(".{name}.tmp"));
         reject_symlink(&target)?;
         reject_symlink(&temp)?;
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .mode(0o600)
-            .open(&temp)?;
-        file.set_permissions(fs::Permissions::from_mode(0o600))?;
-        file.write_all(bytes)?;
-        file.sync_all()?;
-        fs::rename(&temp, target)?;
-        File::open(&self.path)?.sync_all()?;
-        Ok(())
+        let write = || -> Result<(), Error> {
+            let mut file = OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .mode(0o600)
+                .open(&temp)?;
+            file.set_permissions(fs::Permissions::from_mode(0o600))?;
+            file.write_all(bytes)?;
+            file.sync_all()?;
+            fs::rename(&temp, &target)?;
+            File::open(&self.path)?.sync_all()?;
+            Ok(())
+        };
+        let outcome = write();
+        if outcome.is_err() {
+            let _ = fs::remove_file(&temp);
+        }
+        outcome
     }
     pub fn latest(&self, limit: usize) -> Result<Option<Snapshot>, Error> {
         let latest = self.path.join("monitor-latest.json");
         reject_symlink(&latest)?;
-        if !latest.exists() {
-            return Ok(None);
-        }
         match read(&latest, limit) {
             Ok(snapshot) => Ok(Some(snapshot)),
             Err(_) => {
@@ -125,6 +147,9 @@ impl Store {
                     .take(10001)
                     .collect();
                 paths.sort();
+                if paths.is_empty() && !latest.exists() {
+                    return Ok(None);
+                }
                 for path in paths.into_iter().rev() {
                     if let Ok(snapshot) = read(&path, limit) {
                         return Ok(Some(snapshot));

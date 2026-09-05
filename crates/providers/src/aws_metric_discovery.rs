@@ -9,14 +9,16 @@ use std::collections::BTreeMap;
 pub async fn discover(
     client: &aws_sdk_cloudwatch::Client,
     job: &Job,
+    region: &str,
 ) -> (Vec<MetricQuery>, Vec<Operation>) {
     let mut metrics = Vec::new();
     let mut operations = Vec::new();
     let namespaces: Vec<_> = crate::metric_catalog::AWS_NAMESPACES
         .iter()
         .filter(|namespace| {
-            job.check != Check::Queues
-                || matches!(**namespace, "AWS/SQS" | "AWS/SNS" | "AWS/Events")
+            crate::aws_metric_plan::namespace_in_region(job, namespace, region)
+                && (job.check != Check::Queues
+                    || matches!(**namespace, "AWS/SQS" | "AWS/SNS" | "AWS/Events"))
         })
         .collect();
     for (index, namespace) in namespaces.iter().enumerate() {
@@ -68,7 +70,7 @@ pub async fn discover(
                                 .map(|(key, value)| (key.as_str(), value.as_str())),
                         );
                         metrics.push(MetricQuery {
-                            aggregation: Default::default(),
+                            aggregation: crate::aws_metric_plan::aggregation(namespace, name),
                             name: format!("{namespace}/{name}/{suffix}"),
                             namespace: (**namespace).into(),
                             metric: name.into(),
@@ -110,7 +112,7 @@ pub async fn discover(
             }
         }
         operations.push(operation(
-            &format!("metric-discovery/{namespace}"),
+            &format!("metric-discovery/{region}/{namespace}"),
             coverage.map(|_| count).as_ref().copied(),
             pages,
             true,

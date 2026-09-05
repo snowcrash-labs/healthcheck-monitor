@@ -22,7 +22,7 @@ pub fn exit_code(snapshot: &Snapshot, strict: bool) -> u8 {
     }
     0
 }
-fn safe(value: &str) -> String {
+pub(crate) fn safe(value: &str) -> String {
     value
         .chars()
         .filter(|c| !c.is_control())
@@ -76,7 +76,7 @@ pub fn markdown(snapshot: &Snapshot) -> String {
         }
     }
     out.push_str("\n| Resource | Rule | Severity | Stale |\n| --- | --- | --- | --- |\n");
-    for finding in snapshot.findings.values() {
+    for finding in snapshot.findings.values().take(200) {
         out.push_str(&format!(
             "| {} | {} | {:?} | {} |\n",
             safe(&finding.resource),
@@ -85,12 +85,24 @@ pub fn markdown(snapshot: &Snapshot) -> String {
             finding.stale
         ));
     }
+    if snapshot.findings.len() > 200 {
+        out.push_str(
+            "\nFinding table limited to 200 entries; consult the snapshot for the complete set.\n",
+        );
+    }
     if snapshot.findings.is_empty() {
         out.push_str("\nNo active findings. Inventory and missing telemetry do not establish system health.\n");
     }
     if snapshot.persistence_fault {
         out.push_str("\nPersistence fault: some history could not be published.\n");
     }
+    if snapshot.dropped_transitions > 0 {
+        out.push_str(&format!(
+            "\nHistory incomplete: {} transitions exceeded the in-memory retention limit.\n",
+            snapshot.dropped_transitions
+        ));
+    }
+    crate::report_details::append(snapshot, &mut out);
     out
 }
 pub fn diff(old: &Snapshot, new: &Snapshot) -> Vec<Transition> {

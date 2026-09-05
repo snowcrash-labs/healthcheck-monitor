@@ -55,6 +55,7 @@ impl State {
                 retired: BTreeMap::new(),
                 confirmations: BTreeMap::new(),
                 persistence_fault: false,
+                dropped_transitions: 0,
             },
         }
     }

@@ -34,6 +34,13 @@ pub fn followups(
             json!({"TableName":name}),
             "/Table",
         )),
+        "dynamodb-detail" => Some((
+            "dynamodb-backups",
+            "dynamodb",
+            "DynamoDB_20120810.DescribeContinuousBackups",
+            json!({"TableName":name}),
+            "/ContinuousBackupsDescription",
+        )),
         "ecs-clusters" => Some((
             "ecs-services",
             "ecs",

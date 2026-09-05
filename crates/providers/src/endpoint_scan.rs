@@ -56,6 +56,9 @@ pub async fn fetch<S: Source>(
                             break;
                         }
                         let projected = crate::resource_projection::project(job, &endpoint, row);
+                        if let Err(error) = crate::metadata_fields::validate(job, &endpoint, row) {
+                            outcome = Err(error);
+                        }
                         let available = job
                             .settings
                             .max_assets
@@ -80,12 +83,18 @@ pub async fn fetch<S: Source>(
                     }
                     outcome = outcome.map(|n| n + rows.len());
                 } else if endpoint.items.is_empty() {
+                    let projected = crate::resource_projection::project(job, &endpoint, &payload);
+                    let available = job
+                        .settings
+                        .max_assets
+                        .saturating_sub(result.observations.len());
+                    outcome = crate::metadata_fields::validate(job, &endpoint, &payload).map(|_| 1);
+                    if projected.len() > available {
+                        outcome = Err(Error::Limit);
+                    }
                     result
                         .observations
-                        .extend(crate::resource_projection::project(
-                            job, &endpoint, &payload,
-                        ));
-                    outcome = Ok(1);
+                        .extend(projected.into_iter().take(available));
                 } else if payload.as_object().is_some_and(|m| m.is_empty())
                     || endpoint.items == "/items"
                         && payload
@@ -145,10 +154,13 @@ pub async fn fetch<S: Source>(
                     match (next, old) {
                         (Ok(next), Ok(old))
                             if next.origin() == old.origin()
-                                && next.path().starts_with(&format!(
+                                && (next.path().starts_with(&format!(
                                     "/subscriptions/{}/",
                                     job.target.scope
-                                )) =>
+                                )) || old
+                                    .host_str()
+                                    .is_some_and(|host| host.ends_with(".vault.azure.net"))
+                                    && next.path() == old.path()) =>
                         {
                             endpoint.url = next.into()
                         }

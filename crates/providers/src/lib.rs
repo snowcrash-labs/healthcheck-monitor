@@ -13,6 +13,7 @@ mod aws_errors;
 pub mod aws_logs;
 pub mod aws_metric_batch;
 mod aws_metric_discovery;
+mod aws_metric_plan;
 pub mod aws_metrics;
 mod aws_projection;
 pub mod aws_slo;
@@ -44,7 +45,9 @@ mod google_credentials;
 #[cfg(test)]
 mod identity_tests;
 pub mod inventory_cache;
+mod key_vault;
 mod log_cursor;
+mod metadata_fields;
 pub mod metric_catalog;
 pub mod metric_identity;
 pub mod metric_window;

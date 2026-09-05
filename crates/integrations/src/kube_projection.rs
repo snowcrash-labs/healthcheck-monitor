@@ -171,7 +171,30 @@ pub fn project(job: &Job, kind: &str, value: &Value) -> Vec<Observation> {
                 node: false,
             }
         }
-        "certificates" | "externalsecrets" | "scaledobjects" => Data::Condition {
+        "externalsecrets" => {
+            let periodic = !matches!(
+                text(value, &["/spec/refreshPolicy"]),
+                Some("CreatedOnce" | "OnChange")
+            );
+            let interval = text(value, &["/spec/refreshInterval"])
+                .map(|value| {
+                    if matches!(value, "0" | "0s" | "0m" | "0h") {
+                        Some(0)
+                    } else {
+                        value
+                            .parse::<monitor_core::config::duration::Span>()
+                            .ok()
+                            .map(|value| value.0)
+                    }
+                })
+                .unwrap_or(Some(3600));
+            Data::Synchronization {
+                ready: interval.and_then(|_| condition(value, "Ready")),
+                last_sync: timestamp(value, &["/status/refreshTime"]),
+                interval_seconds: interval.filter(|interval| periodic && *interval > 0),
+            }
+        }
+        "certificates" | "scaledobjects" => Data::Condition {
             rule: format!("{kind}-not-ready"),
             healthy: condition(value, "Ready"),
         },

@@ -64,6 +64,9 @@ pub fn evaluate(
     let error = |rule| fault(obs, rule, Severity::Error, Confidence::Direct);
     let warning = |rule| fault(obs, rule, Severity::Warning, Confidence::Direct);
     match &obs.data {
+        Data::Synchronization { .. } => {
+            return crate::synchronization::evaluate(obs, settings, now);
+        }
         Data::Provenance { .. } => return crate::releases::evaluate(obs, now),
         Data::Slo { .. } => return crate::slo_policy::evaluate(obs, settings),
         Data::Progress {
@@ -250,7 +253,10 @@ pub fn evaluate(
             }
             return result(Health::Unknown);
         }
-        Data::Registry { .. }
+        Data::NetworkPolicy { .. }
+        | Data::KeyMetadata { .. }
+        | Data::Maintenance { .. }
+        | Data::Registry { .. }
         | Data::Artifact { .. }
         | Data::Commit { .. }
         | Data::SloDefinition { .. }

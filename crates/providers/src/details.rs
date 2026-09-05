@@ -4,11 +4,16 @@ use monitor_core::{config::resolve::Job, model::Provider};
 use monitor_integrations::projection::text;
 use serde_json::{Value, json};
 pub fn followups(job: &Job, parent: &Endpoint, row: &Value) -> Vec<Endpoint> {
+    if parent.id.starts_with("kv-") {
+        return crate::key_vault::followups(job, parent, row);
+    }
     if parent.id.starts_with("registry-images/") {
         return crate::registry_manifests::followups(job, parent, row);
     }
     let family = parent.id.split('/').next().unwrap_or("");
-    let name = if job.target.provider == Provider::Azure {
+    let name = if family == "route53" {
+        text(row, &["/Id"])
+    } else if job.target.provider == Provider::Azure {
         text(row, &["/id"])
     } else {
         None
@@ -37,7 +42,12 @@ pub fn followups(job: &Job, parent: &Endpoint, row: &Value) -> Vec<Endpoint> {
     let Some(name) = name else { return vec![] };
     if !matches!(
         family,
-        "ecs-clusters" | "ecs-services" | "ecs-tasks" | "artifact-repositories" | "ecr"
+        "ecs-clusters"
+            | "ecs-services"
+            | "ecs-tasks"
+            | "artifact-repositories"
+            | "ecr"
+            | "key-vaults"
     ) && !job.target.resources.is_empty()
         && !job
             .target
@@ -56,7 +66,13 @@ pub fn followups(job: &Job, parent: &Endpoint, row: &Value) -> Vec<Endpoint> {
     match job.target.provider {
         Provider::Gcp => gcp(job, parent, family, name, row),
         Provider::Aws => crate::aws_details::followups(job, parent, family, name, row),
-        Provider::Azure => crate::azure_details::followups(job, parent, family, name),
+        Provider::Azure => {
+            let mut details = crate::azure_details::followups(job, parent, family, name);
+            if family == "key-vaults" {
+                details.extend(crate::key_vault::followups(job, parent, row));
+            }
+            details
+        }
         _ => vec![],
     }
 }

@@ -140,6 +140,16 @@ impl Auth {
             .map(|token| token.token.secret().to_string())
             .map_err(|_| Error::Authentication)
     }
+    pub async fn vault_bearer(&self) -> Result<String, Error> {
+        let Self::Azure(credentials) = self else {
+            return Err(Error::Authentication);
+        };
+        credentials
+            .get_token(&["https://vault.azure.net/.default"], None)
+            .await
+            .map(|token| token.token.secret().to_string())
+            .map_err(|_| Error::Authentication)
+    }
     pub async fn bearer_for(&self, logs: bool) -> Result<String, Error> {
         match self {
             Self::Gcp(credentials) => credentials

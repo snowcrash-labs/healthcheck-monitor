@@ -13,6 +13,10 @@ pub fn project(job: &Job, endpoint: &Endpoint, value: &Value) -> Option<Vec<Obse
             "/CertificateArn",
             "/FunctionName",
             "/RecoveryPointArn",
+            "/volumeId",
+            "/VolumeId",
+            "/instanceId",
+            "/InstanceId",
         ],
     )
     .unwrap_or("configuration");
@@ -26,6 +30,37 @@ pub fn project(job: &Job, endpoint: &Endpoint, value: &Value) -> Option<Vec<Obse
         return Some(vec![]);
     }
     let data = match family {
+        "ebs" => Data::Service {
+            state: match text(value, &["/status", "/State"]) {
+                Some("in-use" | "available") => ServiceState::Ready,
+                Some("error") => ServiceState::Failed,
+                Some("creating" | "deleting") => ServiceState::Starting,
+                _ => ServiceState::Unknown,
+            },
+            replicas: None,
+            backup_enabled: None,
+            encrypted: boolean(value, &["/encrypted", "/Encrypted"]),
+        },
+        "dynamodb-backups" => Data::Recovery {
+            state: ServiceState::Unknown,
+            enabled: text(
+                value,
+                &["/PointInTimeRecoveryDescription/PointInTimeRecoveryStatus"],
+            )
+            .map(|status| status == "ENABLED"),
+            last_attempt: None,
+            last_success: timestamp(
+                value,
+                &["/PointInTimeRecoveryDescription/LatestRestorableDateTime"],
+            ),
+            retention_days: None,
+            point_in_time: text(
+                value,
+                &["/PointInTimeRecoveryDescription/PointInTimeRecoveryStatus"],
+            )
+            .map(|status| status == "ENABLED"),
+            geo_redundant: None,
+        },
         "acm-detail" => Data::Certificate {
             issued: text(value, &["/Status"]).map(|status| status == "ISSUED"),
             expires_at: timestamp(value, &["/NotAfter"]),

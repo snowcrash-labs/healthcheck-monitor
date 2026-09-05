@@ -106,6 +106,11 @@ pub(crate) const CATALOG: &[(&str, &str, &str)] = &[
         "/items",
     ),
     (
+        "instance-group-managers",
+        "compute.googleapis.com/compute/v1/projects/{p}/aggregated/instanceGroupManagers",
+        "/items",
+    ),
+    (
         "backend-services",
         "compute.googleapis.com/compute/v1/projects/{p}/global/backendServices",
         "/items",

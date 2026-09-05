@@ -117,6 +117,7 @@ pub fn allowed(request: &Request) -> bool {
                 "DescribeCertificate",
                 "ListSecretVersionIds",
                 "DescribeTable",
+                "DescribeContinuousBackups",
                 "ListTables",
                 "DescribeClusters",
                 "DescribeServices",
