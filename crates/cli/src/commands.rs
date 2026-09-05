@@ -54,7 +54,7 @@ pub async fn execute(cli: Cli) -> Result<u8, Error> {
                 checks: vec![Check::Preflight],
                 ..Default::default()
             })?;
-            let router = monitor_providers::router::Router::new(config, 2);
+            let router = monitor_providers::router::Router::new(config, &effective);
             use monitor_core::scheduler::Collector;
             let mut code = 0;
             for job in &effective.jobs {

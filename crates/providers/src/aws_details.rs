@@ -13,6 +13,13 @@ pub fn followups(
         return vec![];
     };
     let description = match family {
+        "quota-services" => Some((
+            "quotas",
+            "servicequotas",
+            "ServiceQuotasV20190624.ListServiceQuotas",
+            json!({"ServiceCode":name,"MaxResults":job.settings.page_size.min(100)}),
+            "/Quotas",
+        )),
         "acm" => Some((
             "acm-detail",
             "acm",

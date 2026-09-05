@@ -1,6 +1,6 @@
 //! Credential cache retention is independent of the evidence schema.
+use monitor_core::budget::Budget as Semaphore;
 use std::sync::Arc;
-use tokio::sync::Semaphore;
 #[tokio::test(start_paused = true)]
 async fn token_expiry_and_failed_cache_admission_do_not_retain_unbounded_credentials() {
     let tokens = super::registry_tokens::Tokens::new(Arc::new(Semaphore::new(65536)));

@@ -7,5 +7,6 @@ mod prerequisites;
 mod references;
 pub mod resolve;
 pub mod settings;
+mod shared_limits;
 pub mod types;
 pub mod validate;

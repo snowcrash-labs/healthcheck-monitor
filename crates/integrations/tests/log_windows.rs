@@ -1,5 +1,6 @@
 //! Window deduplication is bounded and cannot hide events from cancelled collections.
 use chrono::{Duration, Utc};
+use monitor_core::budget::Budget as Semaphore;
 use monitor_core::{
     config::{
         duration::Span,
@@ -10,7 +11,6 @@ use monitor_core::{
 };
 use monitor_integrations::{log_dedup::Dedupe, log_window::Window};
 use std::sync::Arc;
-use tokio::sync::Semaphore;
 fn job() -> Result<Job, Box<dyn std::error::Error>> {
     Config::parse("version=1\n[[targets]]\nname='dev'\nprovider='gcp'\nscope='project'")?
         .resolve(&Selection::default())?

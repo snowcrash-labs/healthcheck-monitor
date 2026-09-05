@@ -23,7 +23,19 @@ pub fn load(path: &Path) -> Result<Config, Error> {
     std::fs::File::open(path)?
         .take(1024 * 1024 + 1)
         .read_to_string(&mut text)?;
-    Config::parse(&text)
+    let mut config = Config::parse(&text)?;
+    if let Some(base) = path.parent() {
+        for credential in config.credentials.values_mut() {
+            if let Some(file) = credential
+                .credential_file
+                .as_mut()
+                .filter(|file| file.is_relative())
+            {
+                *file = base.join(&*file);
+            }
+        }
+    }
+    Ok(config)
 }
 pub async fn monitor(config_path: &Path, options: Options, mode: Mode) -> Result<u8, Error> {
     let config = load(config_path)?;
@@ -47,7 +59,7 @@ pub async fn monitor(config_path: &Path, options: Options, mode: Mode) -> Result
     if matches!(mode, Mode::Once) {
         state.begin_run();
     }
-    let router = Arc::new(Router::new(config, settings.subprocesses));
+    let router = Arc::new(Router::new(config, &effective));
     if matches!(mode, Mode::Watch { .. }) {
         router.restore_logs(&state.snapshot).await;
     }
@@ -82,7 +94,7 @@ pub async fn monitor(config_path: &Path, options: Options, mode: Mode) -> Result
             _ = reload.recv(), if matches!(mode, Mode::Watch { .. }) && cleanup_deadline.is_none() => {
                 match load(config_path).and_then(|config| config.resolve(&selection).map(|e| (config, e))) {
                     Ok((config, replacement)) => {
-                        router.reload(config).await;
+                        router.reload(config, &replacement).await;
                         state.retain_scope(&replacement.jobs);
                         if let Some(job) = replacement.jobs.first() { settings = job.settings.clone(); }
                         history = tokio::time::interval(settings.history_interval.duration());

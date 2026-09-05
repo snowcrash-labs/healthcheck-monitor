@@ -1,13 +1,13 @@
 //! Shared fingerprint cache reserves a finite portion of the retained-state budget.
 use chrono::{DateTime, Utc};
+use monitor_core::budget::{Budget, Permit};
 use std::sync::Arc;
-use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 pub struct Dedupe {
     entries: scc::HashCache<[u8; 32], DateTime<Utc>>,
-    _bytes: OwnedSemaphorePermit,
+    _bytes: Permit,
 }
 impl Dedupe {
-    pub fn new(limit: usize, bytes: Arc<Semaphore>) -> Option<Self> {
+    pub fn new(limit: usize, bytes: Arc<Budget>) -> Option<Self> {
         let size = u32::try_from(limit.saturating_add(32).saturating_mul(256)).ok()?;
         let permit = bytes.try_acquire_many_owned(size).ok()?;
         Some(Self {

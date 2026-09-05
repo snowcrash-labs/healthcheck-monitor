@@ -3,26 +3,27 @@ use crate::{
     common::{Endpoint, Source},
     endpoint_scan::{Fetched, fetch},
 };
+use monitor_core::budget::{Budget, Permit};
 use monitor_core::{
     config::resolve::Job,
     model::{Check, CheckResult, Coverage},
 };
 use std::sync::Arc;
-use tokio::sync::{Mutex, OwnedSemaphorePermit, Semaphore};
+use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 struct Entry {
     consumers: std::collections::BTreeSet<Check>,
     at: tokio::time::Instant,
     value: Fetched,
-    _bytes: OwnedSemaphorePermit,
+    _bytes: Permit,
 }
 pub struct InventoryCache {
     pub(crate) tokens: crate::registry_tokens::Tokens,
     entries: scc::HashCache<String, Arc<Mutex<Option<Entry>>>>,
-    bytes: Arc<Semaphore>,
+    bytes: Arc<Budget>,
 }
 impl InventoryCache {
-    pub fn new(entries: usize, bytes: Arc<Semaphore>) -> Self {
+    pub fn new(entries: usize, bytes: Arc<Budget>) -> Self {
         Self {
             tokens: crate::registry_tokens::Tokens::new(bytes.clone()),
             entries: scc::HashCache::with_capacity(0, entries),

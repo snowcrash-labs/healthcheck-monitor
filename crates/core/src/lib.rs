@@ -1,5 +1,6 @@
 //! Bounded monitoring configuration, evaluation, scheduling, and evidence.
 pub mod bounds;
+pub mod budget;
 pub mod capacity;
 pub mod config;
 mod endpoint_policy;

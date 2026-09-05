@@ -8,7 +8,6 @@ use std::{process::Stdio, time::Duration};
 use tokio::{
     io::{AsyncRead, AsyncReadExt},
     process::Command,
-    sync::Semaphore,
 };
 use tokio_util::sync::CancellationToken;
 
@@ -50,13 +49,16 @@ impl Drop for Group {
     }
 }
 pub struct Processes {
-    permits: Semaphore,
+    permits: std::sync::Arc<monitor_core::budget::Budget>,
 }
 impl Processes {
     pub fn new(limit: usize) -> Self {
         Self {
-            permits: Semaphore::new(limit),
+            permits: std::sync::Arc::new(monitor_core::budget::Budget::new(limit)),
         }
+    }
+    pub fn resize(&self, limit: usize) {
+        self.permits.resize(limit);
     }
     /// Explicit authentication inherits the foreground terminal so browser/device prompts work.
     pub async fn login(&self, credential: Credential, timeout: Duration) -> Result<(), Error> {

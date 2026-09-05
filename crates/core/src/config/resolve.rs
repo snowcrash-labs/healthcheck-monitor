@@ -252,6 +252,7 @@ impl Config {
         }
         super::prerequisites::sampling(&mut jobs)?;
         self.reference_jobs(selection, &mut jobs, &revision, metadata_only)?;
+        super::shared_limits::normalize(&mut jobs)?;
         let flow_settings: std::collections::BTreeMap<_, _> = jobs
             .iter()
             .filter(|job| job.check == Check::Flows)

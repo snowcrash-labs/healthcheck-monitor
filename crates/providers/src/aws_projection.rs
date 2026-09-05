@@ -17,19 +17,22 @@ pub fn project(job: &Job, endpoint: &Endpoint, value: &Value) -> Option<Vec<Obse
             "/VolumeId",
             "/instanceId",
             "/InstanceId",
+            "/Id",
         ],
     )
     .unwrap_or("configuration");
-    if !job.target.resources.is_empty()
-        && !job
-            .target
-            .resources
-            .iter()
-            .any(|selector| name.contains(selector) || id.contains(selector))
-    {
-        return Some(vec![]);
-    }
     let data = match family {
+        "cloudfront" => Data::Service {
+            state: match (boolean(value, &["/Enabled"]), text(value, &["/Status"])) {
+                (Some(false), _) => ServiceState::Stopped,
+                (Some(true), Some("Deployed")) => ServiceState::Ready,
+                (Some(true), Some("InProgress")) => ServiceState::Starting,
+                _ => ServiceState::Unknown,
+            },
+            replicas: None,
+            backup_enabled: None,
+            encrypted: None,
+        },
         "ebs" => Data::Service {
             state: match text(value, &["/status", "/State"]) {
                 Some("in-use" | "available") => ServiceState::Ready,

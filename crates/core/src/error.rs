@@ -5,6 +5,8 @@ pub enum Error {
     Config(String),
     #[error("invalid evidence")]
     Evidence,
+    #[error("configured resource capacity exhausted")]
+    Capacity,
     #[error("filesystem operation failed: {0}")]
     Io(#[from] std::io::Error),
     #[error("evidence encoding failed")]

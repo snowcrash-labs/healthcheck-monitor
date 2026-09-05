@@ -1,20 +1,20 @@
 //! Registry credentials use a bounded cache and are never serialized or logged.
+use monitor_core::budget::{Budget, Permit};
 use std::{sync::Arc, time::Duration};
-use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 struct Token {
     value: String,
     until: tokio::time::Instant,
-    _bytes: OwnedSemaphorePermit,
+    _bytes: Permit,
 }
 pub struct Tokens {
     entries: scc::HashCache<String, Token>,
-    bytes: Arc<Semaphore>,
+    bytes: Arc<Budget>,
 }
 impl Tokens {
     pub async fn clear(&self) {
         self.entries.clear_async().await;
     }
-    pub fn new(bytes: Arc<Semaphore>) -> Self {
+    pub fn new(bytes: Arc<Budget>) -> Self {
         Self {
             entries: scc::HashCache::with_capacity(0, 128),
             bytes,

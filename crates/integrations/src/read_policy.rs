@@ -145,6 +145,7 @@ pub fn allowed(request: &Request) -> bool {
                 "BatchGetBuilds",
                 "ListPipelines",
                 "GetPipelineState",
+                "ListPipelineExecutions",
                 "ListBackupVaults",
                 "ListRecoveryPointsByBackupVault",
                 "ListKeys",

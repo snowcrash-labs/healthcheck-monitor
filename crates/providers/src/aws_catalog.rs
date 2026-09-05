@@ -53,11 +53,11 @@ pub(crate) const JSON_APIS: &[(&str, &str, &str, &str, &str)] = &[
         "/SecretList",
     ),
     (
-        "quotas",
+        "quota-services",
         "servicequotas",
         "ServiceQuotasV20190624",
-        "ListServiceQuotas",
-        "/Quotas",
+        "ListServices",
+        "/Services",
     ),
     (
         "health",

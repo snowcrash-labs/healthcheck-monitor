@@ -15,6 +15,7 @@ pub mod aws_metric_batch;
 mod aws_metric_discovery;
 mod aws_metric_plan;
 pub mod aws_metrics;
+mod aws_pipeline;
 mod aws_projection;
 pub mod aws_slo;
 #[cfg(test)]
@@ -52,6 +53,7 @@ pub mod metric_catalog;
 pub mod metric_identity;
 pub mod metric_window;
 pub mod metrics;
+mod pagination;
 mod projection_rows;
 mod quotas;
 mod registry_manifests;

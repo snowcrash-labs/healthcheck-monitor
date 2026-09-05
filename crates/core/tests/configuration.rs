@@ -132,3 +132,18 @@ fn invalid_reload_does_not_mutate_original_config() -> Result<(), Box<dyn std::e
     assert_eq!(old.revision, new.revision);
     Ok(())
 }
+#[test]
+fn selected_checks_share_the_tightest_runtime_and_provider_scope_limits()
+-> Result<(), Box<dyn std::error::Error>> {
+    let config = Config::parse(
+        "version=1\n[[targets]]\nname='one'\nprovider='gcp'\nscope='project'\nregions=['us-central1']\n[targets.settings]\nconcurrency=8\nsubprocesses=1\nmemory_bytes=134217728\n[targets.checks.inventory]\nscope_concurrency=2\n[[targets]]\nname='two'\nprovider='gcp'\nscope='project'\nregions=['us-central1']",
+    )?;
+    let effective = config.resolve(&Selection::default())?;
+    for job in effective.jobs {
+        assert_eq!(job.settings.concurrency, 8);
+        assert_eq!(job.settings.subprocesses, 1);
+        assert_eq!(job.settings.memory_bytes, 134217728);
+        assert_eq!(job.settings.scope_concurrency, 2);
+    }
+    Ok(())
+}

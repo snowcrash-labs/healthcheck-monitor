@@ -68,7 +68,7 @@ pub fn endpoints(job: &Job) -> Vec<Endpoint> {
                 format!("{prefix}.{action}"),
             ));
             endpoint.body = Some(match *name {
-                "quotas" => json!({"ServiceCode":"ec2","MaxResults":100}),
+                "quota-services" => json!({"MaxResults":100}),
                 "health" => {
                     json!({"filter":{"eventStatusCodes":["open","upcoming"]},"maxResults":100})
                 }

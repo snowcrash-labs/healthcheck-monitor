@@ -1,4 +1,5 @@
 //! Concurrent checks reuse normalized inventories under a finite cache budget.
+use monitor_core::budget::Budget as Semaphore;
 use monitor_core::{
     config::{resolve::Selection, types::Config},
     model::Check,
@@ -13,7 +14,7 @@ use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
 };
-use tokio::{sync::Semaphore, time::Duration};
+use tokio::time::Duration;
 use tokio_util::sync::CancellationToken;
 struct Fake {
     cache: InventoryCache,

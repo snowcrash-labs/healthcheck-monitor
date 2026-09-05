@@ -123,97 +123,19 @@ pub async fn fetch<S: Source>(
                     outcome = Err(error);
                     break;
                 }
-                let token = text(
+                match crate::pagination::advance(
+                    &mut endpoint,
+                    job,
                     &payload,
-                    &[
-                        "/nextPageToken",
-                        "/nextToken",
-                        "/NextToken",
-                        "/nextLink",
-                        "/NextMarker",
-                        "/ContinuationToken",
-                        "/$skipToken",
-                        "/DescribeDBInstancesResult/Marker",
-                        "/DescribeDBClustersResult/Marker",
-                        "/DescribeCacheClustersResult/Marker",
-                        "/DescribeReplicationGroupsResult/Marker",
-                    ],
-                )
-                .unwrap_or("");
-                if token.is_empty() {
-                    break;
-                }
-                if token == previous_token || page + 1 == job.settings.max_pages {
-                    outcome = Err(Error::Limit);
-                    break;
-                }
-                previous_token = token.into();
-                if token.starts_with("https://") {
-                    let next = url::Url::parse(token).map_err(|_| Error::Malformed);
-                    let old = url::Url::parse(&endpoint.url).map_err(|_| Error::Malformed);
-                    match (next, old) {
-                        (Ok(next), Ok(old))
-                            if next.origin() == old.origin()
-                                && (next.path().starts_with(&format!(
-                                    "/subscriptions/{}/",
-                                    job.target.scope
-                                )) || old
-                                    .host_str()
-                                    .is_some_and(|host| host.ends_with(".vault.azure.net"))
-                                    && next.path() == old.path()) =>
-                        {
-                            endpoint.url = next.into()
-                        }
-                        _ => {
-                            outcome = Err(Error::Forbidden);
-                            break;
-                        }
-                    }
-                } else if let Some(body) = &mut endpoint.body {
-                    if payload.get("$skipToken").is_some() {
-                        body["options"]["$skipToken"] = Value::String(token.into());
-                        continue;
-                    }
-                    let field = if endpoint.aws.is_some() {
-                        if payload.get("NextToken").is_some() {
-                            "NextToken"
-                        } else if endpoint
-                            .aws
-                            .as_ref()
-                            .is_some_and(|(_, _, target)| target.starts_with("query:"))
-                        {
-                            "Marker"
-                        } else {
-                            "nextToken"
-                        }
-                    } else {
-                        "pageToken"
-                    };
-                    body[field] = Value::String(token.into());
-                } else {
-                    let Ok(mut url) = url::Url::parse(&endpoint.url) else {
-                        outcome = Err(Error::Malformed);
+                    &previous_token,
+                    pages,
+                ) {
+                    Ok(Some(token)) => previous_token = token,
+                    Ok(None) => break,
+                    Err(error) => {
+                        outcome = Err(error);
                         break;
-                    };
-                    let field = if payload.get("ContinuationToken").is_some() {
-                        "continuation-token"
-                    } else if payload.get("NextMarker").is_some() {
-                        "Marker"
-                    } else if job.target.provider == Provider::Gcp {
-                        "pageToken"
-                    } else {
-                        "NextToken"
-                    };
-                    let pairs: Vec<_> = url
-                        .query_pairs()
-                        .filter(|(k, _)| k != field)
-                        .map(|(k, v)| (k.into_owned(), v.into_owned()))
-                        .collect();
-                    url.query_pairs_mut()
-                        .clear()
-                        .extend_pairs(pairs)
-                        .append_pair(field, token);
-                    endpoint.url = url.into();
+                    }
                 }
             }
             Err(error) => {

@@ -1,7 +1,11 @@
 //! Shared target clients and credential recovery without interactive collection.
 use crate::auth::Auth;
+use monitor_core::budget::{Budget, Permit};
 use monitor_core::{
-    config::{resolve::Job, types::Config},
+    config::{
+        resolve::{Effective, Job},
+        types::Config,
+    },
     model::*,
     scheduler::Collector,
 };
@@ -12,7 +16,7 @@ use monitor_integrations::{
     transport::{Error, Http},
 };
 use std::sync::Arc;
-use tokio::sync::{Mutex, OwnedSemaphorePermit, RwLock, Semaphore};
+use tokio::sync::{Mutex, RwLock};
 use tokio_util::sync::CancellationToken;
 
 pub(crate) struct Scope {
@@ -27,35 +31,19 @@ pub(crate) struct Scope {
 }
 pub struct Router {
     pub(crate) config: RwLock<Config>,
+    revision: RwLock<String>,
     scopes: scc::HashMap<String, Arc<Scope>>,
     pub(crate) processes: Processes,
-    pub(crate) cache_bytes: Arc<Semaphore>,
+    pub(crate) cache_bytes: Arc<Budget>,
     log_cursors: scc::HashMap<String, chrono::DateTime<chrono::Utc>>,
     pub(crate) discovery_auth: scc::HashCache<String, Arc<Mutex<Option<Arc<Auth>>>>>,
 }
 pub(crate) struct Cached {
     pub(crate) consumers: std::collections::BTreeSet<Check>,
     pub(crate) result: CheckResult,
-    pub(crate) _bytes: OwnedSemaphorePermit,
+    pub(crate) _bytes: Permit,
 }
 impl Router {
-    pub fn new(config: Config, subprocesses: usize) -> Self {
-        let bytes = config.settings.memory_bytes.unwrap_or(256 * 1024 * 1024) / 4;
-        Self {
-            config: RwLock::new(config),
-            scopes: scc::HashMap::new(),
-            processes: Processes::new(subprocesses),
-            cache_bytes: Arc::new(Semaphore::new(bytes)),
-            log_cursors: scc::HashMap::new(),
-            discovery_auth: scc::HashCache::with_capacity(0, 128),
-        }
-    }
-    pub async fn reload(&self, config: Config) {
-        *self.config.write().await = config;
-        self.scopes.clear_async().await;
-        self.log_cursors.clear_async().await;
-        self.discovery_auth.clear_async().await;
-    }
     /// Restore completed log windows without changing their evidence timestamps.
     pub async fn restore_logs(&self, snapshot: &Snapshot) {
         for result in snapshot
@@ -86,6 +74,9 @@ impl Router {
     }
     pub(crate) async fn scope(&self, job: &Job) -> Result<Arc<Scope>, Error> {
         let config = self.config.read().await;
+        if job.revision != *self.revision.read().await {
+            return Err(Error::Cancelled);
+        }
         if !config.targets.iter().any(|target| {
             target.name == job.target.name
                 && target.scope == job.target.scope
@@ -215,6 +206,8 @@ impl Router {
         Ok(result)
     }
 }
+#[path = "router_lifecycle.rs"]
+mod lifecycle;
 
 impl Collector for Router {
     async fn collect(&self, job: &Job, cancel: CancellationToken) -> CheckResult {
