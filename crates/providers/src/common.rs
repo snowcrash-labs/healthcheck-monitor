@@ -36,9 +36,19 @@ pub async fn request(
     job: &Job,
     cancel: &CancellationToken,
 ) -> Result<Value, Error> {
+    request_cached(http, auth, endpoint, job, cancel, None).await
+}
+async fn request_cached(
+    http: &Http,
+    auth: &Auth,
+    endpoint: &Endpoint,
+    job: &Job,
+    cancel: &CancellationToken,
+    cache: Option<&crate::inventory_cache::InventoryCache>,
+) -> Result<Value, Error> {
     tokio::select! {
         _ = cancel.cancelled() => Err(Error::Cancelled),
-        result = tokio::time::timeout(job.settings.operation_timeout.duration(), request_inner(http, auth, endpoint, job, cancel)) => result.map_err(|_| Error::Timeout).and_then(|r| r),
+        result = tokio::time::timeout(job.settings.operation_timeout.duration(), request_inner(http, auth, endpoint, job, cancel,cache)) => result.map_err(|_| Error::Timeout).and_then(|r| r),
     }
 }
 async fn request_inner(
@@ -47,7 +57,30 @@ async fn request_inner(
     endpoint: &Endpoint,
     job: &Job,
     cancel: &CancellationToken,
+    cache: Option<&crate::inventory_cache::InventoryCache>,
 ) -> Result<Value, Error> {
+    if endpoint.id.starts_with("acr-") {
+        return crate::azure_registry_auth::request(
+            http,
+            auth,
+            endpoint,
+            job,
+            cancel,
+            cache.map(|cache| &cache.tokens),
+        )
+        .await;
+    }
+    if endpoint.id.starts_with("registry-manifest/") && endpoint.aws.is_none() {
+        return crate::registry_transport::gcp(
+            http,
+            auth,
+            endpoint,
+            job,
+            cancel,
+            cache.map(|cache| &cache.tokens),
+        )
+        .await;
+    }
     let query = endpoint
         .aws
         .as_ref()
@@ -144,7 +177,7 @@ impl Source for NativeSource<'_> {
     ) -> Result<Value, Error> {
         tokio::select! {
             _ = cancel.cancelled() => Err(Error::Cancelled),
-            result = tokio::time::timeout(job.settings.operation_timeout.duration(), request(self.http, self.auth, endpoint, job, cancel)) => result.map_err(|_| Error::Timeout).and_then(|r| r),
+            result = tokio::time::timeout(job.settings.operation_timeout.duration(), request_cached(self.http, self.auth, endpoint, job, cancel,self.cache)) => result.map_err(|_| Error::Timeout).and_then(|r| r),
         }
     }
 }

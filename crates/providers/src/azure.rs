@@ -29,6 +29,9 @@ pub fn endpoints(job: &Job) -> Vec<Endpoint> {
         out.push(graph(job));
     }
     for (name, namespace, api) in CATALOG {
+        if job.artifact_only && *name != "registries" {
+            continue;
+        }
         if job.check == Check::Edge
             && !matches!(*name, "container-apps" | "app-service" | "front-door")
         {
@@ -82,7 +85,17 @@ pub async fn collect(
         )
         .await;
     }
-    common::collect_cached(http, auth, job, endpoints(job), cancel, cache).await
+    let source = common::NativeSource {
+        http,
+        auth,
+        cache: Some(cache),
+        dedupe: None,
+    };
+    let mut result = common::collect_from(&source, job, endpoints(job), cancel).await;
+    if matches!(job.check, Check::Inventory | Check::Releases) {
+        crate::azure_registry::enrich(&source, job, &mut result, cancel).await;
+    }
+    result
 }
 pub fn graph(job: &Job) -> Endpoint {
     let mut graph = Endpoint::get(

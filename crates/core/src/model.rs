@@ -188,6 +188,8 @@ pub struct Snapshot {
     pub captured_at: DateTime<Utc>,
     pub selected_scope: Vec<String>,
     #[serde(default)]
+    pub collection_only: std::collections::BTreeSet<String>,
+    #[serde(default)]
     pub scope_fingerprints: BTreeMap<String, String>,
     #[serde(default)]
     pub samples: BTreeMap<String, u32>,

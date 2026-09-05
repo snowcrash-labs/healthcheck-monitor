@@ -97,6 +97,10 @@ impl Http {
         Err(Error::Unavailable)
     }
     async fn once(&self, request: Request, settings: &Settings) -> Result<Value, Error> {
+        let registry = request
+            .url()
+            .host_str()
+            .is_some_and(|host| host.ends_with(".azurecr.io"));
         let response = self.client.execute(request).await.map_err(|error| {
             if error.is_timeout() {
                 Error::Timeout
@@ -120,11 +124,38 @@ impl Http {
             let bytes = bounded(response, settings.response_bytes.min(65536)).await?;
             return Err(response_error(code, &bytes));
         }
+        let next = if registry {
+            response
+                .headers()
+                .get("link")
+                .and_then(|header| header.to_str().ok())
+                .filter(|value| value.len() <= 4096)
+                .and_then(|value| {
+                    value
+                        .split(',')
+                        .find(|part| part.contains("rel=\"next\"") || part.contains("rel=next"))
+                })
+                .and_then(|part| part.split(';').next())
+                .map(|link| {
+                    link.trim()
+                        .trim_start_matches('<')
+                        .trim_end_matches('>')
+                        .to_owned()
+                })
+        } else {
+            None
+        };
         let bytes = bounded(response, settings.response_bytes).await?;
         if bytes.first() == Some(&b'<') {
             super::xml::decode(&bytes)
         } else {
-            serde_json::from_slice(&bytes).map_err(|_| Error::Malformed)
+            let mut value: Value = serde_json::from_slice(&bytes).map_err(|_| Error::Malformed)?;
+            if let Some(next) = next
+                && let Some(object) = value.as_object_mut()
+            {
+                object.insert("_monitor_next".into(), Value::String(next));
+            }
+            Ok(value)
         }
     }
 }

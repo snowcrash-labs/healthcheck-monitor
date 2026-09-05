@@ -1,20 +1,40 @@
 //! Aggregate-only JetStream state; no subscriptions to application message subjects.
-use super::{projection::observation, transport::Error};
-use futures::StreamExt;
-use monitor_core::{
-    config::resolve::Job,
-    model::{Data, Observation},
-};
+use super::transport::Error;
+use monitor_core::config::resolve::Job;
 use tokio_util::sync::CancellationToken;
 
 pub struct Nats {
     client: async_nats::Client,
 }
 impl Nats {
-    pub async fn connect(url: &str) -> Result<Self, Error> {
-        let client = async_nats::ConnectOptions::new()
+    pub async fn connect(
+        url: &str,
+        credential: Option<&monitor_core::config::types::Credential>,
+    ) -> Result<Self, Error> {
+        let mut options = async_nats::ConnectOptions::new()
             .require_tls(true)
-            .max_reconnects(Some(3))
+            .max_reconnects(Some(3));
+        if let Some(path) = credential.and_then(|credential| credential.credential_file.as_ref()) {
+            use tokio::io::AsyncReadExt;
+            let mut bytes = Vec::new();
+            tokio::fs::File::open(path)
+                .await
+                .map_err(|_| Error::Authentication)?
+                .take(65537)
+                .read_to_end(&mut bytes)
+                .await
+                .map_err(|_| Error::Authentication)?;
+            if bytes.len() > 65536 {
+                return Err(Error::Limit);
+            }
+            options = options
+                .credentials(std::str::from_utf8(&bytes).map_err(|_| Error::Authentication)?)
+                .map_err(|_| Error::Authentication)?;
+        }
+        if let Some(variable) = credential.and_then(|credential| credential.token_env.as_ref()) {
+            options = options.token(std::env::var(variable).map_err(|_| Error::Authentication)?);
+        }
+        let client = options
             .connect(url)
             .await
             .map_err(|_| Error::Authentication)?;
@@ -24,32 +44,8 @@ impl Nats {
         &self,
         job: &Job,
         cancel: &CancellationToken,
-    ) -> Result<Vec<Observation>, Error> {
-        let context = async_nats::jetstream::new(self.client.clone());
-        let mut streams = context.streams();
-        let mut result = Vec::new();
-        loop {
-            let next = tokio::select! { _ = cancel.cancelled() => return Err(Error::Cancelled), r = streams.next() => r };
-            let Some(info) = next else { break };
-            let info = info.map_err(|_| Error::Unavailable)?;
-            if result.len() >= job.settings.max_series {
-                return Err(Error::Limit);
-            }
-            result.push(observation(
-                job,
-                "nats-streams",
-                &info.config.name,
-                Data::Metric {
-                    name: "stored-messages".into(),
-                    value: info.state.messages as f64,
-                    capacity: None,
-                    warning: None,
-                    error: None,
-                    window_seconds: 0,
-                },
-            ));
-        }
-        Ok(result)
+    ) -> monitor_core::model::CheckResult {
+        super::nats_collect::collect(&self.client, job, cancel).await
     }
 }
 /// Fixed report parser exposes numeric aggregates and stream identity only.

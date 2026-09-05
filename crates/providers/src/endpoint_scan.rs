@@ -19,6 +19,9 @@ pub async fn fetch<S: Source>(
     endpoint: Endpoint,
     cancel: &CancellationToken,
 ) -> Fetched {
+    if endpoint.id.starts_with("batch-") && endpoint.aws.is_some() {
+        return crate::aws_batches::fetch(source, job, endpoint, cancel).await;
+    }
     let mut result = CheckResult::failure(
         job.target.name.clone(),
         job.check,
@@ -36,6 +39,16 @@ pub async fn fetch<S: Source>(
         match source.request(&endpoint, job, cancel).await {
             Ok(payload) => {
                 let rows = crate::resource_projection::rows(&payload, &endpoint.items);
+                let batches = crate::aws_batches::followups(&endpoint, &rows);
+                if let Some(batches) = &batches {
+                    for batch in batches {
+                        if pending.len() >= job.settings.ready_queue {
+                            outcome = Err(Error::Limit);
+                            break;
+                        }
+                        pending.push_back(batch.clone());
+                    }
+                }
                 if !rows.is_empty() {
                     for row in &rows {
                         if result.observations.len() >= job.settings.max_assets {
@@ -53,7 +66,11 @@ pub async fn fetch<S: Source>(
                         result
                             .observations
                             .extend(projected.into_iter().take(available));
-                        for detail in crate::details::followups(job, &endpoint, row) {
+                        for detail in if batches.is_none() {
+                            crate::details::followups(job, &endpoint, row)
+                        } else {
+                            vec![]
+                        } {
                             if pending.len() >= job.settings.ready_queue {
                                 outcome = Err(Error::Limit);
                                 break;
@@ -88,6 +105,13 @@ pub async fn fetch<S: Source>(
                     outcome = Err(Error::Malformed);
                 }
                 if outcome.is_err() {
+                    break;
+                }
+                if endpoint.id.starts_with("registry-manifest/")
+                    && let Err(error) =
+                        crate::registry_manifests::validate(job, &endpoint, &payload)
+                {
+                    outcome = Err(error);
                     break;
                 }
                 let token = text(

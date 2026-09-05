@@ -29,6 +29,7 @@ log_entries = 5000
 
 [[targets]]
 name = "dev"
+artifact_targets = ["operations"]
 flows_required = true
 provider = "gcp"
 scope = "dev-sc-transcription-fa62"
@@ -48,6 +49,7 @@ deployment = "nats-box"
 
 [[targets]]
 name = "api"
+artifact_targets = ["operations"]
 flows_required = true
 provider = "gcp"
 scope = "api-sc-transcription-4cd1"
@@ -62,6 +64,7 @@ deployment = "nats-box"
 
 [[targets]]
 name = "prod"
+artifact_targets = ["operations"]
 provider = "gcp"
 scope = "prod-sc-transcription-1122"
 credential = "google"
@@ -71,6 +74,7 @@ context = "gke_prod-sc-transcription-1122_us-central1_prod-sc-transcription-gke"
 
 [[targets]]
 name = "sony"
+artifact_targets = ["operations"]
 provider = "gcp"
 scope = "sony-sc-transcription-f435"
 credential = "google"
@@ -89,6 +93,7 @@ context = "gke_sc-devops-root_us-central1-a_sc-devops-gke"
 
 [[targets]]
 name = "c2pa"
+artifact_targets = ["operations"]
 provider = "gcp"
 scope = "c2pa-service"
 credential = "google"
@@ -97,6 +102,7 @@ expected = "active"
 
 [[targets]]
 name = "ghoskey"
+artifact_targets = ["operations"]
 provider = "gcp"
 scope = "ghoskey-enforcement"
 credential = "google"

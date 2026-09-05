@@ -1,4 +1,5 @@
 //! Discover bounded CloudWatch dimensions before issuing batched metric reads.
+use aws_sdk_cloudwatch::error::ProvideErrorMetadata;
 use monitor_core::{
     config::{resolve::Job, types::MetricQuery},
     model::*,
@@ -11,7 +12,16 @@ pub async fn discover(
 ) -> (Vec<MetricQuery>, Vec<Operation>) {
     let mut metrics = Vec::new();
     let mut operations = Vec::new();
-    for namespace in crate::metric_catalog::AWS_NAMESPACES {
+    let namespaces: Vec<_> = crate::metric_catalog::AWS_NAMESPACES
+        .iter()
+        .filter(|namespace| {
+            job.check != Check::Queues
+                || matches!(**namespace, "AWS/SQS" | "AWS/SNS" | "AWS/Events")
+        })
+        .collect();
+    for (index, namespace) in namespaces.iter().enumerate() {
+        let allowance =
+            job.settings.max_series.saturating_sub(metrics.len()) / (namespaces.len() - index);
         let mut token = None;
         let mut count = 0;
         let mut coverage = Ok(0);
@@ -20,14 +30,14 @@ pub async fn discover(
             pages += 1;
             match client
                 .list_metrics()
-                .namespace(*namespace)
-                .set_next_token(token)
+                .namespace(**namespace)
+                .set_next_token(token.clone())
                 .send()
                 .await
             {
                 Ok(response) => {
                     for metric in response.metrics() {
-                        if metrics.len() >= job.settings.max_series {
+                        if count >= allowance {
                             coverage = Err(Error::Limit);
                             break;
                         }
@@ -60,20 +70,30 @@ pub async fn discover(
                         metrics.push(MetricQuery {
                             aggregation: Default::default(),
                             name: format!("{namespace}/{name}/{suffix}"),
-                            namespace: (*namespace).into(),
+                            namespace: (**namespace).into(),
                             metric: name.into(),
                             resource: format!("{namespace}/{name}/{suffix}/{labels}"),
                             dimensions,
                             capacity: crate::metric_catalog::percent_metric(name).then_some(100.0),
                             warning: None,
-                            error: None,
+                            error: (name == "ApproximateAgeOfOldestMessage")
+                                .then_some(job.settings.queue_age_error)
+                                .flatten(),
                         });
                         count += 1;
                     }
                     if coverage.is_err() {
                         break;
                     }
-                    token = response.next_token().map(String::from);
+                    let next = response
+                        .next_token()
+                        .filter(|token| !token.is_empty())
+                        .map(String::from);
+                    if next.is_some() && next == token {
+                        coverage = Err(Error::Limit);
+                        break;
+                    }
+                    token = next;
                     if token.is_none() {
                         break;
                     }
@@ -81,8 +101,10 @@ pub async fn discover(
                         coverage = Err(Error::Limit);
                     }
                 }
-                Err(_) => {
-                    coverage = Err(Error::Unavailable);
+                Err(error) => {
+                    coverage = Err(crate::aws_errors::classify(
+                        error.as_service_error().and_then(|error| error.code()),
+                    ));
                     break;
                 }
             }
@@ -93,9 +115,6 @@ pub async fn discover(
             pages,
             true,
         ));
-        if metrics.len() >= job.settings.max_series {
-            break;
-        }
     }
     (metrics, operations)
 }

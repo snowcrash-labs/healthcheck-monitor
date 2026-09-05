@@ -24,10 +24,11 @@ impl State {
     /// Reference facts can arrive after runtime inventories during a one-off collection.
     pub fn refresh_releases(&mut self, jobs: &[Job], now: DateTime<Utc>) -> Vec<Transition> {
         let mut transitions = Vec::new();
-        for job in jobs
-            .iter()
-            .filter(|job| job.check == Check::Releases && job.target.provider != Provider::Github)
-        {
+        for job in jobs.iter().filter(|job| {
+            job.check == Check::Releases
+                && !job.artifact_only
+                && job.target.provider != Provider::Github
+        }) {
             if let Some(result) = self.snapshot.results.get(&job.key).cloned() {
                 transitions.extend(self.apply_derived(job, result, now));
             }
@@ -41,6 +42,7 @@ impl State {
                 revision,
                 captured_at: Utc::now(),
                 selected_scope: scope,
+                collection_only: BTreeSet::new(),
                 scope_fingerprints: BTreeMap::new(),
                 samples: BTreeMap::new(),
                 selectors: BTreeMap::new(),
@@ -198,10 +200,10 @@ impl State {
             .retain(|key, _| flow_keys.contains(key));
         let keys: BTreeSet<_> = jobs.iter().map(|j| &j.key).collect();
         self.snapshot.results.retain(|k, _| keys.contains(k));
-        let observed: BTreeSet<_> = self
-            .snapshot
-            .results
-            .values()
+        let observed: BTreeSet<_> = jobs
+            .iter()
+            .filter(|job| job.assess_health)
+            .filter_map(|job| self.snapshot.results.get(&job.key))
             .flat_map(|result| &result.observations)
             .map(|obs| &obs.resource)
             .collect();
@@ -217,9 +219,10 @@ impl State {
         self.snapshot.samples.retain(|key, _| keys.contains(key));
         self.snapshot.findings.retain(|_, finding| {
             jobs.iter().any(|job| {
-                finding
-                    .resource
-                    .starts_with(&format!("{}/", job.target.name))
+                job.assess_health
+                    && finding
+                        .resource
+                        .starts_with(&format!("{}/", job.target.name))
                     && finding.check.is_none_or(|check| check == job.check)
                     && (job.target.resources.is_empty()
                         || job
@@ -235,5 +238,10 @@ impl State {
                 .contains_key(key.split_once('|').map_or(key.as_str(), |(_, id)| id))
         });
         self.snapshot.selected_scope = jobs.iter().map(|j| j.key.clone()).collect();
+        self.snapshot.collection_only = jobs
+            .iter()
+            .filter(|job| !job.assess_health)
+            .map(|job| job.key.clone())
+            .collect();
     }
 }

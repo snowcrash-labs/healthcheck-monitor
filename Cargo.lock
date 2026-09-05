@@ -2887,6 +2887,7 @@ dependencies = [
  "aws-smithy-types",
  "azure_core",
  "azure_identity",
+ "base64 0.23.1",
  "chrono",
  "futures",
  "google-cloud-asset-v1",

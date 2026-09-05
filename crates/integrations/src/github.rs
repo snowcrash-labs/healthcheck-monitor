@@ -38,6 +38,7 @@ pub async fn collect(
     http: &Http,
     job: &Job,
     token: &str,
+    expected: Option<&str>,
     cancel: &CancellationToken,
 ) -> CheckResult {
     let mut result = CheckResult::failure(
@@ -104,6 +105,19 @@ pub async fn collect(
             match response {
                 Ok(payload) => {
                     if id == "identity" {
+                        let login = text(&payload, &["/login"]);
+                        if expected.is_some_and(|expected| {
+                            !login.is_some_and(|login| login.eq_ignore_ascii_case(expected))
+                        }) {
+                            result
+                                .operations
+                                .push(operation(&id, Err(&Error::Forbidden), 1, true));
+                            return result;
+                        }
+                        if login.is_none() {
+                            outcome = Err(Error::Malformed);
+                            break;
+                        }
                         result.observations.push(observation(
                             job,
                             &id,

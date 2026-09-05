@@ -27,6 +27,7 @@ pub fn project(
 ) -> Result<Observation, Error> {
     points.retain(|(_, value)| value.is_finite());
     points.sort_unstable_by_key(|(at, _)| *at);
+    points.dedup_by_key(|(at, _)| *at);
     let Some((newest, latest)) = points.last().copied() else {
         return Err(Error::Missing);
     };

@@ -28,6 +28,39 @@ pub async fn collect(
     );
     result.operations.clear();
     for root in roots.iter().filter(|r| r.provider == job.target.provider) {
+        if root.provider == Provider::Aws && root.scope.starts_with("o-") {
+            let mut organization = Endpoint::get(
+                "organization-scope",
+                "https://organizations.us-east-1.amazonaws.com/",
+                "/Organization",
+            );
+            organization.aws = Some((
+                "organizations".into(),
+                "us-east-1".into(),
+                "AWSOrganizationsV20161128.DescribeOrganization".into(),
+            ));
+            organization.body = Some(json!({}));
+            let matched = common::request(http, auth, &organization, job, cancel)
+                .await
+                .and_then(|value| {
+                    if monitor_integrations::projection::text(&value, &["/Organization/Id"])
+                        == Some(root.scope.as_str())
+                    {
+                        Ok(1)
+                    } else {
+                        Err(Error::Forbidden)
+                    }
+                });
+            result.operations.push(operation(
+                &format!("organization-scope/{}", root.scope),
+                matched.as_ref().copied(),
+                1,
+                true,
+            ));
+            if matched.is_err() {
+                continue;
+            }
+        }
         let mut endpoint = match root.provider {
             Provider::Gcp => Endpoint::get(
                 "organization-projects",
@@ -58,6 +91,7 @@ pub async fn collect(
             }
             _ => continue,
         };
+        endpoint.id = format!("{}/{}", endpoint.id, root.scope);
         let mut count = 0;
         let mut outcome = Ok(0);
         let mut seen = std::collections::BTreeSet::new();
@@ -82,6 +116,13 @@ pub async fn collect(
                             }
                         }
                     } else {
+                        if !payload
+                            .pointer(&endpoint.items)
+                            .is_some_and(|value| value.is_array())
+                        {
+                            outcome = Err(Error::Malformed);
+                            break;
+                        }
                         crate::resource_projection::rows(&payload, &endpoint.items)
                             .iter()
                             .filter_map(|r| {
@@ -157,6 +198,26 @@ pub async fn collect(
             pages,
             true,
         ));
+        if root.provider == Provider::Aws {
+            let region = job
+                .target
+                .regions
+                .first()
+                .map(String::as_str)
+                .unwrap_or("us-east-1");
+            let mut endpoint = Endpoint::get(
+                format!("regions/{}", root.scope),
+                format!("https://ec2.{region}.amazonaws.com/"),
+                "/regionInfo/item",
+            );
+            endpoint.aws = Some(("ec2".into(), region.into(), "query:DescribeRegions".into()));
+            endpoint.body = Some(
+                json!({"Action":"DescribeRegions","Version":"2016-11-15","AllRegions":"true"}),
+            );
+            let collected = common::collect(http, auth, job, vec![endpoint], cancel).await;
+            result.operations.extend(collected.operations);
+            result.observations.extend(collected.observations);
+        }
     }
     if result.operations.is_empty() {
         result.operations.push(operation(

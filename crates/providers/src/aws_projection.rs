@@ -106,8 +106,8 @@ pub fn project(job: &Job, endpoint: &Endpoint, value: &Value) -> Option<Vec<Obse
                 geo_redundant: None,
             }
         }
-        "lambda-detail" => Data::Service {
-            state: state(text(value, &["/State"])),
+        "lambda-detail" | "lambda-image" => Data::Service {
+            state: state(text(value, &["/State", "/Configuration/State"])),
             replicas: None,
             backup_enabled: None,
             encrypted: None,

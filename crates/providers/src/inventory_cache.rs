@@ -17,12 +17,14 @@ struct Entry {
     _bytes: OwnedSemaphorePermit,
 }
 pub struct InventoryCache {
+    pub(crate) tokens: crate::registry_tokens::Tokens,
     entries: scc::HashCache<String, Arc<Mutex<Option<Entry>>>>,
     bytes: Arc<Semaphore>,
 }
 impl InventoryCache {
     pub fn new(entries: usize, bytes: Arc<Semaphore>) -> Self {
         Self {
+            tokens: crate::registry_tokens::Tokens::new(bytes.clone()),
             entries: scc::HashCache::with_capacity(0, entries),
             bytes,
         }

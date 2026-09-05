@@ -28,11 +28,24 @@ impl Router {
             *cache = None;
         }
         let config = self.config.read().await;
-        let env = job
+        let profile = job
             .target
-            .credential
+            .github_credential
             .as_ref()
-            .and_then(|k| config.credentials.get(k))
+            .or_else(|| {
+                (job.target.provider == Provider::Github)
+                    .then_some(job.target.credential.as_ref())
+                    .flatten()
+            })
+            .and_then(|name| config.credentials.get(name))
+            .or_else(|| {
+                config
+                    .credentials
+                    .values()
+                    .find(|profile| profile.provider == Provider::Github)
+            });
+        let expected = profile.and_then(|profile| profile.expected_identity.clone());
+        let env = profile
             .and_then(|p| p.token_env.as_deref())
             .unwrap_or("GH_TOKEN");
         let token = match std::env::var(env) {
@@ -54,7 +67,7 @@ impl Router {
             }
         };
         drop(config);
-        let result = github::collect(&scope.http, job, &token, cancel).await;
+        let result = github::collect(&scope.http, job, &token, expected.as_deref(), cancel).await;
         if job.check != Check::Preflight && result.complete() {
             *cache = None;
             if let Ok(bytes) = u32::try_from(monitor_core::bounds::result_bytes(&result))

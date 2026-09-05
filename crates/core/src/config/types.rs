@@ -26,6 +26,7 @@ pub struct Config {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Credential {
+    pub credential_file: Option<std::path::PathBuf>,
     pub provider: Provider,
     pub profile: Option<String>,
     pub tenant: Option<String>,
@@ -56,6 +57,7 @@ pub struct Target {
     pub credential: Option<String>,
     #[serde(default)]
     pub regions: Vec<String>,
+    pub github_credential: Option<String>,
     pub context: Option<String>,
     pub timezone: Option<String>,
     #[serde(default)]
@@ -72,6 +74,8 @@ pub struct Target {
     pub endpoints: Vec<Endpoint>,
     #[serde(default)]
     pub repositories: Vec<String>,
+    #[serde(default)]
+    pub artifact_targets: Vec<String>,
     #[serde(default)]
     pub build_targets: BTreeMap<String, String>,
     #[serde(default)]

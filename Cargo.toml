@@ -34,6 +34,8 @@ panic = "deny"
 
 [profile.dev]
 debug = 0
+# Rust 1.98.1 can reuse invalid trait-obligation fingerprints after a compilation error.
+incremental = false
 
 [profile.release]
 opt-level = 3

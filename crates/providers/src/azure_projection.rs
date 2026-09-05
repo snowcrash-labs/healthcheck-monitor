@@ -3,6 +3,22 @@ use crate::common::Endpoint;
 use monitor_core::{config::resolve::Job, model::*};
 use monitor_integrations::projection::{self, observation, text};
 use serde_json::Value;
+pub fn registry(job: &Job, endpoint: &Endpoint, value: &Value) -> Vec<Observation> {
+    let Some(host) = text(value, &["/properties/loginServer"]).filter(|host| {
+        host.ends_with(".azurecr.io")
+            && host
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || b".-".contains(&byte))
+    }) else {
+        return vec![];
+    };
+    vec![observation(
+        job,
+        &endpoint.id,
+        host,
+        Data::Registry { host: host.into() },
+    )]
+}
 pub fn graph(job: &Job, endpoint: &Endpoint, value: &Value) -> Vec<Observation> {
     let id = endpoint.id.as_str();
     let name = text(value, &["/id", "/name"]).unwrap_or("resource");

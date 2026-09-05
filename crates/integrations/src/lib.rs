@@ -10,6 +10,7 @@ pub mod log_dedup;
 pub mod log_window;
 pub mod logs;
 pub mod nats;
+mod nats_collect;
 pub mod process;
 #[cfg(test)]
 mod process_tests;

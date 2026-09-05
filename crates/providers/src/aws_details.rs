@@ -2,7 +2,13 @@
 use crate::common::Endpoint;
 use monitor_core::config::resolve::Job;
 use serde_json::json;
-pub fn followups(job: &Job, parent: &Endpoint, family: &str, name: &str) -> Vec<Endpoint> {
+pub fn followups(
+    job: &Job,
+    parent: &Endpoint,
+    family: &str,
+    name: &str,
+    row: &serde_json::Value,
+) -> Vec<Endpoint> {
     let Some((_, region, _)) = &parent.aws else {
         return vec![];
     };
@@ -87,6 +93,18 @@ pub fn followups(job: &Job, parent: &Endpoint, family: &str, name: &str) -> Vec<
         );
         endpoint.aws = Some((service.into(), region.clone(), target.into()));
         endpoint.body = Some(body);
+        if family == "ecs-clusters" {
+            let mut tasks = endpoint.clone();
+            tasks.id = format!("ecs-tasks/{region}/{name}");
+            tasks.items = "/taskArns".into();
+            tasks.aws = Some((
+                "ecs".into(),
+                region.clone(),
+                "AmazonEC2ContainerServiceV20141113.ListTasks".into(),
+            ));
+            tasks.body = Some(json!({"cluster":name,"desiredStatus":"RUNNING","maxResults":100}));
+            return vec![endpoint, tasks];
+        }
         return vec![endpoint];
     }
     if family == "eks" {
@@ -118,6 +136,16 @@ pub fn followups(job: &Job, parent: &Endpoint, family: &str, name: &str) -> Vec<
         .collect();
     }
     let rest = match family {
+        "lambda"
+            if monitor_integrations::projection::text(row, &["/PackageType"]) == Some("Image") =>
+        {
+            Some((
+                "lambda-image",
+                "lambda",
+                format!("/2015-03-31/functions/{name}"),
+                "",
+            ))
+        }
         "lambda" => Some((
             "lambda-detail",
             "lambda",

@@ -7,6 +7,10 @@ use serde_json::Value;
 pub use crate::projection_rows::rows;
 pub fn project(job: &Job, endpoint: &Endpoint, value: &Value) -> Vec<Observation> {
     let mut result = project_data(job, endpoint, value);
+    if job.target.provider == Provider::Azure && endpoint.id == "registries" {
+        result.extend(crate::azure_projection::registry(job, endpoint, value));
+    }
+    result.extend(crate::runtime_images::project(job, endpoint, value));
     result.extend(crate::artifact_projection::built(job, endpoint, value));
     if let Some(url) = crate::advertisements::endpoint(endpoint, value) {
         result.push(observation(
@@ -19,6 +23,12 @@ pub fn project(job: &Job, endpoint: &Endpoint, value: &Value) -> Vec<Observation
     result
 }
 fn project_data(job: &Job, endpoint: &Endpoint, value: &Value) -> Vec<Observation> {
+    if endpoint.id.starts_with("registry-manifest/") {
+        return crate::registry_manifests::project(job, endpoint, value);
+    }
+    if endpoint.id.starts_with("ecs-tasks-detail/") {
+        return vec![];
+    }
     if endpoint.id.starts_with("registry-images/") {
         return crate::artifact_projection::registry(job, endpoint, value);
     }
@@ -82,6 +92,9 @@ fn project_data(job: &Job, endpoint: &Endpoint, value: &Value) -> Vec<Observatio
             "/BackupVaultName",
             "/ResourceArn",
             "/VersionId",
+            "/taskArn",
+            "/serviceArn",
+            "/regionName",
         ],
     )
     .or_else(|| value.as_str())

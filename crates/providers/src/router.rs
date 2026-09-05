@@ -31,6 +31,7 @@ pub struct Router {
     pub(crate) processes: Processes,
     pub(crate) cache_bytes: Arc<Semaphore>,
     log_cursors: scc::HashMap<String, chrono::DateTime<chrono::Utc>>,
+    pub(crate) discovery_auth: scc::HashCache<String, Arc<Mutex<Option<Arc<Auth>>>>>,
 }
 pub(crate) struct Cached {
     pub(crate) consumers: std::collections::BTreeSet<Check>,
@@ -46,12 +47,14 @@ impl Router {
             processes: Processes::new(subprocesses),
             cache_bytes: Arc::new(Semaphore::new(bytes)),
             log_cursors: scc::HashMap::new(),
+            discovery_auth: scc::HashCache::with_capacity(0, 128),
         }
     }
     pub async fn reload(&self, config: Config) {
         *self.config.write().await = config;
         self.scopes.clear_async().await;
         self.log_cursors.clear_async().await;
+        self.discovery_auth.clear_async().await;
     }
     /// Restore completed log windows without changing their evidence timestamps.
     pub async fn restore_logs(&self, snapshot: &Snapshot) {
@@ -139,7 +142,7 @@ impl Router {
                 job.target.provider,
                 profile.as_ref(),
                 job.target.regions.first().map(String::as_str),
-                &job.target.scope,
+                Some(&job.target.scope),
                 &scope.http,
                 &job.settings,
             ),
@@ -232,6 +235,25 @@ impl Collector for Router {
                 Err(error) => CheckResult::failure(job.target.name.clone(), job.check, job.revision.clone(), error.coverage()),
             }
         };
+        if result
+            .operations
+            .iter()
+            .any(|operation| operation.coverage == Coverage::Unauthenticated)
+            && let Some(scope) = self
+                .scopes
+                .read_async(&job.target.name, |_, scope| scope.clone())
+                .await
+        {
+            if job.check == Check::Kubernetes
+                || job.kube_only
+                || job.target.provider == Provider::Kubernetes
+            {
+                *scope.kube.lock().await = None;
+            } else {
+                *scope.auth.lock().await = None;
+                scope.inventory.tokens.clear().await;
+            }
+        }
         if job.continuous
             && job.check == Check::Logs
             && crate::log_cursor::complete(&result)

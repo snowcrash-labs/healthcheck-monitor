@@ -28,14 +28,33 @@ impl HttpConnector for Recorder {
         }) {
             self.allowed.store(false, Ordering::SeqCst);
         }
-        HttpConnectorFuture::new(async {
-            let status = aws_smithy_runtime_api::http::StatusCode::try_from(400).map_err(|_| {
-                aws_smithy_runtime_api::client::result::ConnectorError::other(
-                    Box::new(std::io::Error::other("fixture status")),
-                    None,
-                )
-            })?;
-            Ok(HttpResponse::new(status, SdkBody::from("{}")))
+        let metrics = request.uri().contains("/GetMetricData");
+        HttpConnectorFuture::new(async move {
+            let status =
+                aws_smithy_runtime_api::http::StatusCode::try_from(if metrics { 200 } else { 400 })
+                    .map_err(|_| {
+                        aws_smithy_runtime_api::client::result::ConnectorError::other(
+                            Box::new(std::io::Error::other("fixture status")),
+                            None,
+                        )
+                    })?;
+            let mut response = HttpResponse::new(
+                status,
+                if metrics {
+                    SdkBody::from(vec![0xa0])
+                } else {
+                    SdkBody::from("{}")
+                },
+            );
+            if metrics {
+                response
+                    .headers_mut()
+                    .insert("content-type", "application/cbor");
+                response
+                    .headers_mut()
+                    .insert("smithy-protocol", "rpc-v2-cbor");
+            }
+            Ok(response)
         })
     }
 }
@@ -88,7 +107,15 @@ async fn cloudwatch_batches_use_read_only_sdk_requests() -> Result<(), Box<dyn s
             error: None,
         })
         .collect();
-    let _ = crate::aws_metrics::aws(&auth, &job, &tokio_util::sync::CancellationToken::new()).await;
+    let result =
+        crate::aws_metrics::aws(&auth, &job, &tokio_util::sync::CancellationToken::new()).await;
+    assert_eq!(result.operations.len(), 501);
+    assert!(
+        result
+            .operations
+            .iter()
+            .all(|operation| operation.coverage == monitor_core::model::Coverage::Missing)
+    );
     assert_eq!(calls.load(Ordering::SeqCst), 2);
     if let crate::auth::Auth::Aws(clients) = &auth {
         let _ = clients.sts.get_caller_identity().send().await;

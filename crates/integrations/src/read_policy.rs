@@ -20,10 +20,19 @@ pub fn allowed(request: &Request) -> bool {
         reqwest::Method::GET | reqwest::Method::HEAD => {
             let query = request.url().query().unwrap_or("").to_ascii_lowercase();
             !query.contains("alt=media")
+                && !(path.starts_with("/v2/") && path.contains("/blobs/"))
                 && !path.contains("/objects/")
                 && (!path.contains("/secrets/") || path.ends_with("/versions"))
         }
         reqwest::Method::POST => {
+            if request
+                .url()
+                .host_str()
+                .is_some_and(|host| host.ends_with(".azurecr.io"))
+                && matches!(path.as_str(), "/oauth2/exchange" | "/oauth2/token")
+            {
+                return true;
+            }
             if request.url().host_str() == Some("management.azure.com")
                 && path.contains("/providers/microsoft.network/applicationgateways/")
                 && path.ends_with("/backendhealth")
@@ -111,6 +120,8 @@ pub fn allowed(request: &Request) -> bool {
                 "ListTables",
                 "DescribeClusters",
                 "DescribeServices",
+                "ListTasks",
+                "DescribeTasks",
                 "ListClusters",
                 "ListServices",
                 "ListFunctions",
@@ -128,6 +139,7 @@ pub fn allowed(request: &Request) -> bool {
                 "DescribeRepositories",
                 "ListImages",
                 "DescribeImages",
+                "BatchGetImage",
                 "ListBuilds",
                 "BatchGetBuilds",
                 "ListPipelines",

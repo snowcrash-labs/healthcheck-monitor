@@ -18,6 +18,10 @@ pub struct Selection {
 }
 #[derive(Debug, Clone, Serialize)]
 pub struct Job {
+    pub artifact_only: bool,
+    pub assess_health: bool,
+    pub requested_checks: BTreeSet<Check>,
+    pub kube_only: bool,
     #[serde(skip)]
     pub sampling_explicit: bool,
     #[serde(skip)]
@@ -100,6 +104,13 @@ impl Config {
     }
     /// Defaults, global, profile, target, global check, target check, CLI.
     pub fn resolve(&self, selection: &Selection) -> Result<Effective, Error> {
+        self.resolve_inner(selection, false)
+    }
+    pub(super) fn resolve_inner(
+        &self,
+        selection: &Selection,
+        metadata_only: bool,
+    ) -> Result<Effective, Error> {
         let profile_name = selection.profile.as_deref().unwrap_or("full");
         let profile = self
             .profiles
@@ -140,20 +151,41 @@ impl Config {
                 .into_iter()
                 .filter(|c| applicable(target, *c))
                 .collect();
+            let kube_only = target.context.is_some()
+                && checks.iter().any(|check| *check != Check::Preflight)
+                && checks.iter().all(|check| {
+                    matches!(check, Check::Preflight | Check::Kubernetes | Check::Queues)
+                });
+            let requested_checks = checks.clone();
+            if target.provider != crate::model::Provider::Github
+                && !selection.checks.contains(&Check::Discovery)
+                && !self
+                    .discovery
+                    .iter()
+                    .any(|root| root.provider == target.provider)
+            {
+                checks.remove(&Check::Discovery);
+            }
             checks.insert(Check::Preflight);
-            if checks.iter().any(|c| {
-                matches!(
-                    c,
-                    Check::Managed | Check::Releases | Check::Queues | Check::Edge
-                )
-            }) && target.provider != crate::model::Provider::Edge
+            if !metadata_only
+                && checks
+                    .iter()
+                    .any(|c| matches!(c, Check::Managed | Check::Releases))
+                && target.provider != crate::model::Provider::Edge
             {
                 if applicable(target, Check::Inventory) {
                     checks.insert(Check::Inventory);
                 }
-                if target.context.is_some() {
+                if target.context.is_some() && checks.contains(&Check::Releases) {
                     checks.insert(Check::Kubernetes);
                 }
+            }
+            if target.context.is_some()
+                && checks
+                    .iter()
+                    .any(|check| matches!(check, Check::Queues | Check::Edge))
+            {
+                checks.insert(Check::Kubernetes);
             }
             if checks.contains(&Check::Flows) && !target.flows.is_empty() {
                 checks.insert(Check::Metrics);
@@ -175,16 +207,20 @@ impl Config {
                     },
                     ..Default::default()
                 };
-                settings.overlay(&self.settings);
-                settings.overlay(&profile.settings);
-                settings.overlay(&target.settings);
-                if let Some(patch) = self.checks.get(&check) {
+                let empty = SettingsPatch::default();
+                let patches = [
+                    &self.settings,
+                    &profile.settings,
+                    &target.settings,
+                    self.checks.get(&check).unwrap_or(&empty),
+                    target.checks.get(&check).unwrap_or(&empty),
+                    &selection.overrides,
+                ];
+                let sampling_explicit = patches.iter().any(|patch| patch.samples.is_some());
+                let interval_explicit = patches.iter().any(|patch| patch.interval.is_some());
+                for patch in patches {
                     settings.overlay(patch);
                 }
-                if let Some(patch) = target.checks.get(&check) {
-                    settings.overlay(patch);
-                }
-                settings.overlay(&selection.overrides);
                 settings.validate()?;
                 if !settings.enabled {
                     continue;
@@ -194,32 +230,12 @@ impl Config {
                     target.resources = selection.resources.clone();
                 }
                 jobs.push(Job {
-                    sampling_explicit: [
-                        &self.settings,
-                        &profile.settings,
-                        &target.settings,
-                        self.checks.get(&check).unwrap_or(&SettingsPatch::default()),
-                        target
-                            .checks
-                            .get(&check)
-                            .unwrap_or(&SettingsPatch::default()),
-                        &selection.overrides,
-                    ]
-                    .iter()
-                    .any(|patch| patch.samples.is_some()),
-                    interval_explicit: [
-                        &self.settings,
-                        &profile.settings,
-                        &target.settings,
-                        self.checks.get(&check).unwrap_or(&SettingsPatch::default()),
-                        target
-                            .checks
-                            .get(&check)
-                            .unwrap_or(&SettingsPatch::default()),
-                        &selection.overrides,
-                    ]
-                    .iter()
-                    .any(|patch| patch.interval.is_some()),
+                    artifact_only: metadata_only,
+                    assess_health: requested_checks.contains(&check) || check == Check::Preflight,
+                    requested_checks: requested_checks.clone(),
+                    kube_only,
+                    sampling_explicit,
+                    interval_explicit,
                     continuous: false,
                     log_start: None,
                     log_end: None,
@@ -235,38 +251,7 @@ impl Config {
             }
         }
         super::prerequisites::sampling(&mut jobs)?;
-        if jobs.iter().any(|job| {
-            job.check == Check::Releases && job.target.provider != crate::model::Provider::Github
-        }) {
-            let sources: Vec<_> = self
-                .targets
-                .iter()
-                .filter(|target| {
-                    target.provider == crate::model::Provider::Github
-                        && !jobs.iter().any(|job| {
-                            job.target.name == target.name
-                                && matches!(
-                                    job.check,
-                                    Check::Github | Check::Releases | Check::Inventory
-                                )
-                        })
-                })
-                .map(|target| target.name.clone())
-                .collect();
-            if !sources.is_empty() {
-                let mut sources = self.resolve(&Selection {
-                    profile: selection.profile.clone(),
-                    targets: sources,
-                    checks: vec![Check::Github],
-                    resources: vec![],
-                    overrides: selection.overrides.clone(),
-                })?;
-                for job in &mut sources.jobs {
-                    job.revision = revision.clone();
-                }
-                jobs.extend(sources.jobs);
-            }
-        }
+        self.reference_jobs(selection, &mut jobs, &revision, metadata_only)?;
         let flow_settings: std::collections::BTreeMap<_, _> = jobs
             .iter()
             .filter(|job| job.check == Check::Flows)

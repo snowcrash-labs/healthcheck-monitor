@@ -46,7 +46,7 @@ pub fn endpoints(job: &Job) -> Vec<Endpoint> {
                 continue;
             }
             if job.check == Check::Releases
-                && !matches!(*name, "ecr" | "codebuild" | "codepipeline" | "ecs-services")
+                && !matches!(*name, "ecr" | "codebuild" | "codepipeline" | "ecs-clusters")
             {
                 continue;
             }

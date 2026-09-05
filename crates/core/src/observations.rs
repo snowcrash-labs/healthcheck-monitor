@@ -4,6 +4,9 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Data {
+    Registry {
+        host: String,
+    },
     Artifact {
         manifest: ManifestKind,
         children: Vec<String>,
@@ -237,7 +240,8 @@ impl Data {
     pub fn is_health_evidence(&self) -> bool {
         !matches!(
             self,
-            Self::Artifact { .. }
+            Self::Registry { .. }
+                | Self::Artifact { .. }
                 | Self::Commit { .. }
                 | Self::SloDefinition { .. }
                 | Self::LogWorkspace { .. }

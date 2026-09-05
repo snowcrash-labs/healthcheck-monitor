@@ -52,6 +52,11 @@ pub fn markdown(snapshot: &Snapshot) -> String {
         );
     }
     for key in &snapshot.selected_scope {
+        let label = if snapshot.collection_only.contains(key) {
+            format!("{} (prerequisite)", safe(key))
+        } else {
+            safe(key)
+        };
         match snapshot.results.get(key) {
             Some(result) => {
                 let coverage: BTreeSet<_> = result
@@ -61,13 +66,13 @@ pub fn markdown(snapshot: &Snapshot) -> String {
                     .collect();
                 out.push_str(&format!(
                     "| {} | {} | {} | {} |\n",
-                    safe(key),
+                    label,
                     coverage.into_iter().collect::<Vec<_>>().join(", "),
                     result.observations.len(),
                     snapshot.samples.get(key).copied().unwrap_or(0)
                 ));
             }
-            None => out.push_str(&format!("| {} | Missing | 0 | 0 |\n", safe(key))),
+            None => out.push_str(&format!("| {label} | Missing | 0 | 0 |\n")),
         }
     }
     out.push_str("\n| Resource | Rule | Severity | Stale |\n| --- | --- | --- | --- |\n");

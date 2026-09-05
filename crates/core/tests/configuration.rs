@@ -42,7 +42,7 @@ fn cli_overrides_global_profile_target_and_check() -> Result<(), Box<dyn std::er
     };
     let jobs = c.resolve(&selected)?.jobs;
     assert!(jobs.iter().all(|j| j.settings.interval == Span(90)));
-    assert!(jobs.iter().any(|j| j.check == Check::Inventory));
+    assert!(jobs.iter().any(|j| j.check == Check::Preflight));
     Ok(())
 }
 #[test]

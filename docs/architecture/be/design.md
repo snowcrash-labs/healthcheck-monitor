@@ -55,3 +55,5 @@ Linux and macOS development checks are defined in the repository workflow. Local
 - [Valkey instance API](https://docs.cloud.google.com/memorystore/docs/valkey/reference/rest/v1/projects.locations.instances/list).
 - [Valkey operational metrics](https://docs.cloud.google.com/memorystore/docs/valkey/supported-monitoring-metrics).
 - [Azure Resource Health](https://learn.microsoft.com/en-us/rest/api/resourcehealth/availability-statuses/get-by-resource?view=rest-resourcehealth-2025-05-01).
+- [Azure registry manifest metadata and platform references](https://learn.microsoft.com/en-us/rest/api/registry-dataplane/container-registry/get-manifests?view=rest-registry-dataplane-2021-07-01).
+- [Azure registry token exchange](https://learn.microsoft.com/en-us/rest/api/registry-dataplane/authentication/exchange-aad-access-token-for-acr-refresh-token?view=rest-registry-dataplane-2021-07-01).

@@ -76,6 +76,9 @@ impl Kubernetes {
         );
         result.operations.clear();
         for (kind, api) in KINDS {
+            if !required_kind(job, kind) {
+                continue;
+            }
             if cancel.is_cancelled() {
                 break;
             }
@@ -141,6 +144,30 @@ impl Kubernetes {
         }
         result.finished_at = chrono::Utc::now();
         result
+    }
+}
+fn required_kind(job: &Job, kind: &str) -> bool {
+    let requested = &job.requested_checks;
+    if requested.contains(&Check::Kubernetes)
+        || requested.len() == 1 && requested.contains(&Check::Preflight)
+        || job.target.provider == Provider::Kubernetes
+            && requested
+                .iter()
+                .any(|check| matches!(check, Check::Inventory | Check::Managed))
+    {
+        return true;
+    }
+    let queues = requested.contains(&Check::Queues) || requested.contains(&Check::Flows);
+    let releases = requested.contains(&Check::Releases);
+    let edge = requested.contains(&Check::Edge);
+    match kind {
+        "pods" | "deployments" | "statefulsets" | "replicasets" | "daemonsets" => {
+            queues || releases
+        }
+        "jobs" | "cronjobs" => releases,
+        "horizontalpodautoscalers" | "scaledobjects" => queues,
+        "ingresses" | "httproutes" | "mappings" | "certificates" => edge,
+        _ => false,
     }
 }
 const KINDS: &[(&str, &str)] = &[

@@ -15,6 +15,11 @@ impl State {
         now: DateTime<Utc>,
     ) -> Vec<Transition> {
         let samples = self.snapshot.samples.entry(job.key.clone()).or_default();
+        if job.assess_health {
+            self.snapshot.collection_only.remove(&job.key);
+        } else {
+            self.snapshot.collection_only.insert(job.key.clone());
+        }
         self.snapshot
             .scope_fingerprints
             .insert(job.key.clone(), job.observation_scope());
@@ -22,7 +27,7 @@ impl State {
         if job.check == Check::Flows {
             result = crate::flows::evaluate(&mut self.snapshot, job, now);
         }
-        if job.check == Check::Releases {
+        if job.check == Check::Releases && !job.artifact_only {
             crate::releases::enrich(&self.snapshot, job, &mut result, now);
         }
         let mut transitions = Vec::new();
@@ -80,14 +85,27 @@ impl State {
                 .operations
                 .iter()
                 .any(|op| op.id == observation.operation && op.coverage == Coverage::Complete);
-            let evaluation = crate::capacity::evaluate(
-                &mut self.snapshot.pressure,
-                observation,
-                &job.settings,
-                complete,
-                now,
-            )
-            .unwrap_or_else(|| evaluate(observation, prior, &job.settings, now));
+            let assess = job.assess_health
+                && (job.check != Check::Releases
+                    || matches!(
+                        observation.data,
+                        Data::Build { .. } | Data::Provenance { .. }
+                    ));
+            let evaluation = if !assess {
+                crate::policy::Evaluation {
+                    health: Health::Unknown,
+                    findings: vec![],
+                }
+            } else {
+                crate::capacity::evaluate(
+                    &mut self.snapshot.pressure,
+                    observation,
+                    &job.settings,
+                    complete,
+                    now,
+                )
+                .unwrap_or_else(|| evaluate(observation, prior, &job.settings, now))
+            };
             let health = if !complete
                 && matches!(
                     evaluation.health,
@@ -97,7 +115,7 @@ impl State {
             } else {
                 evaluation.health
             };
-            if observation.data.is_health_evidence() {
+            if assess && observation.data.is_health_evidence() {
                 self.snapshot
                     .health
                     .insert(observation.resource.clone(), health);

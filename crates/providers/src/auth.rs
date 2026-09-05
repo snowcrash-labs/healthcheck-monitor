@@ -15,16 +15,22 @@ impl Auth {
         provider: Provider,
         profile: Option<&Credential>,
         region: Option<&str>,
-        scope: &str,
+        scope: Option<&str>,
         http: &monitor_integrations::transport::Http,
         settings: &monitor_core::config::settings::Settings,
     ) -> Result<Self, Error> {
         match provider {
             Provider::Gcp => {
-                let credentials = google_cloud_auth::credentials::Builder::default()
-                    .with_scopes(["https://www.googleapis.com/auth/cloud-platform"])
-                    .build_access_token_credentials()
-                    .map_err(|_| Error::Authentication)?;
+                let credentials = crate::google_credentials::load(profile).await?;
+                if let Some(expected) =
+                    profile.and_then(|profile| profile.expected_identity.as_deref())
+                {
+                    let token = credentials
+                        .access_token()
+                        .await
+                        .map_err(|_| Error::Authentication)?;
+                    crate::auth_identity::google(http, &token.token, expected, settings).await?;
+                }
                 Ok(Self::Gcp(credentials))
             }
             Provider::Azure => {
@@ -51,6 +57,15 @@ impl Auth {
                     ))
                     .map_err(|_| Error::Authentication)?
                 };
+                if let Some(expected) =
+                    profile.and_then(|profile| profile.expected_identity.as_deref())
+                {
+                    let token = credential
+                        .get_token(&["https://management.azure.com/.default"], None)
+                        .await
+                        .map_err(|_| Error::Authentication)?;
+                    crate::auth_identity::azure(token.token.secret(), expected)?;
+                }
                 Ok(Self::Azure(credential))
             }
             Provider::Aws => {
@@ -98,7 +113,7 @@ impl Auth {
                     .send()
                     .await
                     .map_err(|_| Error::Authentication)?;
-                if identity.account() != Some(scope) {
+                if scope.is_some_and(|scope| identity.account() != Some(scope)) {
                     return Err(Error::Forbidden);
                 }
                 if profile
@@ -114,6 +129,16 @@ impl Auth {
     }
     pub async fn bearer(&self) -> Result<String, Error> {
         self.bearer_for(false).await
+    }
+    pub async fn registry_bearer(&self) -> Result<String, Error> {
+        let Self::Azure(credentials) = self else {
+            return Err(Error::Authentication);
+        };
+        credentials
+            .get_token(&["https://containerregistry.azure.net/.default"], None)
+            .await
+            .map(|token| token.token.secret().to_string())
+            .map_err(|_| Error::Authentication)
     }
     pub async fn bearer_for(&self, logs: bool) -> Result<String, Error> {
         match self {

@@ -1,7 +1,10 @@
 mod applicability;
+mod credentials;
 pub mod duration;
+mod limits;
 pub mod patch;
 mod prerequisites;
+mod references;
 pub mod resolve;
 pub mod settings;
 pub mod types;

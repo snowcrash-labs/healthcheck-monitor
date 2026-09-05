@@ -48,6 +48,9 @@ pub fn endpoints(job: &Job) -> Vec<Endpoint> {
         .collect();
     let mut endpoints = Vec::new();
     for (id, template, items) in CATALOG {
+        if job.artifact_only && !matches!(*id, "builds" | "artifact-repositories") {
+            continue;
+        }
         if job.check == Check::Edge && *id != "cloud-run" {
             continue;
         }

@@ -104,34 +104,44 @@ impl Router {
             let mut nats = scope.nats.lock().await;
             if nats.is_none() {
                 let url = job.target.nats_url.as_ref().ok_or(Error::Authentication)?;
+                let credential = {
+                    let config = self.config.read().await;
+                    job.target
+                        .credential
+                        .as_ref()
+                        .and_then(|name| config.credentials.get(name))
+                        .cloned()
+                };
                 *nats = Some(
                     tokio::time::timeout(
                         job.settings.connect_timeout.duration(),
-                        Nats::connect(url.as_str()),
+                        Nats::connect(url.as_str(), credential.as_ref()),
                     )
                     .await
                     .map_err(|_| Error::Timeout)??,
                 );
             }
-            let nats = nats.as_ref().ok_or(Error::Authentication)?;
-            let observations = tokio::time::timeout(
-                job.settings.operation_timeout.duration(),
-                nats.collect(job, cancel),
-            )
-            .await
-            .map_err(|_| Error::Timeout)??;
-            let mut result = base(job);
-            result
-                .operations
-                .push(operation("nats-streams", Ok(observations.len()), 1, true));
-            result.observations = observations;
+            let result = nats
+                .as_ref()
+                .ok_or(Error::Authentication)?
+                .collect(job, cancel)
+                .await;
+            if result.operations.iter().any(|operation| {
+                matches!(
+                    operation.coverage,
+                    Coverage::Unavailable | Coverage::Unauthenticated
+                )
+            }) {
+                *nats = None;
+            }
             return Ok(result);
         }
         if job.check == Check::Preflight
-            && matches!(job.target.provider, Provider::Edge | Provider::Kubernetes)
+            && (job.kube_only
+                || matches!(job.target.provider, Provider::Edge | Provider::Kubernetes))
         {
             let mut result = base(job);
-            if job.target.provider == Provider::Kubernetes {
+            if job.kube_only || job.target.provider == Provider::Kubernetes {
                 let observed = self.kube(job, &scope, cancel).await?;
                 if let Some(failed) = observed.operations.iter().find(|operation| {
                     operation.required && operation.coverage != Coverage::Complete
@@ -156,6 +166,9 @@ impl Router {
                 },
             ));
             return Ok(result);
+        }
+        if job.check == Check::Discovery {
+            return Ok(self.discover(job, &scope, cancel).await);
         }
         let auth = self.auth(job, &scope).await?;
         if job.check == Check::Slo && !job.target.slo_goals.is_empty() {
@@ -205,10 +218,6 @@ impl Router {
                     Coverage::Unsupported,
                 ),
             });
-        }
-        if job.check == Check::Discovery {
-            let roots = self.config.read().await.discovery.clone();
-            return Ok(crate::discovery::collect(&scope.http, &auth, job, &roots, cancel).await);
         }
         Ok(match job.target.provider {
             Provider::Gcp => {

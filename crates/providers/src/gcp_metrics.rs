@@ -11,6 +11,9 @@ pub async fn collect<S: Source>(source: &S, job: &Job, cancel: &CancellationToke
     let endpoints = crate::gcp::endpoints(&inventory_job)
         .into_iter()
         .filter(|endpoint| {
+            if job.check == Check::Queues {
+                return endpoint.id.starts_with("pubsub-subscriptions/");
+            }
             matches!(
                 endpoint.id.split('/').next(),
                 Some(
@@ -50,6 +53,12 @@ pub async fn collect<S: Source>(source: &S, job: &Job, cancel: &CancellationToke
                 operation.id.starts_with(&format!("{family}/"))
                     && (operation.records > 0 || operation.coverage != Coverage::Complete)
             })
+        })
+        .map(|mut query| {
+            if query.name == "pubsub-age" {
+                query.error = job.settings.queue_age_error;
+            }
+            query
         })
         .collect();
     if !metrics.target.metrics.is_empty() {

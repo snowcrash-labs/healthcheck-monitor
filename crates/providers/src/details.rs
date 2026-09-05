@@ -4,6 +4,9 @@ use monitor_core::{config::resolve::Job, model::Provider};
 use monitor_integrations::projection::text;
 use serde_json::{Value, json};
 pub fn followups(job: &Job, parent: &Endpoint, row: &Value) -> Vec<Endpoint> {
+    if parent.id.starts_with("registry-images/") {
+        return crate::registry_manifests::followups(job, parent, row);
+    }
     let family = parent.id.split('/').next().unwrap_or("");
     let name = if job.target.provider == Provider::Azure {
         text(row, &["/id"])
@@ -25,12 +28,17 @@ pub fn followups(job: &Job, parent: &Endpoint, row: &Value) -> Vec<Endpoint> {
                 "/CertificateArn",
                 "/BackupVaultName",
                 "/FunctionName",
+                "/serviceArn",
+                "/taskArn",
             ],
         )
         .or_else(|| row.as_str())
     });
     let Some(name) = name else { return vec![] };
-    if !job.target.resources.is_empty()
+    if !matches!(
+        family,
+        "ecs-clusters" | "ecs-services" | "ecs-tasks" | "artifact-repositories" | "ecr"
+    ) && !job.target.resources.is_empty()
         && !job
             .target
             .resources
@@ -47,7 +55,7 @@ pub fn followups(job: &Job, parent: &Endpoint, row: &Value) -> Vec<Endpoint> {
     }
     match job.target.provider {
         Provider::Gcp => gcp(job, parent, family, name, row),
-        Provider::Aws => crate::aws_details::followups(job, parent, family, name),
+        Provider::Aws => crate::aws_details::followups(job, parent, family, name, row),
         Provider::Azure => crate::azure_details::followups(job, parent, family, name),
         _ => vec![],
     }
@@ -55,6 +63,45 @@ pub fn followups(job: &Job, parent: &Endpoint, row: &Value) -> Vec<Endpoint> {
 fn gcp(job: &Job, parent: &Endpoint, family: &str, name: &str, row: &Value) -> Vec<Endpoint> {
     let p = &job.target.scope;
     let mut out = Vec::new();
+    if family == "cloud-run" {
+        let mut revisions: std::collections::BTreeSet<_> = row
+            .get("trafficStatuses")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter(|traffic| {
+                monitor_integrations::projection::number(traffic, &["/percent"])
+                    .is_some_and(|percent| percent > 0.0)
+            })
+            .filter_map(|traffic| text(traffic, &["/revision"]))
+            .map(String::from)
+            .collect();
+        if revisions.is_empty()
+            && let Some(revision) = text(row, &["/latestReadyRevision"])
+        {
+            revisions.insert(revision.into());
+        }
+        for revision in revisions.into_iter().take(job.settings.max_assets) {
+            let revision = if revision.starts_with("projects/") {
+                revision
+            } else {
+                format!("{name}/revisions/{revision}")
+            };
+            if !revision.starts_with(&format!("{name}/revisions/"))
+                || !monitor_core::config::validate::identifier(&revision)
+            {
+                continue;
+            }
+            let Some((_, location)) = revision.split_once("/locations/") else {
+                continue;
+            };
+            out.push(Endpoint::get(
+                format!("cloud-run-revision/{revision}"),
+                format!("https://run.googleapis.com/v2/projects/{p}/locations/{location}"),
+                "",
+            ));
+        }
+    }
     let paths: Vec<(String, String, &str)> = match family {
         "sql" => vec![
             (
