@@ -24,9 +24,12 @@ async fn pooled_probes_reuse_one_tls_connection_and_never_read_application_bodie
 -> Result<(), Box<dyn std::error::Error>> {
     let certified = rcgen::generate_simple_self_signed(vec!["localhost".into()])?;
     let key = rustls::pki_types::PrivatePkcs8KeyDer::from(certified.signing_key.serialize_der());
-    let config = rustls::ServerConfig::builder()
-        .with_no_client_auth()
-        .with_single_cert(vec![certified.cert.der().clone()], key.into())?;
+    let config = rustls::ServerConfig::builder_with_provider(Arc::new(
+        rustls::crypto::aws_lc_rs::default_provider(),
+    ))
+    .with_safe_default_protocol_versions()?
+    .with_no_client_auth()
+    .with_single_cert(vec![certified.cert.der().clone()], key.into())?;
     let acceptor = tokio_rustls::TlsAcceptor::from(Arc::new(config));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let address = listener.local_addr()?;
