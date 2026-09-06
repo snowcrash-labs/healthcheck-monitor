@@ -114,7 +114,7 @@ Profiles are editable presets. Capacity defaults are 80% warning and 90% error s
 | AWS | Official `aws-config` and service SDKs; shared profiles, IAM Identity Center sessions, role assumption, environment credentials, or workload credentials. Interactive SSO login uses `aws sso login`. |
 | Azure | `azure_identity`; the existing `az login` session through `AzureCliCredential`, or configured managed/workload identity. |
 | Kubernetes | The selected kubeconfig context and supported credential plugin. GKE commonly uses `gke-gcloud-auth-plugin`. |
-| GitHub | The configured token environment variable, defaulting to `GH_TOKEN`, then the existing `gh auth token` credential. |
+| GitHub | A configured protected `credential_file`, or the token environment variable (default `GH_TOKEN`) with `gh auth token` fallback. A file and token variable cannot be configured together. |
 
 Collection never initiates interactive login. Providers reuse and refresh credentials where supported; expired credentials leave dependent checks incomplete while independent checks continue. Tokens are excluded from snapshots, database history, frontend assets, and diagnostic logs.
 

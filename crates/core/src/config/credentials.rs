@@ -20,7 +20,10 @@ pub fn validate(config: &Config) -> Result<(), Error> {
         if credential.tenant.is_some() && credential.provider != Provider::Azure
             || credential.role_arn.is_some() && credential.provider != Provider::Aws
             || credential.credential_file.is_some()
-                && !matches!(credential.provider, Provider::Gcp | Provider::Nats)
+                && !matches!(
+                    credential.provider,
+                    Provider::Gcp | Provider::Nats | Provider::Github
+                )
             || credential.token_env.is_some()
                 && !matches!(credential.provider, Provider::Github | Provider::Nats)
         {
@@ -52,12 +55,12 @@ pub fn validate(config: &Config) -> Result<(), Error> {
                 "identity assertions are unsupported by this credential provider".into(),
             ));
         }
-        if credential.provider == Provider::Nats
+        if matches!(credential.provider, Provider::Nats | Provider::Github)
             && credential.credential_file.is_some()
             && credential.token_env.is_some()
         {
             return Err(Error::Config(
-                "select a NATS credential file or token variable".into(),
+                "select a credential file or token variable".into(),
             ));
         }
         if credential.token_env.as_ref().is_some_and(|name| {

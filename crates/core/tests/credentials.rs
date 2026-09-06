@@ -30,6 +30,11 @@ fn credential_files_and_discovery_profiles_are_explicit() {
     assert!(Config::parse(&config("[credentials.azure]\nprovider='azure'\n[[discovery]]\nprovider='gcp'\nscope='organizations/123'\ncredential='azure'")).is_err());
 }
 #[test]
+fn github_credential_files_have_unambiguous_selection() {
+    assert!(Config::parse(&config("[credentials.github]\nprovider='github'\ncredential_file='/run/credentials/monitor/github-token'")).is_ok());
+    assert!(Config::parse(&config("[credentials.github]\nprovider='github'\ncredential_file='/run/credentials/monitor/github-token'\ntoken_env='GH_TOKEN'")).is_err());
+}
+#[test]
 fn nats_credentials_cannot_be_embedded_in_urls() {
     for url in [
         "tls://server:4222?token=private",

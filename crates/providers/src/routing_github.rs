@@ -76,6 +76,14 @@ impl Router {
         let expected = profile
             .as_ref()
             .and_then(|profile| profile.expected_identity.clone());
+        if let Some(path) = profile
+            .as_ref()
+            .and_then(|profile| profile.credential_file.as_ref())
+        {
+            let token =
+                token_file::read(path, job.settings.attempt_timeout.duration(), cancel).await?;
+            return Ok((token, expected));
+        }
         let env = profile
             .as_ref()
             .and_then(|p| p.token_env.as_deref())
@@ -101,3 +109,6 @@ impl Router {
         Ok((token, expected))
     }
 }
+
+#[path = "github_token_file.rs"]
+mod token_file;
