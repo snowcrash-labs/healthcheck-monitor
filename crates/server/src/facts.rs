@@ -26,9 +26,18 @@ pub fn facts(data: &Data) -> Vec<Fact> {
             restarts,
             crash_loop,
             container,
-            ..
+            uid,
+            created_at,
+            terminated_at,
         } => {
             add("Container", container.clone());
+            add("Pod UID", uid.clone());
+            if let Some(at) = created_at {
+                add("Created", at.to_rfc3339());
+            }
+            if let Some(at) = terminated_at {
+                add("Last termination", at.to_rfc3339());
+            }
             add("Ready", ready.to_string());
             add("Restarts", restarts.to_string());
             if *crash_loop {
@@ -41,13 +50,25 @@ pub fn facts(data: &Data) -> Vec<Fact> {
             status,
             latency_ms,
             expires_at,
-            ..
+            accepted,
         } => {
             add("DNS", if *dns { "Resolved" } else { "Unavailable" }.into());
             add("TLS", if *tls { "Trusted" } else { "Unavailable" }.into());
             add(
                 "HTTP status",
                 status.map_or("Unavailable".into(), |status| status.to_string()),
+            );
+            add(
+                "Accepted HTTP statuses",
+                if accepted.is_empty() {
+                    "Below 500 (reachability only)".into()
+                } else {
+                    accepted
+                        .iter()
+                        .map(u16::to_string)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                },
             );
             add("Latency", format!("{latency_ms} ms"));
             if let Some(at) = expires_at {
@@ -75,9 +96,18 @@ pub fn facts(data: &Data) -> Vec<Fact> {
             name,
             value,
             capacity,
-            ..
+            warning,
+            error,
+            window_seconds,
         } => {
             add(name, format!("{value:.2}"));
+            if let Some(warning) = warning {
+                add("Warning threshold", warning.to_string());
+            }
+            if let Some(error) = error {
+                add("Error threshold", error.to_string());
+            }
+            add("Evaluation window", format!("{window_seconds} seconds"));
             if let Some(capacity) = capacity {
                 add("Capacity", format!("{capacity:.2}"));
             }

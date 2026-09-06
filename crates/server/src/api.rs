@@ -17,6 +17,10 @@ pub struct App {
 pub fn router(app: Arc<App>, _config: &Config) -> Router {
     let api = Router::new()
         .route("/overview", get(crate::overview::overview))
+        .route("/checks", get(crate::checks_api::checks))
+        .route("/check", get(crate::checks_api::check))
+        .route("/check/operations", get(crate::checks_api::operations))
+        .route("/resource/evidence", get(crate::checks_api::evidence))
         .route("/resources", get(crate::lists::resources))
         .route("/resource", get(crate::lists::resource))
         .route("/findings", get(crate::lists::findings))

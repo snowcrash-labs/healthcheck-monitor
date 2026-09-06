@@ -13,6 +13,7 @@ async fn search_includes_observed_facts_beyond_the_first_page()
     let config = Config::default();
     let (app, _) = app(&config).await?;
     let (mut state, effective) = crate::test_support::evidence()?;
+    state.snapshot.findings.clear();
     let result = state.snapshot.results.values_mut().next().ok_or("result")?;
     let template = result.observations.first().ok_or("observation")?.clone();
     result.observations.clear();
@@ -51,6 +52,9 @@ async fn deep_links_are_documents_and_unknown_assets_stay_missing()
     let routes = router(app, &config);
     for path in [
         "/findings",
+        "/checks",
+        "/checks/fixture/edge?target=fixture",
+        "/targets/fixture?target=fixture",
         "/resources/fixture%2Fendpoints%2Fapi",
         "/history",
     ] {

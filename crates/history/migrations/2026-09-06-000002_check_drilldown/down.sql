@@ -1,0 +1,1 @@
+DROP INDEX health_monitor.check_run_target_check_finished_id_idx;

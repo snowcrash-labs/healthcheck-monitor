@@ -120,6 +120,32 @@ tbody tr:hover { background: var(--hover); }
 .pagination, .scroll-boundary { padding: 15px 22px; border-top: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 16px; font-size: 11px; color: var(--muted); }
 .pagination > div { display: flex; gap: 8px; }
 .back-link { display: inline-block; margin: 0 0 25px; font-size: 12px; }
+.target-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr)); }
+.target-card { position: relative; border: 1px solid var(--line); min-width: 0; }
+.target-card-main { display: block; padding: 24px; color: var(--text); overflow-wrap: anywhere; }
+.target-card-main::after { content: ""; position: absolute; inset: 0; }
+.target-card-main h3 { margin: 0 0 10px; font-size: 22px; }
+.target-card-main .quiet-link { display: block; margin-top: 16px; }
+.target-card:hover, .linked-card:hover { background: var(--surface); }
+.target-coverage { position: relative; z-index: 1; display: block; padding: 18px 24px; border-top: 1px solid var(--line); font-size: 12px; }
+.linked-card { display: block; height: 100%; color: var(--text); overflow-wrap: anywhere; }
+.linked-card > div:first-child { flex-wrap: wrap; gap: 8px; }
+.linked-card .quiet-link { display: block; margin-top: 12px; }
+.linked-card li { display: block; margin: 10px 0; }
+.linked-card li .requirement { display: block; margin-top: 4px; font-size: 10px; color: var(--muted); }
+.detail-nav, .console-links { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0 24px; }
+.operation-detail { padding: 22px; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.operation-detail > div:first-child { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.operation-detail h3 { margin: 0 0 12px; font-size: 14px; }
+.operation-detail p { font-size: 12px; color: var(--muted); line-height: 1.7; }
+.operation-detail .detail-meta, .finding-detail .detail-meta { margin: 18px 0; }
+.operation-detail .facts-grid { margin-top: 16px; }
+.panel-heading label { max-width: 100%; font-size: 12px; color: var(--muted); }
+.panel-heading input { display: block; max-width: 100%; margin-top: 8px; }
+.resource-findings .console-links, td .console-links { margin: 12px 0 0; }
+td .console-links .button { font-size: 10px; padding: 5px 8px; }
+.finding-detail details { margin-top: 16px; font-size: 12px; overflow-wrap: anywhere; }
+.finding-detail summary { cursor: pointer; color: var(--muted); }
 .resource-heading h1 { overflow-wrap: anywhere; font-size: 26px; }
 .resource-path { font-size: 11px; color: var(--muted); overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
 .detail-meta { display: flex; flex-wrap: wrap; gap: 24px; color: var(--muted); font-size: 12px; margin: -8px 0 28px; }

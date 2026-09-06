@@ -42,6 +42,8 @@ pub fn base(job: &Job, service: &str, native: &str) -> Option<ResourceContext> {
         name: None,
         uid: None,
         container: None,
+        reason: None,
+        exit_code: None,
     })
 }
 pub fn kubernetes(job: &Job, kind: &str, value: &Value) -> Option<ResourceContext> {
@@ -50,7 +52,7 @@ pub fn kubernetes(job: &Job, kind: &str, value: &Value) -> Option<ResourceContex
     context.name = identifier(name);
     context.namespace = text(value, &["/metadata/namespace"]).and_then(identifier);
     context.uid = text(value, &["/metadata/uid"]).and_then(identifier);
-    context.cluster = job.target.context.as_deref().and_then(identifier);
+    context.cluster = None;
     // gcloud contexts explicitly encode project, location and cluster; other context names do not.
     if let Some(parts) = job
         .target

@@ -24,7 +24,7 @@ fn all_collected_failure_details_remain_available() -> Result<(), Box<dyn std::e
             .iter()
             .find(|check| check.check == Check::Edge)
             .ok_or("check")?
-            .failures
+            .operations
             .len(),
         2000
     );

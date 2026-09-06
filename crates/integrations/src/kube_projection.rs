@@ -15,6 +15,34 @@ pub fn project(job: &Job, kind: &str, value: &Value) -> Vec<Observation> {
             (&mut observation.context, &observation.data)
         {
             context.container = Some(container.clone());
+            if let Some(status) = value
+                .pointer("/status/containerStatuses")
+                .and_then(Value::as_array)
+                .and_then(|rows| {
+                    rows.iter()
+                        .find(|row| text(row, &["/name"]) == Some(container))
+                })
+            {
+                context.reason = text(
+                    status,
+                    &[
+                        "/state/waiting/reason",
+                        "/state/terminated/reason",
+                        "/lastState/terminated/reason",
+                    ],
+                )
+                .filter(|reason| {
+                    reason.len() <= 64
+                        && reason
+                            .bytes()
+                            .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+                })
+                .map(String::from);
+                context.exit_code = status
+                    .pointer("/lastState/terminated/exitCode")
+                    .and_then(Value::as_i64)
+                    .and_then(|value| value.try_into().ok());
+            }
         }
     }
     output

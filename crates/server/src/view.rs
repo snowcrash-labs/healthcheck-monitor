@@ -12,6 +12,11 @@ pub struct Fact {
 }
 #[derive(Clone, Serialize)]
 pub struct Resource {
+    pub checks: Vec<Check>,
+    pub context: Option<monitor_core::diagnostics::ResourceContext>,
+    pub links: Vec<crate::console_links::Link>,
+    #[serde(skip)]
+    pub evidence: std::sync::Arc<Vec<crate::resource_evidence::Evidence>>,
     pub id: String,
     pub target: String,
     pub check: Check,
@@ -25,6 +30,8 @@ pub struct Resource {
 }
 #[derive(Clone, Serialize)]
 pub struct FindingView {
+    pub check: Option<Check>,
+    pub diagnostic: Option<crate::resource_evidence::DiagnosticView>,
     pub id: String,
     pub target: String,
     pub resource: String,
@@ -39,6 +46,12 @@ pub struct FindingView {
 }
 #[derive(Clone, Serialize)]
 pub struct CheckView {
+    pub started_at: Option<DateTime<Utc>>,
+    pub required_failures: usize,
+    pub optional_gaps: usize,
+    pub prerequisite: bool,
+    #[serde(skip)]
+    pub operations: std::sync::Arc<Vec<monitor_core::model::Operation>>,
     pub key: String,
     pub target: String,
     pub check: Check,
@@ -90,6 +103,7 @@ impl ResultStamp {
 impl FindingView {
     pub fn source(&self) -> Finding {
         Finding {
+            diagnostic: None,
             check: None,
             id: self.id.clone(),
             resource: self.resource.clone(),

@@ -1,6 +1,6 @@
 import { createContext, createEffect, createSignal, onSettled, useContext } from "solid-js";
 import type { Accessor, ParentProps } from "solid-js";
-import { useSearchParams } from "@solidjs/router";
+import { useLocation, useNavigate, useSearchParams } from "@solidjs/router";
 import { get, query } from "./api";
 import { overview as overviewSchema } from "./schema";
 import type { Overview } from "./schema";
@@ -18,12 +18,18 @@ interface Dashboard {
 const Context = createContext<Dashboard>();
 export function DashboardProvider(props: ParentProps) {
   const [params, setParams] = useSearchParams();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const routeTarget = () => {
+    const match = /^\/(?:targets|checks)\/([^/]+)/.exec(location.pathname);
+    try { return match?.[1] ? decodeURIComponent(match[1]) : undefined; } catch { return undefined; }
+  };
   const [overview, setOverview] = createSignal<Overview>();
   const [error, setError] = createSignal("");
   const [connected, setConnected] = createSignal(false);
   const [now, setNow] = createSignal(Date.now());
   const [refreshId, setRefreshId] = createSignal(0);
-  const target = () => typeof params.target === "string" ? params.target : "";
+  const target = () => routeTarget() ?? (typeof params.target === "string" ? params.target : "");
   const refresh = () => setRefreshId((value) => value + 1);
   createEffect(() => [target(), refreshId()] as const, ([target]) => {
     const controller = new AbortController();
@@ -66,7 +72,10 @@ export function DashboardProvider(props: ParentProps) {
     const poll = setInterval(refresh, 15_000);
     return () => { disconnect(); window.removeEventListener("offline", disconnect); window.removeEventListener("online", connect); clearInterval(clock); clearInterval(poll); if (pending !== undefined) clearTimeout(pending); };
   });
-  const value: Dashboard = { overview, error, connected, now, refreshId, target, setTarget: (target) => setParams({ target: target || undefined, cursor: undefined }), refresh };
+  const value: Dashboard = { overview, error, connected, now, refreshId, target, setTarget: (target) => {
+    if (routeTarget()) { void navigate(target ? `/targets/${encodeURIComponent(target)}?target=${encodeURIComponent(target)}` : "/"); }
+    else setParams({ target: target || undefined, cursor: undefined });
+  }, refresh };
   return <Context value={value}>{props.children}</Context>;
 }
 export function useDashboard(): Dashboard | undefined { return useContext(Context); }

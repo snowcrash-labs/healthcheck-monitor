@@ -19,6 +19,7 @@ struct Preview {
     observed_at: DateTime<Utc>,
     valid_until: Option<DateTime<Utc>>,
     stale: bool,
+    diagnostic: Option<crate::resource_evidence::DiagnosticView>,
 }
 /// Retain two highest-severity summaries per row; count every matching active finding.
 pub fn with_findings(
@@ -48,6 +49,7 @@ pub fn with_findings(
         };
         row.finding_count += 1;
         row.findings.push(Preview {
+            diagnostic: finding.diagnostic.clone(),
             rule: finding.rule.clone(),
             severity: finding.severity,
             observed_at: finding.observed_at,

@@ -18,6 +18,7 @@ use std::sync::Arc;
 #[serde(deny_unknown_fields)]
 pub struct Parameters {
     target: Option<String>,
+    check: Option<enums::Check>,
     resource: Option<String>,
     severity: Option<enums::Severity>,
     kind: Option<enums::Kind>,
@@ -108,7 +109,12 @@ pub async fn runs(
         .map_err(|_| ApiError::BadQuery)?;
     let mut items = app
         .history
-        .runs(target.as_ref(), cursor(query.before.as_deref())?, limit)
+        .runs(
+            target.as_ref(),
+            query.check,
+            cursor(query.before.as_deref())?,
+            limit,
+        )
         .await?;
     let more = items.len() > usize::from(limit);
     items.truncate(usize::from(limit));

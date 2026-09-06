@@ -37,6 +37,8 @@ CronJob calendars use explicit resource timezones or the configured target contr
 
 ## Operational boundaries
 
+Current dashboard views retain grouped source evidence in shared immutable allocations. Native resource context is projected before identifiers are sanitized for display. Active findings retain compact triggering observations and detection timestamps, separately bounded within the configured memory allowance. Resource pages remain available for unresolved findings after a failed inventory; legacy evidence without diagnostic metadata stays explicitly unknown. Check and operation drill-downs paginate published observations without launching cloud requests. Run-history filtering uses a combined target/check/time/UUID index.
+
 `monitor.toml` contains explicit deep-monitoring targets. Organization/account/subscription discovery does not expand those targets. Authentication refresh is native where supported; collection never starts browser login. The explicit login command delegates to the corresponding provider helper.
 
 Run the binary in the foreground under an existing Linux or macOS supervisor. Send SIGHUP to reload the same config path, SIGTERM or SIGINT to stop, or use `--duration` for a bounded watch. Use a dedicated output directory for each running writer; one-off diagnostics can use a separate `--output` directory while continuous monitoring is active.

@@ -1,9 +1,6 @@
 //! Project the current bounded engine state without imposing another result limit.
 use crate::view::*;
-use monitor_core::{
-    config::resolve::Effective,
-    model::{Data, Health, Snapshot},
-};
+use monitor_core::{config::resolve::Effective, model::Snapshot};
 use std::collections::BTreeMap;
 pub fn build(snapshot: &Snapshot, effective: &Effective, generation: u64) -> View {
     let mut targets = BTreeMap::new();
@@ -24,6 +21,8 @@ pub fn build(snapshot: &Snapshot, effective: &Effective, generation: u64) -> Vie
     let mut findings = Vec::new();
     for finding in snapshot.findings.values() {
         findings.push(FindingView {
+            check: finding.check,
+            diagnostic: finding.diagnostic.as_ref().map(Into::into),
             id: finding.id.clone(),
             target: target(&finding.resource, &targets),
             resource: finding.resource.clone(),
@@ -37,7 +36,7 @@ pub fn build(snapshot: &Snapshot, effective: &Effective, generation: u64) -> Vie
             evidence: finding.evidence.clone(),
         });
     }
-    let mut resources: BTreeMap<String, Resource> = BTreeMap::new();
+
     let mut checks = Vec::new();
     let mut result_stamps = BTreeMap::new();
     for job in &effective.jobs {
@@ -70,6 +69,11 @@ pub fn build(snapshot: &Snapshot, effective: &Effective, generation: u64) -> Vie
             });
         }
         checks.push(CheckView {
+            started_at: result.map(|r| r.started_at),
+            required_failures: failures.iter().filter(|f| f.required).count(),
+            optional_gaps: failures.iter().filter(|f| !f.required).count(),
+            prerequisite: !job.requested_checks.contains(&job.check),
+            operations: std::sync::Arc::new(result.map_or_else(Vec::new, |r| r.operations.clone())),
             key: job.key.clone(),
             target: job.target.name.clone(),
             check: job.check,
@@ -79,69 +83,17 @@ pub fn build(snapshot: &Snapshot, effective: &Effective, generation: u64) -> Vie
                 .map(|result| result.finished_at + chrono::Duration::seconds(freshness as i64)),
             complete: result.is_some_and(|result| result.complete()),
             observations: result.map_or(0, |result| result.observations.len()),
-            failures,
+            failures: failures.into_iter().take(3).collect(),
         });
     }
-    for job in &effective.jobs {
-        let freshness = snapshot
-            .freshness
-            .get(&job.key)
-            .copied()
-            .unwrap_or(job.settings.freshness());
-        if let Some(result) = snapshot.results.get(&job.key) {
-            for observation in &result.observations {
-                if matches!(observation.data, Data::Owner { .. } | Data::Scaler { .. }) {
-                    continue;
-                }
-                if resources
-                    .get(&observation.resource)
-                    .is_some_and(|old| old.observed_at >= observation.observed_at)
-                {
-                    continue;
-                }
-                let facts = crate::facts::facts(&observation.data);
-                let expires_at =
-                    observation.observed_at + chrono::Duration::seconds(freshness as i64);
-                let expires_at = match &observation.data {
-                    Data::Provenance { valid_until, .. } => expires_at.min(*valid_until),
-                    _ => expires_at,
-                };
-                resources.insert(
-                    observation.resource.clone(),
-                    Resource {
-                        id: observation.resource.clone(),
-                        target: job.target.name.clone(),
-                        check: job.check,
-                        health: snapshot
-                            .health
-                            .get(&observation.resource)
-                            .copied()
-                            .unwrap_or(Health::Unknown),
-                        expected: observation.expected,
-                        observed_at: observation.observed_at,
-                        expires_at,
-                        search: std::iter::once(observation.resource.as_str())
-                            .chain(
-                                facts
-                                    .iter()
-                                    .flat_map(|fact| [fact.label.as_str(), fact.value.as_str()]),
-                            )
-                            .collect::<Vec<_>>()
-                            .join(" ")
-                            .to_lowercase(),
-                        facts,
-                    },
-                );
-            }
-        }
-    }
+    let resources = crate::build_resources::build(snapshot, effective);
     View {
         generation,
         revision: snapshot.revision.clone(),
         captured_at: snapshot.captured_at,
         targets,
         checks,
-        resources: resources.into_values().collect(),
+        resources,
         findings,
         result_stamps,
         persistence_fault: snapshot.persistence_fault,

@@ -5,12 +5,18 @@ import { Root } from "./layout";
 import Overview from "./overview";
 import "./styles.css";
 
+const Checks = lazy(() => import("./checks"));
+const CheckDetail = lazy(() => import("./check-detail"));
+const Target = lazy(() => import("./target"));
 const Findings = lazy(() => import("./findings"));
 const Resources = lazy(() => import("./resources"));
 const Detail = lazy(() => import("./detail"));
 const History = lazy(() => import("./history"));
 const Router = createRouter({ routes: [
   { path: "/", component: Overview },
+  { path: "/targets/:target", component: Target },
+  { path: "/checks", component: Checks },
+  { path: "/checks/:target/:check", component: CheckDetail },
   { path: "/findings", component: Findings },
   { path: "/resources", component: Resources },
   { path: "/resources/:id", component: Detail },

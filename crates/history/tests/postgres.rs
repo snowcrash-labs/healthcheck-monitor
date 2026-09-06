@@ -36,6 +36,7 @@ async fn native_uuid_keys_idempotency_typed_history_and_retention()
     for index in 0..5 {
         let at = now + chrono::Duration::milliseconds(index);
         let finding = Finding {
+            diagnostic: None,
             check: Some(Check::Kubernetes),
             id: format!("fixture-{index}"),
             resource: format!("fixture/pod-{index}"),
@@ -92,7 +93,7 @@ async fn native_uuid_keys_idempotency_typed_history_and_retention()
             .collect::<Vec<_>>(),
         ids
     );
-    let run_rows = history.runs(None, None, 100).await?;
+    let run_rows = history.runs(None, None, None, 100).await?;
     assert!(
         run_rows
             .iter()

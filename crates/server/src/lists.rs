@@ -16,6 +16,8 @@ use std::sync::Arc;
 #[serde(deny_unknown_fields)]
 pub struct Filter {
     target: Option<String>,
+    check: Option<monitor_core::model::Check>,
+    resource: Option<String>,
     q: Option<String>,
     severity: Option<Severity>,
     health: Option<Health>,
@@ -54,6 +56,9 @@ pub async fn resources(
                 .target
                 .as_ref()
                 .is_none_or(|target| &resource.target == target)
+                && filter
+                    .check
+                    .is_none_or(|check| resource.checks.contains(&check))
                 && resource.search.contains(&query)
                 && filter.health.is_none_or(|health| {
                     crate::view::current_health(resource.health, resource.expires_at, now) == health
@@ -99,6 +104,13 @@ pub async fn findings(
                 .as_ref()
                 .is_none_or(|target| &finding.target == target)
                 && filter
+                    .check
+                    .is_none_or(|check| finding.check == Some(check))
+                && filter
+                    .resource
+                    .as_ref()
+                    .is_none_or(|resource| &finding.resource == resource)
+                && filter
                     .severity
                     .is_none_or(|severity| finding.severity == severity)
                 && (query.is_empty()
@@ -130,6 +142,7 @@ pub async fn findings(
 #[derive(Deserialize)]
 pub struct Identity {
     id: String,
+    include_findings: Option<bool>,
 }
 #[derive(Serialize)]
 struct Detail {
@@ -159,7 +172,9 @@ pub async fn resource(
     let findings = view
         .findings
         .iter()
-        .filter(|finding| finding.resource == identity.id)
+        .filter(|finding| {
+            identity.include_findings != Some(false) && finding.resource == identity.id
+        })
         .cloned()
         .collect();
     json(

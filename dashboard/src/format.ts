@@ -10,5 +10,5 @@ export function age(at: string | null, now: number): string {
   return `${Math.floor(seconds / 3600)}h ago`;
 }
 export function stale(at: string | null, now: number): boolean { return at !== null && now > Date.parse(at); }
-export function rule(text: string): string { return text.replaceAll("-", " ").replace(/^./, (letter) => letter.toUpperCase()); }
+export function rule(text: string): string { return text.replaceAll("-", " ").replaceAll("_", " ").replace(/^./, (letter) => letter.toUpperCase()); }
 export function utc(at: string): string { return new Date(at).toISOString().replace("T", " ").replace(/\.\d+Z$/, " UTC"); }

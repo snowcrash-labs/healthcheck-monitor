@@ -7,7 +7,9 @@ use serde_json::Value;
 pub use crate::projection_rows::rows;
 pub fn project(job: &Job, endpoint: &Endpoint, value: &Value) -> Vec<Observation> {
     if !crate::resource_scope::selected(job, endpoint, value) {
-        return crate::resource_scope::inventory_only(job, endpoint, value);
+        let mut result = crate::resource_scope::inventory_only(job, endpoint, value);
+        crate::resource_context::enrich(job, endpoint, value, &mut result);
+        return result;
     }
     let mut result = project_data(job, endpoint, value);
     result.extend(crate::metadata_fields::project(job, endpoint, value));

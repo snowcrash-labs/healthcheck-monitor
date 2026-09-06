@@ -69,6 +69,7 @@ impl History {
     pub async fn runs(
         &self,
         target: Option<&Name>,
+        check: Option<enums::Check>,
         before: Option<(DateTime<Utc>, Id)>,
         limit: u16,
     ) -> Result<Vec<RunRow>, Error> {
@@ -85,6 +86,9 @@ impl History {
         );
         if let Some(target) = target {
             query = query.filter(check_run::check_run_target.eq(target));
+        }
+        if let Some(check) = check {
+            query = query.filter(check_run::check_run_check.eq(check));
         }
         if let Some((at, id)) = before {
             query = query.filter(

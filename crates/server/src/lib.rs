@@ -1,9 +1,12 @@
 //! Read-only HTTP access to an autonomous monitoring runtime.
 mod api;
 mod body;
+mod build_resources;
 mod build_view;
 pub mod bus;
+mod checks_api;
 pub mod config;
+mod console_links;
 mod encoding;
 mod events;
 mod facts;
@@ -12,8 +15,10 @@ mod history_api;
 mod iap;
 mod listener;
 mod lists;
+mod log_links;
 mod overview;
 mod pages;
+mod resource_evidence;
 mod resource_rows;
 mod response;
 mod security;
@@ -23,6 +28,10 @@ mod view;
 pub use serve::serve;
 #[cfg(test)]
 mod api_tests;
+#[cfg(test)]
+mod console_tests;
+#[cfg(test)]
+mod diagnostic_tests;
 #[cfg(test)]
 mod test_support;
 #[cfg(test)]

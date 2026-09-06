@@ -55,6 +55,7 @@ pub fn evidence() -> Result<(State, Effective), Box<dyn std::error::Error>> {
     );
     result.operations[0].id = "endpoints".into();
     result.observations.push(Observation {
+        context: None,
         resource: "fixture/endpoints/api".into(),
         operation: "endpoints".into(),
         observed_at: chrono::Utc::now(),

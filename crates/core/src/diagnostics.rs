@@ -17,6 +17,10 @@ pub struct ResourceContext {
     pub name: Option<String>,
     pub uid: Option<String>,
     pub container: Option<String>,
+    #[serde(default)]
+    pub reason: Option<String>,
+    #[serde(default)]
+    pub exit_code: Option<i32>,
 }
 
 /// Detection times belong to a finding episode, not to later recovery evaluations.
@@ -30,6 +34,22 @@ pub struct Diagnostic {
 }
 
 impl Diagnostic {
+    pub fn bytes(&self) -> usize {
+        crate::bounds::observation_bytes(&self.observation).saturating_add(256)
+    }
+
+    /// Charge retained triggering evidence separately from current collection results.
+    pub fn admit(self, old: Option<&crate::model::Finding>, remaining: &mut usize) -> Option<Self> {
+        let old = old.and_then(|finding| finding.diagnostic.as_ref());
+        let available = remaining.saturating_add(old.map_or(0, Self::bytes));
+        let needed = self.bytes();
+        if needed <= available {
+            *remaining = available - needed;
+            Some(self)
+        } else {
+            old.cloned()
+        }
+    }
     /// A restored legacy finding has an unknown beginning until a new episode starts.
     pub fn capture(
         observation: &Observation,

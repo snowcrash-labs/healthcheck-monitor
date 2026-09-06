@@ -58,6 +58,14 @@ impl State {
         crate::bounds::validate_source(&mut result, job.settings.freshness(), now);
         let old = self.snapshot.results.get(&job.key);
         let mut current = BTreeSet::new();
+        let mut diagnostic_bytes = (job.settings.memory_bytes / 4).saturating_sub(
+            self.snapshot
+                .findings
+                .values()
+                .filter_map(|finding| finding.diagnostic.as_ref())
+                .map(crate::diagnostics::Diagnostic::bytes)
+                .sum(),
+        );
         let mut index = crate::evaluation_index::Index::new(old, &result);
         let remaining = job.settings.max_assets.saturating_sub(
             self.snapshot
@@ -127,7 +135,7 @@ impl State {
                 }
                 current.insert(finding.id.clone());
                 let previous = self.snapshot.findings.get(&finding.id);
-                finding.diagnostic = Some(crate::diagnostics::Diagnostic::capture(
+                finding.diagnostic = crate::diagnostics::Diagnostic::capture(
                     observation,
                     prior,
                     previous,
@@ -136,7 +144,8 @@ impl State {
                     } else {
                         job.settings.rollout_grace.0
                     },
-                ));
+                )
+                .admit(previous, &mut diagnostic_bytes);
                 if previous.is_none() && self.snapshot.findings.len() >= job.settings.max_findings {
                     for op in &mut result.operations {
                         if op.coverage == Coverage::Complete {

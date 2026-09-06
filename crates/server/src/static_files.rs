@@ -13,8 +13,12 @@ struct Assets;
 
 pub async fn serve(request: Request) -> Response {
     let path = request.uri().path();
-    let document = matches!(path, "/" | "/findings" | "/resources" | "/history")
-        || path.starts_with("/resources/");
+    let document = matches!(
+        path,
+        "/" | "/findings" | "/resources" | "/history" | "/checks"
+    ) || path.starts_with("/resources/")
+        || path.starts_with("/targets/")
+        || path.starts_with("/checks/");
     let path = if document {
         "index.html"
     } else {
