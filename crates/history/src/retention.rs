@@ -96,6 +96,8 @@ impl History {
             configuration_seen_at,
             self.config.configuration_rows
         );
+        drop(connection);
+        self.retain_queries().await?;
         Ok(())
     }
 }

@@ -18,6 +18,7 @@ const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
 
 pub struct History {
     pub(crate) pool: Pool,
+    pub(crate) read_pool: Pool,
     pub(crate) config: Config,
     url: String,
     ready: AtomicBool,
@@ -33,15 +34,29 @@ impl History {
         options.custom_setup = Box::new(|url| connect(url).boxed());
         let manager = AsyncDieselConnectionManager::new_with_config(url.clone(), options);
         let pool = Pool::builder()
-            .max_size(config.connections)
+            .max_size(1)
             .min_idle(Some(0))
             .test_on_check_out(true)
             .connection_timeout(Duration::from_secs(5))
             .idle_timeout(Some(Duration::from_secs(60)))
             .max_lifetime(Some(Duration::from_secs(900)))
             .build_unchecked(manager);
+        let mut read_options = ManagerConfig::default();
+        read_options.custom_setup = Box::new(|url| connect(url).boxed());
+        let read_pool = Pool::builder()
+            .max_size(config.connections.saturating_sub(1).max(1))
+            .min_idle(Some(0))
+            .test_on_check_out(true)
+            .connection_timeout(Duration::from_secs(5))
+            .idle_timeout(Some(Duration::from_secs(60)))
+            .max_lifetime(Some(Duration::from_secs(900)))
+            .build_unchecked(AsyncDieselConnectionManager::new_with_config(
+                url.clone(),
+                read_options,
+            ));
         Ok(Arc::new(Self {
             pool,
+            read_pool,
             config,
             url,
             ready: AtomicBool::new(false),

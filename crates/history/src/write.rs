@@ -18,10 +18,20 @@ impl History {
         events: &[Event],
         gaps: &[Gap],
     ) -> Result<(), Error> {
+        self.write_queries(revision, runs, events, gaps, &[]).await
+    }
+    pub async fn write_queries(
+        &self,
+        revision: &Digest,
+        runs: &[Run],
+        events: &[Event],
+        gaps: &[Gap],
+        records: &[crate::query_records::QueryRecord],
+    ) -> Result<(), Error> {
         if !self.ready() {
             return Err(Error::Migration);
         }
-        if runs.len() > 2048 || events.len() > 10000 || gaps.len() > 32 {
+        if runs.len() > 2048 || events.len() > 10000 || gaps.len() > 32 || records.len() > 20000 {
             return Err(Error::Record);
         }
         self.ensure_retention().await?;
@@ -76,10 +86,12 @@ impl History {
                         .execute(connection)
                         .await?;
                 }
+                crate::query_write::write(connection, records).await?;
                 Ok::<_, Error>(())
             })
             .await?;
         drop(connection);
-        self.ensure_retention().await
+        self.ensure_retention().await?;
+        self.retain_queries().await
     }
 }

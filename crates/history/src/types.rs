@@ -21,6 +21,14 @@ macro_rules! text_type {
             type Expression = diesel::dsl::AsExprOf<&'a str, Text>;
             fn as_expression(self) -> Self::Expression { let value: &str = self.as_ref(); <&str as AsExpression<Text>>::as_expression(value) }
         }
+        impl AsExpression<diesel::sql_types::Nullable<Text>> for $name {
+            type Expression = diesel::dsl::AsExprOf<String, diesel::sql_types::Nullable<Text>>;
+            fn as_expression(self) -> Self::Expression { <String as AsExpression<diesel::sql_types::Nullable<Text>>>::as_expression(self.into_inner()) }
+        }
+        impl<'a> AsExpression<diesel::sql_types::Nullable<Text>> for &'a $name {
+            type Expression = diesel::dsl::AsExprOf<&'a str, diesel::sql_types::Nullable<Text>>;
+            fn as_expression(self) -> Self::Expression { let value: &str = self.as_ref(); <&str as AsExpression<diesel::sql_types::Nullable<Text>>>::as_expression(value) }
+        }
         impl ToSql<Text, Pg> for $name {
             fn to_sql<'b>(&'b self, out: &mut Output<'b, '_, Pg>) -> diesel::serialize::Result {
                 let value: &str = self.as_ref(); out.write_all(value.as_bytes())?; Ok(IsNull::No)

@@ -48,6 +48,7 @@ pub(crate) async fn run(
                 revision: revision.clone(),
                 runs: vec![],
                 events: vec![],
+                records: vec![],
                 gaps: vec![],
                 _charges: vec![],
                 _pending: Pending::new(&status),
@@ -74,7 +75,7 @@ pub(crate) async fn run(
         }
         delay = Duration::from_secs(1);
         loop {
-            let result = tokio::select! { _=stop.cancelled()=>return, result=history.write(&batch.revision,&batch.runs,&batch.events,&batch.gaps)=>result };
+            let result = tokio::select! { _=stop.cancelled()=>return, result=history.write_queries(&batch.revision,&batch.runs,&batch.events,&batch.gaps,&batch.records)=>result };
             match result {
                 Ok(()) => {
                     if !batch.gaps.is_empty() {
@@ -89,9 +90,13 @@ pub(crate) async fn run(
                     break;
                 }
                 Err(error) if !error.retryable() => {
-                    status.drop_records(batch.events.len() as u64, batch.runs.len() as u64);
+                    status.drop_records(
+                        (batch.events.len() + batch.records.len()) as u64,
+                        batch.runs.len() as u64,
+                    );
                     tracing::warn!("Invalid history batch rejected");
-                    if batch.events.is_empty() && batch.runs.is_empty() {
+                    if batch.events.is_empty() && batch.runs.is_empty() && batch.records.is_empty()
+                    {
                         return;
                     }
                     for gap in &batch.gaps {

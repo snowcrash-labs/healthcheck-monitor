@@ -16,6 +16,7 @@ use std::sync::{
 };
 pub struct Bus {
     views: scc::HashMap<(), Arc<View>>,
+    recorder: scc::HashMap<(), crate::query_recorder::Recorder>,
     generation: AtomicU64,
     pub changed: tokio::sync::watch::Sender<u64>,
     pub journal: Arc<Journal>,
@@ -27,6 +28,7 @@ impl Bus {
         let (changed, _) = tokio::sync::watch::channel(0);
         Arc::new(Self {
             views: scc::HashMap::new(),
+            recorder: scc::HashMap::new(),
             generation: AtomicU64::new(0),
             changed,
             journal,
@@ -82,7 +84,22 @@ impl Observer for Bus {
                     .ok_or(monitor_history::error::Error::Record)?;
                 Event::new(&old.target, transition, &old.source())
             });
-            self.journal.submit(revision, runs, events);
+            let mut recorder = self
+                .recorder
+                .entry_sync(())
+                .or_insert_with(Default::default);
+            recorder
+                .get_mut()
+                .retain(&view.resources.iter().map(|r| r.id.as_str()).collect());
+            let records = crate::query_publish::records(
+                recorder.get_mut(),
+                snapshot,
+                effective,
+                &view,
+                previous.as_deref(),
+                transitions,
+            );
+            self.journal.submit_queries(revision, runs, events, records);
         }
         let view = Arc::new(view);
         let mut entry = self.views.entry_sync(()).or_insert_with(|| view.clone());

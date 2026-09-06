@@ -23,6 +23,7 @@ pub(crate) struct Batch {
     pub revision: Digest,
     pub runs: Vec<Run>,
     pub events: Vec<Event>,
+    pub records: Vec<crate::query_records::QueryRecord>,
     pub gaps: Vec<Gap>,
     pub _charges: Vec<Permit>,
     pub _pending: Pending,
@@ -120,10 +121,20 @@ impl Journal {
         runs: impl IntoIterator<Item = Result<Run, Error>>,
         events: impl IntoIterator<Item = Result<Event, Error>>,
     ) {
+        self.submit_queries(revision, runs, events, std::iter::empty());
+    }
+    pub fn submit_queries(
+        &self,
+        revision: Digest,
+        runs: impl IntoIterator<Item = Result<Run, Error>>,
+        events: impl IntoIterator<Item = Result<Event, Error>>,
+        records: impl IntoIterator<Item = Result<crate::query_records::QueryRecord, Error>>,
+    ) {
         let mut batch = Batch {
             revision,
             runs: vec![],
             events: vec![],
+            records: vec![],
             gaps: vec![],
             _charges: vec![],
             _pending: Pending::new(&self.status),
@@ -146,7 +157,17 @@ impl Journal {
                 _ => self.status.drop_records(1, 0),
             }
         }
-        if batch.runs.is_empty()
+        for record in records {
+            match record.and_then(|record| self.reserve(&record).map(|permit| (record, permit))) {
+                Ok((record, permit)) if batch.records.len() < 20000 => {
+                    batch.records.push(record);
+                    batch._charges.push(permit);
+                }
+                _ => self.status.drop_records(1, 0),
+            }
+        }
+        if batch.records.is_empty()
+            && batch.runs.is_empty()
             && batch.events.is_empty()
             && self.status.pending_events.load(Ordering::Relaxed) == 0
             && self.status.pending_runs.load(Ordering::Relaxed) == 0
@@ -155,8 +176,10 @@ impl Journal {
         }
         if let Err(error) = self.sender.try_send(batch) {
             let batch = error.into_inner();
-            self.status
-                .drop_records(batch.events.len() as u64, batch.runs.len() as u64);
+            self.status.drop_records(
+                (batch.events.len() + batch.records.len()) as u64,
+                batch.runs.len() as u64,
+            );
         }
     }
 }
