@@ -60,6 +60,8 @@ async fn overview_resources_findings_and_missing_history_have_separate_outcomes(
     let value: serde_json::Value =
         serde_json::from_slice(&to_bytes(response.into_body(), 65536).await?)?;
     assert_eq!(value["items"].as_array().map(Vec::len), Some(1));
+    assert_eq!(value["items"][0]["finding_count"], 1);
+    assert_eq!(value["items"][0]["findings"][0]["severity"], "error");
     for (path, status) in [
         ("/api/v1/resources?limit=101", StatusCode::BAD_REQUEST),
         ("/api/v1/resource?id=absent", StatusCode::NOT_FOUND),

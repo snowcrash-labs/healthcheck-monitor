@@ -77,8 +77,9 @@ pub async fn resources(
             row
         })
         .collect();
+    let items = crate::resource_rows::with_findings(items, &view.findings, now);
     json(
-        &Page::<Resource> {
+        &Page::<crate::resource_rows::Row> {
             generation: view.generation,
             items,
             next_cursor: (cursor + limit < total).then(|| (cursor + limit).to_string()),

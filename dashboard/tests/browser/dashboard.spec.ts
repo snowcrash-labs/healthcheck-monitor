@@ -22,7 +22,7 @@ test("routes, resource details, persistent header, and theme selection", async (
   await page.evaluate(() => window.scrollTo(0, 700));
   const box = await page.locator(".topbar").boundingBox();
   expect(box?.y).toBe(0);
-  await page.locator("tbody tr").first().getByRole("link").click();
+  await page.locator("tbody tr").first().getByRole("link").first().click();
   await expect(page.getByRole("heading", { name: "Observed facts" })).toBeVisible();
   await page.reload();
   await expect(page.getByRole("heading", { name: "Observed facts" })).toBeVisible();

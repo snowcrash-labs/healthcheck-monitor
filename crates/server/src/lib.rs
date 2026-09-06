@@ -11,6 +11,7 @@ mod history_api;
 mod listener;
 mod lists;
 mod overview;
+mod resource_rows;
 mod response;
 mod security;
 mod serve;

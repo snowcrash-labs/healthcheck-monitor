@@ -31,7 +31,11 @@ export const overview = z.object({
   checks: z.array(checkView),
 });
 export const findingPage = z.object({ generation: count, items: z.array(finding), next_cursor: z.string().nullable(), total: count });
-export const resourcePage = z.object({ generation: count, items: z.array(resource), next_cursor: z.string().nullable(), total: count });
+const resourceRow = resource.extend({
+  finding_count: count,
+  findings: z.array(z.object({ rule: z.string(), severity, observed_at: timestamp, valid_until: timestamp.nullable(), stale: z.boolean() })).max(2),
+});
+export const resourcePage = z.object({ generation: count, items: z.array(resourceRow), next_cursor: z.string().nullable(), total: count });
 export const resourceDetail = z.object({ generation: count, resource, findings: z.array(finding) });
 export const historyEvent = z.object({
   id: z.uuidv7(), configuration_id: z.uuidv7(), target: z.string(), finding: z.string(), resource: z.string(), rule: z.string(),

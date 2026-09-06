@@ -83,6 +83,9 @@ tbody tr:hover { background: var(--hover); }
 .primary-link:hover { color: var(--accent); }
 .cell-detail { display: block; color: var(--muted); font-size: 11px; margin-top: 5px; }
 .resource-name { display: block; max-width: 430px; overflow-wrap: anywhere; }
+.resource-findings { min-width: 190px; max-width: 280px; }
+.resource-finding + .resource-finding, .resource-fact + .resource-fact { margin-top: 10px; }
+.finding-rule { font-weight: 550; overflow-wrap: anywhere; }
 .coverage-number { font-weight: 600; font-size: 15px; font-variant-numeric: tabular-nums; }
 .coverage-number span { color: var(--muted); font-weight: 450; }
 .quiet-link { font-size: 12px; white-space: nowrap; }
