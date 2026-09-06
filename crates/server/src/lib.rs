@@ -13,6 +13,7 @@ mod iap;
 mod listener;
 mod lists;
 mod overview;
+mod pages;
 mod resource_rows;
 mod response;
 mod security;

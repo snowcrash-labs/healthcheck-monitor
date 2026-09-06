@@ -43,7 +43,6 @@ struct Overview<'a> {
     heartbeat_at: Option<chrono::DateTime<chrono::Utc>>,
     running: bool,
     persistence_fault: bool,
-    view_truncated: bool,
     history: monitor_history::journal::Health,
     totals: Totals,
     targets: Vec<TargetSummary>,
@@ -121,7 +120,6 @@ pub async fn overview(
             ),
             running: app.bus.running.load(Ordering::Acquire),
             persistence_fault: view.persistence_fault,
-            view_truncated: view.truncated,
             history: app.bus.journal.health(),
             totals,
             targets,
@@ -169,7 +167,6 @@ fn summary(view: &View, target: &Target, now: chrono::DateTime<chrono::Utc>) -> 
         Health::Degraded
     } else if complete != checks.len()
         || checks.is_empty()
-        || view.truncated
         || resources.is_empty()
         || has_health(Health::Unknown)
     {

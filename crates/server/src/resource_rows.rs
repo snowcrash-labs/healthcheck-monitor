@@ -71,7 +71,7 @@ mod tests {
     fn summaries_prioritize_errors_preserve_age_and_count_truncation()
     -> Result<(), Box<dyn std::error::Error>> {
         let (state, effective) = crate::test_support::evidence()?;
-        let view = crate::build_view::build(&state.snapshot, &effective, 1, 65536);
+        let view = crate::build_view::build(&state.snapshot, &effective, 1);
         let finding = view.findings.first().ok_or("fixture finding")?;
         let now = Utc::now();
         let mut findings = Vec::new();

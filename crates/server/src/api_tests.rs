@@ -7,6 +7,43 @@ use crate::{
 use axum::{body::to_bytes, http::StatusCode};
 use tower::ServiceExt;
 #[tokio::test]
+async fn search_includes_observed_facts_beyond_the_first_page()
+-> Result<(), Box<dyn std::error::Error>> {
+    use monitor_runtime::Observer;
+    let config = Config::default();
+    let (app, _) = app(&config).await?;
+    let (mut state, effective) = crate::test_support::evidence()?;
+    let result = state.snapshot.results.values_mut().next().ok_or("result")?;
+    let template = result.observations.first().ok_or("observation")?.clone();
+    result.observations.clear();
+    for index in 0..400 {
+        let mut row = template.clone();
+        row.resource = format!("fixture/resource-{index:04}");
+        if index != 399 {
+            row.data = monitor_core::model::Data::Identity {
+                scope: "ordinary".into(),
+            };
+        }
+        result.observations.push(row);
+    }
+    app.bus.update(&state.snapshot, &effective, &[]);
+    let routes = router(app, &config);
+    for (query, count) in [("limit=50", 400), ("q=503", 1), ("q=RESOURCE-0399", 1)] {
+        let response = routes
+            .clone()
+            .oneshot(request(&format!("/api/v1/resources?{query}"))?)
+            .await?;
+        assert_eq!(response.status(), StatusCode::OK);
+        let value: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), 65536).await?)?;
+        assert_eq!(value["total"], count);
+        if count == 1 {
+            assert_eq!(value["items"][0]["id"], "fixture/resource-0399");
+        }
+    }
+    Ok(())
+}
+#[tokio::test]
 async fn deep_links_are_documents_and_unknown_assets_stay_missing()
 -> Result<(), Box<dyn std::error::Error>> {
     let config = Config::default();

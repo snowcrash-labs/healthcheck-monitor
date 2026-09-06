@@ -3,7 +3,6 @@ listen = "127.0.0.1:9840"
 connections = 64
 requests = 16
 event_streams = 16
-view_bytes = 33554432
 response_bytes = 2097152
 
 [access]

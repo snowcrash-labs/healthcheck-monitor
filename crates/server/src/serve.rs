@@ -32,7 +32,7 @@ pub async fn serve(
     let journal_stop = CancellationToken::new();
     let (journal, mut journal_task) =
         monitor_history::journal::Journal::start(history.clone(), journal_stop.clone());
-    let bus = Bus::new(journal.clone(), config.view_bytes);
+    let bus = Bus::new(journal.clone());
     let app = Arc::new(App {
         bus: bus.clone(),
         history,

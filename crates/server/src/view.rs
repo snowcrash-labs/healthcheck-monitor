@@ -73,7 +73,6 @@ pub struct View {
     pub result_stamps: BTreeMap<String, ResultStamp>,
     pub persistence_fault: bool,
     pub dropped_transitions: u64,
-    pub truncated: bool,
 }
 #[derive(PartialEq, Eq)]
 pub struct ResultStamp {

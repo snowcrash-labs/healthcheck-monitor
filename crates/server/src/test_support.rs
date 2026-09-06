@@ -17,7 +17,7 @@ pub async fn app(config: &Config) -> Result<(Arc<App>, Effective), Box<dyn std::
     cancelled.cancel();
     let (journal, task) = monitor_history::journal::Journal::start(history.clone(), cancelled);
     task.await?;
-    let bus = Bus::new(journal, config.view_bytes);
+    let bus = Bus::new(journal);
     let (state, effective) = evidence()?;
     bus.update(&state.snapshot, &effective, &[]);
     bus.heartbeat(chrono::Utc::now(), true);

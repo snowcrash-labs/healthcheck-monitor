@@ -1,6 +1,7 @@
 //! Bounded current-state pages never clone or transmit an entire snapshot.
 use crate::{
     api::App,
+    pages::{self, Direction, Page},
     response::{ApiError, json},
     view::{FindingView, Resource},
 };
@@ -18,22 +19,15 @@ pub struct Filter {
     q: Option<String>,
     severity: Option<Severity>,
     health: Option<Health>,
-    cursor: Option<usize>,
+    cursor: Option<String>,
+    #[serde(default)]
+    direction: Direction,
     limit: Option<usize>,
 }
-#[derive(Serialize)]
-struct Page<T> {
-    generation: u64,
-    items: Vec<T>,
-    next_cursor: Option<String>,
-    total: usize,
-}
-fn bounds(filter: &Filter) -> Result<(usize, usize), ApiError> {
+fn bounds(filter: &Filter) -> Result<usize, ApiError> {
     let limit = filter.limit.unwrap_or(50);
-    let cursor = filter.cursor.unwrap_or(0);
     if limit == 0
         || limit > 100
-        || cursor > 1_000_000
         || filter.q.as_ref().is_some_and(|value| value.len() > 128)
         || filter
             .target
@@ -42,16 +36,16 @@ fn bounds(filter: &Filter) -> Result<(usize, usize), ApiError> {
     {
         return Err(ApiError::BadQuery);
     }
-    Ok((cursor, limit))
+    Ok(limit)
 }
 pub async fn resources(
     State(app): State<Arc<App>>,
     Query(filter): Query<Filter>,
 ) -> Result<Response, ApiError> {
-    let (cursor, limit) = bounds(&filter)?;
+    let limit = bounds(&filter)?;
     let view = app.bus.current().ok_or(ApiError::Waiting)?;
     let now = chrono::Utc::now();
-    let query = filter.q.unwrap_or_default().to_ascii_lowercase();
+    let query = filter.q.as_deref().unwrap_or_default().to_lowercase();
     let rows: Vec<_> = view
         .resources
         .iter()
@@ -66,11 +60,10 @@ pub async fn resources(
                 })
         })
         .collect();
-    let total = rows.len();
-    let items = rows
+    let page = pages::select(rows, filter.cursor.as_deref(), &filter.direction, limit)?;
+    let items = page
+        .items
         .into_iter()
-        .skip(cursor)
-        .take(limit)
         .cloned()
         .map(|mut row| {
             row.health = crate::view::current_health(row.health, row.expires_at, now);
@@ -82,8 +75,9 @@ pub async fn resources(
         &Page::<crate::resource_rows::Row> {
             generation: view.generation,
             items,
-            next_cursor: (cursor + limit < total).then(|| (cursor + limit).to_string()),
-            total,
+            next_cursor: page.next,
+            previous_cursor: page.previous,
+            total: page.total,
         },
         app.response_bytes,
     )
@@ -92,11 +86,11 @@ pub async fn findings(
     State(app): State<Arc<App>>,
     Query(filter): Query<Filter>,
 ) -> Result<Response, ApiError> {
-    let (cursor, limit) = bounds(&filter)?;
+    let limit = bounds(&filter)?;
     let view = app.bus.current().ok_or(ApiError::Waiting)?;
     let now = chrono::Utc::now();
-    let query = filter.q.unwrap_or_default().to_ascii_lowercase();
-    let mut rows: Vec<_> = view
+    let query = filter.q.as_deref().unwrap_or_default().to_lowercase();
+    let rows: Vec<_> = view
         .findings
         .iter()
         .filter(|finding| {
@@ -108,21 +102,14 @@ pub async fn findings(
                     .severity
                     .is_none_or(|severity| finding.severity == severity)
                 && (query.is_empty()
-                    || finding.resource.to_ascii_lowercase().contains(&query)
-                    || finding.rule.contains(&query))
+                    || finding.resource.to_lowercase().contains(&query)
+                    || finding.rule.to_lowercase().contains(&query))
         })
         .collect();
-    rows.sort_by(|a, b| {
-        b.severity
-            .cmp(&a.severity)
-            .then_with(|| a.resource.cmp(&b.resource))
-            .then_with(|| a.rule.cmp(&b.rule))
-    });
-    let total = rows.len();
-    let items = rows
+    let page = pages::select(rows, filter.cursor.as_deref(), &filter.direction, limit)?;
+    let items = page
+        .items
         .into_iter()
-        .skip(cursor)
-        .take(limit)
         .cloned()
         .map(|mut row| {
             row.stale |= row.valid_until.is_some_and(|at| now > at);
@@ -133,8 +120,9 @@ pub async fn findings(
         &Page::<FindingView> {
             generation: view.generation,
             items,
-            next_cursor: (cursor + limit < total).then(|| (cursor + limit).to_string()),
-            total,
+            next_cursor: page.next,
+            previous_cursor: page.previous,
+            total: page.total,
         },
         app.response_bytes,
     )
@@ -172,7 +160,6 @@ pub async fn resource(
         .findings
         .iter()
         .filter(|finding| finding.resource == identity.id)
-        .take(128)
         .cloned()
         .collect();
     json(

@@ -11,7 +11,6 @@ pub struct Config {
     pub connections: usize,
     pub requests: usize,
     pub event_streams: usize,
-    pub view_bytes: usize,
     pub response_bytes: usize,
 }
 #[derive(Clone, Deserialize)]
@@ -47,7 +46,6 @@ impl Default for Config {
             connections: 64,
             requests: 16,
             event_streams: 16,
-            view_bytes: 32 * 1024 * 1024,
             response_bytes: 2 * 1024 * 1024,
         }
     }
@@ -88,7 +86,6 @@ impl Config {
             || self.requests > self.connections
             || !(1..=64).contains(&self.event_streams)
             || self.event_streams > self.connections
-            || !(65536..=128 * 1024 * 1024).contains(&self.view_bytes)
             || !(1024..=4 * 1024 * 1024).contains(&self.response_bytes)
         {
             return Err(crate::Error::Configuration);

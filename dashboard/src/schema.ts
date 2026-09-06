@@ -24,18 +24,18 @@ const checkView = z.object({
 });
 export const overview = z.object({
   generation: count, configuration_revision: z.string(), captured_at: timestamp,
-  heartbeat_at: timestamp.nullable(), running: z.boolean(), persistence_fault: z.boolean(), view_truncated: z.boolean(),
+  heartbeat_at: timestamp.nullable(), running: z.boolean(), persistence_fault: z.boolean(),
   history: z.object({ available: z.boolean(), last_persisted_at: timestamp.nullable(), dropped_events: count, dropped_runs: count, queued_batches: count, gaps: count }),
   totals: z.object({ targets: count, resources: count, error_findings: count, warning_findings: count, incomplete_checks: count }),
   targets: z.array(z.object({ name: z.string(), provider: z.string(), scope: z.string(), regions: z.array(z.string()), health, complete_checks: count, total_checks: count, errors: count, warnings: count, resources: count, latest_observation: timestamp.nullable() })),
   checks: z.array(checkView),
 });
-export const findingPage = z.object({ generation: count, items: z.array(finding), next_cursor: z.string().nullable(), total: count });
+export const findingPage = z.object({ generation: count, items: z.array(finding), next_cursor: z.string().nullable(), previous_cursor: z.string().nullable(), total: count });
 const resourceRow = resource.extend({
   finding_count: count,
   findings: z.array(z.object({ rule: z.string(), severity, observed_at: timestamp, valid_until: timestamp.nullable(), stale: z.boolean() })).max(2),
 });
-export const resourcePage = z.object({ generation: count, items: z.array(resourceRow), next_cursor: z.string().nullable(), total: count });
+export const resourcePage = z.object({ generation: count, items: z.array(resourceRow), next_cursor: z.string().nullable(), previous_cursor: z.string().nullable(), total: count });
 export const resourceDetail = z.object({ generation: count, resource, findings: z.array(finding) });
 export const historyEvent = z.object({
   id: z.uuidv7(), configuration_id: z.uuidv7(), target: z.string(), finding: z.string(), resource: z.string(), rule: z.string(),

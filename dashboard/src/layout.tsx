@@ -24,7 +24,6 @@ function Layout(props: ParentProps) {
         <Show when={!dashboard.connected() && dashboard.overview()}><Notice>Connection interrupted. Displayed observations retain their original timestamps.</Notice></Show>
         <Show when={dashboard.error()}><Notice error>{dashboard.error()}</Notice></Show>
         <Show when={dashboard.overview() && (!dashboard.overview()?.running || dashboard.now() - Date.parse(dashboard.overview()?.heartbeat_at ?? "1970-01-01T00:00:00Z") > 15_000)}><Notice>The monitor heartbeat is stale or stopped. Displayed health requires fresh collection.</Notice></Show>
-        <Show when={dashboard.overview()?.view_truncated}><Notice>The dashboard reached its view limit. Coverage is incomplete; narrow the configured scope or increase the view budget.</Notice></Show>
         <Show when={dashboard.overview()?.persistence_fault}><Notice error>Evidence publication is failing. Live checks continue while storage retries.</Notice></Show>
         <Errored fallback={(_, reset) => <div class="empty"><h2>This view could not be displayed.</h2><button class="button" onClick={reset}>Try again</button></div>}><Loading fallback={<Empty title="Loading view" />}>{props.children}</Loading></Errored>
       </main>

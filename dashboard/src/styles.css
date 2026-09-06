@@ -117,7 +117,7 @@ tbody tr:hover { background: var(--hover); }
 .empty h3 { color: var(--text); margin-bottom: 7px; }
 .empty p { font-size: 12px; max-width: 420px; margin: auto; }
 .empty .button { margin-top: 18px; }
-.pagination { padding: 15px 22px; border-top: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 16px; font-size: 11px; color: var(--muted); }
+.pagination, .scroll-boundary { padding: 15px 22px; border-top: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 16px; font-size: 11px; color: var(--muted); }
 .pagination > div { display: flex; gap: 8px; }
 .back-link { display: inline-block; margin: 0 0 25px; font-size: 12px; }
 .resource-heading h1 { overflow-wrap: anywhere; font-size: 26px; }

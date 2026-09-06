@@ -21,10 +21,9 @@ pub struct Bus {
     pub journal: Arc<Journal>,
     pub heartbeat: AtomicI64,
     pub running: AtomicBool,
-    limit: usize,
 }
 impl Bus {
-    pub fn new(journal: Arc<Journal>, limit: usize) -> Arc<Self> {
+    pub fn new(journal: Arc<Journal>) -> Arc<Self> {
         let (changed, _) = tokio::sync::watch::channel(0);
         Arc::new(Self {
             views: scc::HashMap::new(),
@@ -33,7 +32,6 @@ impl Bus {
             journal,
             heartbeat: AtomicI64::new(0),
             running: AtomicBool::new(true),
-            limit,
         })
     }
     pub fn current(&self) -> Option<Arc<View>> {
@@ -52,7 +50,7 @@ impl Observer for Bus {
             return;
         }
         let generation = self.generation.fetch_add(1, Ordering::Relaxed) + 1;
-        let view = crate::build_view::build(snapshot, effective, generation, self.limit);
+        let view = crate::build_view::build(snapshot, effective, generation);
         if let Ok(revision) = Digest::try_new(snapshot.revision.clone()) {
             let runs = snapshot
                 .results

@@ -7,7 +7,7 @@ use monitor_runtime::Observer;
 use tower::ServiceExt;
 
 #[test]
-fn limits_and_excess_failure_details_are_explicit() -> Result<(), Box<dyn std::error::Error>> {
+fn all_collected_failure_details_remain_available() -> Result<(), Box<dyn std::error::Error>> {
     let (mut state, effective) = evidence()?;
     let job = effective
         .jobs
@@ -17,9 +17,8 @@ fn limits_and_excess_failure_details_are_explicit() -> Result<(), Box<dyn std::e
     let result = state.snapshot.results.get_mut(&job.key).ok_or("result")?;
     let mut failure = result.operations[0].clone();
     failure.coverage = Coverage::Denied;
-    result.operations = vec![failure; 129];
-    let view = build(&state.snapshot, &effective, 1, 65536);
-    assert!(view.truncated);
+    result.operations = vec![failure; 2000];
+    let view = build(&state.snapshot, &effective, 1);
     assert_eq!(
         view.checks
             .iter()
@@ -27,11 +26,9 @@ fn limits_and_excess_failure_details_are_explicit() -> Result<(), Box<dyn std::e
             .ok_or("check")?
             .failures
             .len(),
-        128
+        2000
     );
-    let tiny = build(&state.snapshot, &effective, 1, 1024);
-    assert!(tiny.truncated);
-    assert!(tiny.resources.is_empty());
+    assert_eq!(view.resources.len(), 1);
     Ok(())
 }
 
@@ -58,7 +55,7 @@ fn shared_resources_prefer_the_newest_source_and_preserve_expiry()
     result.check = other.check;
     result.observations[0].observed_at -= chrono::Duration::minutes(10);
     state.snapshot.results.insert(other.key.clone(), result);
-    let view = build(&state.snapshot, &effective, 1, 65536);
+    let view = build(&state.snapshot, &effective, 1);
     assert_eq!(view.resources.len(), 1);
     assert_eq!(view.resources[0].check, Check::Edge);
     assert_eq!(
