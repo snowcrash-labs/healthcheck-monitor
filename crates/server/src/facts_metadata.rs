@@ -148,6 +148,9 @@ pub fn facts(data: &Data) -> Vec<Fact> {
             add("Build confirmed", built.to_string());
         }
         Data::Provenance {
+            desired_digest,
+            observed_digests,
+            repository,
             registry_verified,
             build_verified,
             commit_verified,
@@ -156,6 +159,23 @@ pub fn facts(data: &Data) -> Vec<Fact> {
             revision,
             ..
         } => {
+            add(
+                "Desired image digest",
+                desired_digest
+                    .clone()
+                    .unwrap_or_else(|| "Not recorded".into()),
+            );
+            add(
+                "Observed image digests",
+                if observed_digests.is_empty() {
+                    "Not recorded".into()
+                } else {
+                    observed_digests.join(", ")
+                },
+            );
+            if let Some(repository) = repository {
+                add("Source repository", repository.clone());
+            }
             add("Registry verified", registry_verified.to_string());
             add("Build verified", build_verified.to_string());
             add("Commit verified", commit_verified.to_string());

@@ -224,3 +224,30 @@ fn retained_findings_remain_navigable_without_current_inventory()
     );
     Ok(())
 }
+
+#[test]
+fn release_mismatch_evidence_includes_the_actual_and_expected_digests() {
+    let data = Data::Provenance {
+        valid_until: chrono::Utc::now(),
+        observed_digests: vec!["sha256:observed".into()],
+        desired_digest: Some("sha256:desired".into()),
+        pending: false,
+        revision: Some("revision".into()),
+        repository: Some("example/service".into()),
+        registry_verified: false,
+        build_verified: true,
+        commit_verified: true,
+        mismatch: true,
+    };
+    let facts = crate::facts::facts(&data);
+    assert!(
+        facts
+            .iter()
+            .any(|fact| fact.label == "Desired image digest" && fact.value == "sha256:desired")
+    );
+    assert!(
+        facts
+            .iter()
+            .any(|fact| fact.label == "Observed image digests" && fact.value == "sha256:observed")
+    );
+}
