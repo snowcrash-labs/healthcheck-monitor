@@ -9,15 +9,7 @@ use tower::ServiceExt;
 #[tokio::test]
 async fn deep_links_are_documents_and_unknown_assets_stay_missing()
 -> Result<(), Box<dyn std::error::Error>> {
-    let directory = tempfile::tempdir()?;
-    std::fs::write(
-        directory.path().join("index.html"),
-        "<!doctype html><title>Fixture</title>",
-    )?;
-    let config = Config {
-        assets: directory.path().into(),
-        ..Default::default()
-    };
+    let config = Config::default();
     let (app, _) = app(&config).await?;
     let routes = router(app, &config);
     for path in [

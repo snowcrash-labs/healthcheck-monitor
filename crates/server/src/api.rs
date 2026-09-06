@@ -14,7 +14,7 @@ pub struct App {
     pub response_bytes: usize,
     pub tls: bool,
 }
-pub fn router(app: Arc<App>, config: &Config) -> Router {
+pub fn router(app: Arc<App>, _config: &Config) -> Router {
     let api = Router::new()
         .route("/overview", get(crate::overview::overview))
         .route("/resources", get(crate::lists::resources))
@@ -24,16 +24,10 @@ pub fn router(app: Arc<App>, config: &Config) -> Router {
         .route("/runs", get(crate::history_api::runs))
         .route("/events", get(crate::events::events))
         .fallback(|| async { ApiError::NotFound });
-    let files = tower_http::services::ServeDir::new(&config.assets)
-        .precompressed_br()
-        .precompressed_gzip()
-        .fallback(crate::static_files::fallback(
-            config.assets.join("index.html"),
-        ));
     Router::new()
         .nest("/api/v1", api)
         .route("/healthz", get(crate::events::health))
-        .fallback_service(files)
+        .fallback(crate::static_files::serve)
         .layer(tower_http::compression::CompressionLayer::new())
         .layer(DefaultBodyLimit::max(1024))
         .layer(middleware::from_fn_with_state(

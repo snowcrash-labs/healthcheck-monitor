@@ -16,7 +16,6 @@ pub async fn serve(
     config: Config,
 ) -> Result<u8, Error> {
     config.validate()?;
-    assets(&config.assets)?;
     let security = Security::new(&config, |name| std::env::var(name).ok())?;
     let url = std::env::var(&config.history.database_url_env).map_err(|_| Error::History)?;
     let history =
@@ -110,34 +109,4 @@ pub async fn serve(
         Some(result) => Ok(result.map_err(|_| Error::Task)??),
         None => Err(Error::Task),
     }
-}
-fn assets(root: &Path) -> Result<(), Error> {
-    if std::fs::symlink_metadata(root)?.file_type().is_symlink() {
-        return Err(Error::Configuration);
-    }
-    if !root.join("index.html").is_file() {
-        return Err(Error::Configuration);
-    }
-    let mut pending = vec![root.to_path_buf()];
-    let mut count = 0;
-    let mut bytes = 0u64;
-    while let Some(path) = pending.pop() {
-        for entry in std::fs::read_dir(path)? {
-            let entry = entry?;
-            let kind = entry.file_type()?;
-            count += 1;
-            if kind.is_symlink() || count > 2048 {
-                return Err(Error::Configuration);
-            }
-            if kind.is_dir() {
-                pending.push(entry.path());
-            } else if kind.is_file() {
-                bytes = bytes.saturating_add(entry.metadata()?.len());
-                if bytes > 64 * 1024 * 1024 {
-                    return Err(Error::Configuration);
-                }
-            }
-        }
-    }
-    Ok(())
 }

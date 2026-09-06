@@ -5,7 +5,6 @@ use std::{net::SocketAddr, path::PathBuf};
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
     pub listen: SocketAddr,
-    pub assets: PathBuf,
     pub tls: Option<Tls>,
     pub access: Access,
     pub history: monitor_history::config::Config,
@@ -32,12 +31,16 @@ pub enum Access {
         trusted_peers: Vec<ipnet::IpNet>,
         allowed_domains: Vec<String>,
     },
+    Iap {
+        audience: String,
+        public_origin: url::Url,
+        allowed_domains: Vec<String>,
+    },
 }
 impl Default for Config {
     fn default() -> Self {
         Self {
             listen: SocketAddr::from(([127, 0, 0, 1], 9840)),
-            assets: "dashboard/dist".into(),
             tls: None,
             access: Access::Local,
             history: Default::default(),
@@ -63,17 +66,14 @@ impl Config {
             return Err(crate::Error::Configuration);
         }
         let mut config: Self = toml::from_str(&text).map_err(|_| crate::Error::Configuration)?;
-        if let Some(base) = path.parent() {
-            if config.assets.is_relative() {
-                config.assets = base.join(&config.assets);
+        if let Some(base) = path.parent()
+            && let Some(tls) = &mut config.tls
+        {
+            if tls.certificate.is_relative() {
+                tls.certificate = base.join(&tls.certificate);
             }
-            if let Some(tls) = &mut config.tls {
-                if tls.certificate.is_relative() {
-                    tls.certificate = base.join(&tls.certificate);
-                }
-                if tls.private_key.is_relative() {
-                    tls.private_key = base.join(&tls.private_key);
-                }
+            if tls.private_key.is_relative() {
+                tls.private_key = base.join(&tls.private_key);
             }
         }
         config.validate()?;
@@ -96,6 +96,25 @@ impl Config {
         match &self.access {
             Access::Local if !self.listen.ip().is_loopback() => {
                 return Err(crate::Error::Configuration);
+            }
+            Access::Iap {
+                audience,
+                public_origin,
+                allowed_domains,
+            } => {
+                let valid_audience = audience
+                    .strip_prefix("/projects/")
+                    .and_then(|value| value.split_once("/global/backendServices/"))
+                    .is_some_and(|(project, service)| {
+                        [project, service].iter().all(|value| {
+                            !value.is_empty()
+                                && value.len() <= 20
+                                && value.bytes().all(|byte| byte.is_ascii_digit())
+                        })
+                    });
+                if !valid_audience || !origin(public_origin) || !domains(allowed_domains) {
+                    return Err(crate::Error::Configuration);
+                }
             }
             Access::Proxy {
                 secret_env,
@@ -132,4 +151,24 @@ impl Config {
         }
         Ok(())
     }
+}
+fn origin(value: &url::Url) -> bool {
+    value.scheme() == "https"
+        && value.host_str().is_some()
+        && value.username().is_empty()
+        && value.password().is_none()
+        && value.query().is_none()
+        && value.fragment().is_none()
+        && value.path() == "/"
+}
+fn domains(values: &[String]) -> bool {
+    !values.is_empty()
+        && values.len() <= 32
+        && values.iter().all(|value| {
+            !value.is_empty()
+                && value.len() <= 253
+                && value
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || b".-".contains(&byte))
+        })
 }

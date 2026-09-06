@@ -16,6 +16,7 @@ use std::sync::Arc;
 pub struct Security {
     access: Access,
     secret: Option<[u8; 32]>,
+    iap: Option<crate::iap::Iap>,
 }
 impl Security {
     pub fn new(
@@ -23,7 +24,7 @@ impl Security {
         secret: impl Fn(&str) -> Option<String>,
     ) -> Result<Self, crate::Error> {
         let digest = match &config.access {
-            Access::Local => None,
+            Access::Local | Access::Iap { .. } => None,
             Access::Proxy { secret_env, .. } => {
                 let value = secret(secret_env)
                     .filter(|value| value.len() >= 32 && value.len() <= 4096)
@@ -31,19 +32,34 @@ impl Security {
                 Some(sha2::Sha256::digest(value.as_bytes()).into())
             }
         };
+        let iap = match &config.access {
+            Access::Iap {
+                audience,
+                allowed_domains,
+                ..
+            } => Some(crate::iap::Iap::new(
+                audience.clone(),
+                allowed_domains.clone(),
+            )?),
+            _ => None,
+        };
         Ok(Self {
             access: config.access.clone(),
             secret: digest,
+            iap,
         })
     }
-    fn authorized(&self, request: &Request, peer: std::net::IpAddr) -> bool {
-        let host = request
-            .uri()
+    async fn authorized(
+        &self,
+        headers: &axum::http::HeaderMap,
+        uri: &axum::http::Uri,
+        peer: std::net::IpAddr,
+    ) -> bool {
+        let host = uri
             .authority()
             .map(|authority| authority.as_str())
             .or_else(|| {
-                request
-                    .headers()
+                headers
                     .get(header::HOST)
                     .and_then(|value| value.to_str().ok())
             });
@@ -53,9 +69,8 @@ impl Security {
         else {
             return false;
         };
-        if request.uri().path().starts_with("/api/")
-            && request
-                .headers()
+        if uri.path().starts_with("/api/")
+            && headers
                 .get("sec-fetch-site")
                 .and_then(|value| value.to_str().ok())
                 == Some("cross-site")
@@ -65,6 +80,23 @@ impl Security {
         match &self.access {
             Access::Local => {
                 peer.is_loopback() && matches!(host.as_str(), "localhost" | "127.0.0.1" | "[::1]")
+            }
+            Access::Iap { public_origin, .. } => {
+                if Some(host.as_str()) != public_origin.host_str()
+                    || !crate::iap::trusted_peer(peer)
+                {
+                    return false;
+                }
+                let Some(token) = headers
+                    .get("x-goog-iap-jwt-assertion")
+                    .and_then(|value| value.to_str().ok())
+                else {
+                    return false;
+                };
+                match &self.iap {
+                    Some(iap) => iap.authorized(token).await,
+                    None => false,
+                }
             }
             Access::Proxy {
                 public_origin,
@@ -77,7 +109,7 @@ impl Security {
                 {
                     return false;
                 }
-                let Some(token) = request.headers().get("x-healthcheck-proxy-key") else {
+                let Some(token) = headers.get("x-healthcheck-proxy-key") else {
                     return false;
                 };
                 let digest: [u8; 32] = sha2::Sha256::digest(token.as_bytes()).into();
@@ -90,8 +122,7 @@ impl Security {
                 }) {
                     return false;
                 }
-                request
-                    .headers()
+                headers
                     .get("x-auth-request-email")
                     .and_then(|value| value.to_str().ok())
                     .filter(|email| email.len() <= 320)
@@ -105,6 +136,10 @@ impl Security {
             }
         }
     }
+    fn probe(&self, peer: std::net::IpAddr) -> bool {
+        peer.is_loopback()
+            || matches!(self.access, Access::Iap { .. }) && crate::iap::trusted_peer(peer)
+    }
 }
 pub async fn guard(State(app): State<Arc<App>>, request: Request, next: Next) -> Response {
     let peer = request
@@ -114,8 +149,20 @@ pub async fn guard(State(app): State<Arc<App>>, request: Request, next: Next) ->
     if request.uri().to_string().len() > 8192 {
         return ApiError::BadQuery.into_response();
     }
-    let authorized = request.uri().path() == "/healthz"
-        || peer.is_some_and(|peer| app.security.authorized(&request, peer));
+    // Authentication can refresh public keys; bound waiting requests before any network work.
+    let permit = match app.requests.clone().try_acquire_owned() {
+        Ok(permit) => permit,
+        Err(_) => return ApiError::Busy.into_response(),
+    };
+    let authorized = match peer {
+        Some(peer) if request.uri().path() == "/healthz" => app.security.probe(peer),
+        Some(peer) => {
+            app.security
+                .authorized(request.headers(), request.uri(), peer)
+                .await
+        }
+        None => false,
+    };
     if !authorized {
         return ApiError::Unauthorized.into_response();
     }
@@ -126,12 +173,10 @@ pub async fn guard(State(app): State<Arc<App>>, request: Request, next: Next) ->
         return axum::http::StatusCode::METHOD_NOT_ALLOWED.into_response();
     }
     let permit = if request.uri().path() == "/api/v1/events" {
+        drop(permit);
         None
     } else {
-        match app.requests.clone().try_acquire_owned() {
-            Ok(permit) => Some(permit),
-            Err(_) => return ApiError::Busy.into_response(),
-        }
+        Some(permit)
     };
     let asset = request.uri().path().starts_with("/assets/");
     let mut response = next.run(request).await;
@@ -152,7 +197,7 @@ pub async fn guard(State(app): State<Arc<App>>, request: Request, next: Next) ->
             .headers_mut()
             .insert(name, HeaderValue::from_static(value));
     }
-    if app.tls {
+    if app.tls || matches!(app.security.access, Access::Iap { .. }) {
         response.headers_mut().insert(
             "strict-transport-security",
             HeaderValue::from_static("max-age=31536000"),

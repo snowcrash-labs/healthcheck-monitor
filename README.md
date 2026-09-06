@@ -17,11 +17,13 @@ Collection does not change infrastructure, consume queue messages, read applicat
 
 ## Quick start
 
-Requirements: current stable Rust, a C compiler for jemalloc, and credentials for your selected targets. The project uses edition 2024 and the prebuilt Rust standard library. Linux and macOS are supported.
+Requirements: current stable Rust, a C compiler for jemalloc, Node 24 or newer with npm to build the embedded dashboard, and credentials for your selected targets. The project uses edition 2024 and the prebuilt Rust standard library. Linux and macOS are supported.
 
 ```sh
 git clone https://github.com/snowcrash-labs/healthcheck-monitor.git
 cd healthcheck-monitor
+npm --prefix dashboard ci
+npm --prefix dashboard run build
 cargo build --locked -p healthcheck-monitor
 cp monitor.example.toml monitor.local.toml
 ```
@@ -69,11 +71,12 @@ target/debug/healthcheck-monitor diff older-snapshot.json newer-snapshot.json
 
 ## Dashboard
 
-The dashboard needs Node 24 or newer, npm, and a dedicated PostgreSQL 18.6 or newer database. The CLI's `run`, `watch`, `report`, and `diff` commands do not require PostgreSQL or Node.
+The dashboard needs a dedicated PostgreSQL 18.6 or newer database. Vite runs only during the build. `rust-embed` incorporates the frontend and its precompressed gzip/zstd representations at compile time, including development builds. Axum serves borrowed embedded bytes from the same listener as the API; the executable needs no asset directory or Node runtime. The CLI's `run`, `watch`, `report`, and `diff` commands do not require PostgreSQL.
 
 ```sh
 npm --prefix dashboard ci
 npm --prefix dashboard run build
+cargo build --locked -p healthcheck-monitor
 ```
 
 Create a database owned by the monitoring service role, then provide its connection URL. Embedded migrations initialize the `health_monitor` schema at startup. Adjust the example URL for your PostgreSQL user, authentication method, and host.
@@ -92,7 +95,9 @@ If the monitor runs on another machine over SSH, forward its loopback port from 
 ssh -N -L 9840:127.0.0.1:9840 your-monitor-host
 ```
 
-The default listener is loopback-only. Configure TLS in `server.local.toml` to prefer HTTP/2 through ALPN. Shared access requires a trusted authentication proxy; the server verifies its peer address, shared credential, public authority, and allowed identity domain. See the [dashboard runbook](docs/plans/2026-09-05-dashboard-operations.md) for TLS, access controls, database permissions, retention, and foreground supervision.
+The default listener is loopback-only. Configure TLS in `server.local.toml` to prefer HTTP/2 through ALPN. Shared access supports Google IAP with verified ES256 assertions, issuer, backend audience, expiry and identity domain, or an explicitly trusted authentication proxy. Authentication protects API routes and embedded assets. See the [dashboard runbook](docs/plans/2026-09-05-dashboard-operations.md) for TLS, access controls, database permissions, retention, and foreground supervision.
+
+For a terminal-only build without Node or dashboard assets, use `cargo build --locked -p healthcheck-monitor --no-default-features`. This omits `serve` while retaining one-off assessments and continuous command-line monitoring.
 
 For frontend development, run the loopback service and `npm --prefix dashboard run dev`. Vite serves the application on port 5173 and proxies API requests to port 9840.
 

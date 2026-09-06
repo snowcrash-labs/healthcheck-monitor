@@ -1,6 +1,5 @@
 # Copy to server.local.toml; paths are relative to this file.
 listen = "127.0.0.1:9840"
-assets = "dashboard/dist"
 connections = 64
 requests = 16
 event_streams = 16

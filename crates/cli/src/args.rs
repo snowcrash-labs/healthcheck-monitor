@@ -21,6 +21,7 @@ pub struct Cli {
 pub enum Command {
     Run(Options),
     Watch(WatchOptions),
+    #[cfg(feature = "dashboard")]
     Serve(ServeOptions),
     Report {
         snapshot: PathBuf,
@@ -84,6 +85,7 @@ pub struct WatchOptions {
     pub duration: Option<Span>,
 }
 #[derive(Args)]
+#[cfg(feature = "dashboard")]
 pub struct ServeOptions {
     #[command(flatten)]
     pub watch: WatchOptions,
@@ -91,8 +93,6 @@ pub struct ServeOptions {
     pub server_config: Option<PathBuf>,
     #[arg(long)]
     pub listen: Option<std::net::SocketAddr>,
-    #[arg(long)]
-    pub assets: Option<PathBuf>,
 }
 impl Select {
     pub fn selection(&self) -> Selection {
