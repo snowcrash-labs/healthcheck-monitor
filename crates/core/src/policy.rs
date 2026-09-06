@@ -26,6 +26,7 @@ pub(crate) fn fault(
             Health::Degraded
         },
         findings: vec![Finding {
+            diagnostic: None,
             check: None,
             id: format!("{}/{}", obs.resource, rule),
             resource: obs.resource.clone(),

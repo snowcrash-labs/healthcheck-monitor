@@ -29,6 +29,7 @@ fn signals(
 ) {
     let mut observations = vec![
         Observation {
+            context: None,
             resource: "dev/incoming".into(),
             operation: "telemetry".into(),
             observed_at: at,
@@ -43,6 +44,7 @@ fn signals(
             },
         },
         Observation {
+            context: None,
             resource: "dev/workers/query-producer".into(),
             operation: "telemetry".into(),
             observed_at: at,
@@ -58,6 +60,7 @@ fn signals(
     ];
     if let Some(value) = progress {
         observations.push(Observation {
+            context: None,
             resource: "dev/completed".into(),
             operation: "telemetry".into(),
             observed_at: at,

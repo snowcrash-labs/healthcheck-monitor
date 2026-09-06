@@ -230,6 +230,7 @@ pub fn enrich(snapshot: &Snapshot, job: &Job, current: &mut CheckResult, now: Da
         };
         operations.push(operation(id.clone(), coverage, at, true));
         observations.push(Observation {
+            context: image.context.clone(),
             resource: format!("{}/provenance", image.resource),
             operation: id,
             observed_at: at,

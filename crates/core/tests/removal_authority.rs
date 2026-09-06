@@ -13,6 +13,7 @@ fn job() -> Result<Job, Box<dyn std::error::Error>> {
 }
 fn observation(name: &str, healthy: bool, at: DateTime<Utc>) -> Observation {
     Observation {
+        context: None,
         resource: format!("dev/status/{name}"),
         operation: "status".into(),
         observed_at: at,

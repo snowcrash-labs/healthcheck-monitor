@@ -7,6 +7,7 @@ use monitor_core::{
 };
 fn slo(compliance: Option<f64>, burn_rate: Option<f64>) -> Observation {
     Observation {
+        context: None,
         resource: "test/slo/api".into(),
         operation: "slo".into(),
         observed_at: Utc::now(),

@@ -4,6 +4,7 @@ pub mod budget;
 pub mod capacity;
 pub mod collection_budget;
 pub mod config;
+pub mod diagnostics;
 mod endpoint_policy;
 pub mod error;
 mod evaluation_index;

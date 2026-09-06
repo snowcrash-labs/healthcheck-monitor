@@ -16,6 +16,7 @@ fn equal_log_counts_sort_by_scope_and_warning_noise_stays_out_of_diagnostics() {
         ("warning-worker", LogClass::Warning),
     ] {
         result.observations.push(Observation {
+            context: None,
             resource: format!("dev/logs/{name}"),
             operation: "logs".into(),
             observed_at: now,

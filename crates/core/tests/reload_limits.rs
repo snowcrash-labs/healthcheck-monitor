@@ -32,6 +32,7 @@ fn a_smaller_budget_is_rejected_atomically_until_the_selected_scope_fits()
     result.observations = ["one", "two"]
         .into_iter()
         .map(|name| Observation {
+            context: None,
             resource: format!("test/inventory/{name}"),
             operation: "inventory".into(),
             observed_at: now,

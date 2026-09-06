@@ -20,6 +20,7 @@ pub fn job() -> Result<Job, Box<dyn std::error::Error>> {
 }
 pub fn observation(resource: &str, operation: &str, data: Data, at: DateTime<Utc>) -> Observation {
     Observation {
+        context: None,
         resource: resource.into(),
         operation: operation.into(),
         observed_at: at,

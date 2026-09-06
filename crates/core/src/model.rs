@@ -111,6 +111,8 @@ pub struct Operation {
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Observation {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context: Option<crate::diagnostics::ResourceContext>,
     pub resource: String,
     pub operation: String,
     pub observed_at: DateTime<Utc>,
@@ -120,6 +122,8 @@ pub struct Observation {
 pub use crate::observations::{Data, LogClass, ManifestKind, ServiceState};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Finding {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub diagnostic: Option<crate::diagnostics::Diagnostic>,
     #[serde(default)]
     pub check: Option<Check>,
     pub id: String,

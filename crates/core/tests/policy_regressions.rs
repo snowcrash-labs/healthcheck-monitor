@@ -3,6 +3,7 @@ use chrono::Utc;
 use monitor_core::{config::settings::Settings, model::*, policy::evaluate};
 fn observation(data: Data) -> Observation {
     Observation {
+        context: None,
         resource: "test/resource".into(),
         operation: "test".into(),
         observed_at: Utc::now(),

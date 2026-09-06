@@ -24,6 +24,7 @@ fn cancelled_endpoint_refresh_retains_last_observation_without_refreshing_its_ag
     result.operations[0].id = "https".into();
     result.operations[0].observed_at = at;
     result.observations.push(Observation {
+        context: None,
         resource: "dev/https/api".into(),
         operation: "https".into(),
         observed_at: at,
@@ -75,6 +76,7 @@ fn changing_provider_scope_drops_old_baselines_without_claiming_recovery()
         Coverage::Complete,
     );
     result.observations.push(Observation {
+        context: None,
         resource: "dev/service".into(),
         operation: "Edge".into(),
         observed_at: at,

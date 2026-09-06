@@ -94,6 +94,7 @@ pub fn observation(job: &Job, operation: &str, name: &str, data: Data) -> Observ
         .max_by_key(|(selector, _)| selector.len())
         .map_or(job.target.expected, |(_, expected)| *expected);
     Observation {
+        context: super::resource_context::base(job, operation, name),
         resource,
         operation: operation.into(),
         observed_at: Utc::now(),

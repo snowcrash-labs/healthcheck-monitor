@@ -101,9 +101,13 @@ pub async fn collect_from<S: Source>(
                         {
                             continue;
                         }
-                        if let Err(error) =
-                            window.record(&scope, text(row, &["/insertId"]), message, at)
-                        {
+                        if let Err(error) = window.record_context(
+                            &scope,
+                            text(row, &["/insertId"]),
+                            message,
+                            at,
+                            crate::log_context::gcp(job, row, &scope),
+                        ) {
                             outcome = Err(error);
                             break;
                         }

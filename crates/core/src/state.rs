@@ -127,6 +127,16 @@ impl State {
                 }
                 current.insert(finding.id.clone());
                 let previous = self.snapshot.findings.get(&finding.id);
+                finding.diagnostic = Some(crate::diagnostics::Diagnostic::capture(
+                    observation,
+                    prior,
+                    previous,
+                    if matches!(observation.data, Data::Workload { node: true, .. }) {
+                        job.settings.node_grace.0
+                    } else {
+                        job.settings.rollout_grace.0
+                    },
+                ));
                 if previous.is_none() && self.snapshot.findings.len() >= job.settings.max_findings {
                     for op in &mut result.operations {
                         if op.coverage == Coverage::Complete {

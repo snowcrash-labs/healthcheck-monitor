@@ -8,6 +8,7 @@ use monitor_core::{
 use std::collections::BTreeMap;
 fn obs(at: DateTime<Utc>, value: f64) -> Observation {
     Observation {
+        context: None,
         resource: "test/quota/cpu".into(),
         operation: "quota".into(),
         observed_at: at,

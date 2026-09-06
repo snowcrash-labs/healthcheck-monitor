@@ -10,6 +10,7 @@ use monitor_core::{
 fn historical_points_do_not_override_the_latest_successful_backup() {
     let now = Utc::now();
     let point = |days| Observation {
+        context: None,
         resource: "test/backups/database".into(),
         operation: "backups".into(),
         observed_at: now,
@@ -44,6 +45,7 @@ fn historical_points_do_not_override_the_latest_successful_backup() {
 fn newest_failed_attempt_preserves_the_last_successful_recovery_point() {
     let now = Utc::now();
     let point = |state, at| Observation {
+        context: None,
         resource: "test/backups/database".into(),
         operation: "backups".into(),
         observed_at: now,

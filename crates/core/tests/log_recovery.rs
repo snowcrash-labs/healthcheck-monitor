@@ -26,6 +26,7 @@ fn result(job: &Job, at: DateTime<Utc>, coverage: Coverage, error: bool) -> Chec
     result.operations[0].id = "errors".into();
     result.operations[0].observed_at = at;
     result.observations.push(Observation {
+        context: None,
         resource: "dev/errors/window".into(),
         operation: "errors".into(),
         observed_at: at,
@@ -42,6 +43,7 @@ fn result(job: &Job, at: DateTime<Utc>, coverage: Coverage, error: bool) -> Chec
     });
     if error {
         result.observations.push(Observation {
+            context: None,
             resource: "dev/errors/worker/Import".into(),
             operation: "errors".into(),
             observed_at: at,

@@ -98,6 +98,7 @@ pub fn evaluate(snapshot: &mut Snapshot, job: &Job, now: DateTime<Utc>) -> Check
                 (Health::Unknown, now)
             };
             result.observations.push(Observation {
+                context: None,
                 resource: key,
                 operation: operation.clone(),
                 observed_at: at,

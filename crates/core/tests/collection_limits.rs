@@ -13,6 +13,7 @@ fn operation() -> Operation {
 }
 fn observation(name: &str) -> Observation {
     Observation {
+        context: None,
         resource: name.into(),
         operation: "inventory".into(),
         observed_at: chrono::Utc::now(),

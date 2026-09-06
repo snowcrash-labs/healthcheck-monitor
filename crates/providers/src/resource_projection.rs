@@ -16,6 +16,7 @@ pub fn project(job: &Job, endpoint: &Endpoint, value: &Value) -> Vec<Observation
     }
     result.extend(crate::runtime_images::project(job, endpoint, value));
     result.extend(crate::artifact_projection::built(job, endpoint, value));
+    crate::resource_context::enrich(job, endpoint, value, &mut result);
     if let Some(url) = crate::advertisements::endpoint(endpoint, value) {
         result.push(observation(
             job,

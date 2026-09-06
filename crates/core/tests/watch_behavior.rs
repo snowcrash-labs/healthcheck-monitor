@@ -90,6 +90,7 @@ impl Collector for Harness {
         result.finished_at = at;
         for resource in 0..16 {
             result.observations.push(Observation {
+                context: None,
                 resource: format!("{}/inventory/{cycle}-{resource}", job.target.name),
                 operation: "inventory".into(),
                 observed_at: at,

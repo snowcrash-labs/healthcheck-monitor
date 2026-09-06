@@ -99,6 +99,7 @@ fn collection_prerequisites_do_not_add_unrequested_health_findings()
         Coverage::Complete,
     );
     result.observations.push(Observation {
+        context: None,
         resource: "test/metadata/unrelated".into(),
         operation: "Kubernetes".into(),
         observed_at: at,

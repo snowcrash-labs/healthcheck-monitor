@@ -8,6 +8,7 @@ fn at(text: &str) -> Result<DateTime<Utc>, chrono::ParseError> {
 }
 fn observation(data: Data, now: DateTime<Utc>) -> Observation {
     Observation {
+        context: None,
         resource: "dev/cronjobs/ns/nightly".into(),
         operation: "cronjobs".into(),
         observed_at: now,

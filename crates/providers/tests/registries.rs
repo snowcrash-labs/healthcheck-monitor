@@ -65,6 +65,7 @@ fn base(job: &Job) -> CheckResult {
         Coverage::Complete,
     );
     result.observations.push(Observation {
+        context: None,
         resource: "target/registry".into(),
         operation: "Releases".into(),
         observed_at: chrono::Utc::now(),

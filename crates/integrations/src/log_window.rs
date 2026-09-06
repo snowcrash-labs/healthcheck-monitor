@@ -10,7 +10,7 @@ use monitor_core::{
     model::*,
 };
 use sha2::{Digest, Sha256};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 pub struct Window<'a> {
     id: String,
     dedupe: Option<&'a crate::log_dedup::Dedupe>,
@@ -23,6 +23,7 @@ pub struct Window<'a> {
     duplicates: usize,
     fingerprints: BTreeSet<[u8; 32]>,
     groups: Groups,
+    contexts: BTreeMap<String, monitor_core::diagnostics::ResourceContext>,
 }
 impl<'a> Window<'a> {
     pub fn new(
@@ -51,6 +52,7 @@ impl<'a> Window<'a> {
             duplicates: 0,
             fingerprints: BTreeSet::new(),
             groups: Groups::default(),
+            contexts: BTreeMap::new(),
         }
     }
     /// Raw payloads and provider IDs are hashed only for transient deduplication and then discarded.
@@ -87,6 +89,50 @@ impl<'a> Window<'a> {
         self.groups.add_for(scope, message, at);
         Ok(())
     }
+    /// Retain only common location fields when a diagnostic group spans multiple resources.
+    pub fn record_context(
+        &mut self,
+        scope: &str,
+        id: Option<&str>,
+        message: &str,
+        at: DateTime<Utc>,
+        context: Option<monitor_core::diagnostics::ResourceContext>,
+    ) -> Result<(), Error> {
+        self.record(scope, id, message, at)?;
+        if let Some(context) = context {
+            let scope = crate::projection::identity(scope);
+            self.contexts
+                .entry(scope.clone())
+                .and_modify(|old| {
+                    if old.native_id != context.native_id {
+                        old.native_id = scope.clone();
+                    }
+                    if old.name != context.name {
+                        old.name = None;
+                    }
+                    if old.uid != context.uid {
+                        old.uid = None;
+                    }
+                    if old.container != context.container {
+                        old.container = None;
+                    }
+                    if old.cluster != context.cluster {
+                        old.cluster = None;
+                    }
+                    if old.namespace != context.namespace {
+                        old.namespace = None;
+                    }
+                    if old.region != context.region {
+                        old.region = None;
+                    }
+                    if old.zone != context.zone {
+                        old.zone = None;
+                    }
+                })
+                .or_insert(context);
+        }
+        Ok(())
+    }
     pub fn finish(
         self,
         job: &Job,
@@ -102,9 +148,11 @@ impl<'a> Window<'a> {
             if let Data::Log { sampled, .. } = &mut data {
                 *sampled = outcome.is_err();
             }
-            result
-                .observations
-                .push(observation(job, id, &signature, data));
+            let mut observation = observation(job, id, &signature, data);
+            if let Some((scope, _)) = signature.rsplit_once('/') {
+                observation.context = self.contexts.get(scope).cloned().or(observation.context);
+            }
+            result.observations.push(observation);
         }
         let mut window = observation(
             job,

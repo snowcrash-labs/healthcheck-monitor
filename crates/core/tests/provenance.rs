@@ -3,6 +3,7 @@ use chrono::{Duration, Utc};
 use monitor_core::{model::*, provenance::mark_retries};
 fn build(id: &str, revision: &str, state: ServiceState, offset: i64) -> Observation {
     Observation {
+        context: None,
         resource: format!("dev/builds/{id}"),
         operation: "builds".into(),
         observed_at: Utc::now(),

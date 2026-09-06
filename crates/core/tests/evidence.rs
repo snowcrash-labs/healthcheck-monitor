@@ -37,6 +37,7 @@ fn result(job: &Job, healthy: bool, at: chrono::DateTime<Utc>, coverage: Coverag
             required: true,
         }],
         observations: vec![Observation {
+            context: None,
             resource: "dev/status/api".into(),
             operation: "status".into(),
             observed_at: at,

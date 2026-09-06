@@ -40,6 +40,7 @@ pub fn reconcile(job: &Job, snapshot: &Snapshot, result: &mut CheckResult) {
             })
             .unwrap_or(LogClass::OtherError);
         clears.push(Observation {
+            context: None,
             resource: finding.resource.clone(),
             operation: window.operation.clone(),
             observed_at: window.observed_at,
