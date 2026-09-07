@@ -8,6 +8,9 @@ use jsonwebtoken::{
 };
 use serde::Deserialize;
 use std::time::{Duration, Instant};
+#[cfg(test)]
+#[path = "google_tests.rs"]
+mod tests;
 
 #[derive(Clone, Deserialize)]
 pub struct Claims {

@@ -51,6 +51,24 @@ async fn current_resource_survives_database_unavailability()
     Ok(())
 }
 #[tokio::test]
+async fn deployment_query_accepts_encoded_timestamps_and_scopes()
+-> Result<(), Box<dyn std::error::Error>> {
+    let config = Config::default();
+    let (app, _) = app(&config).await?;
+    let at = (chrono::Utc::now() - chrono::Duration::minutes(2)).to_rfc3339();
+    let parameters = url::form_urlencoded::Serializer::new(String::new())
+        .append_pair("deployed_at", &at)
+        .append_pair("window_seconds", "60")
+        .append_pair("target", "fixture")
+        .append_pair("check", "edge")
+        .finish();
+    let response = router(app, &config)
+        .oneshot(request(&format!("/api/v1/query/deployment?{parameters}"))?)
+        .await?;
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    Ok(())
+}
+#[tokio::test]
 async fn queries_reject_ambiguous_scope_invalid_windows_and_writes()
 -> Result<(), Box<dyn std::error::Error>> {
     let config = Config::default();
