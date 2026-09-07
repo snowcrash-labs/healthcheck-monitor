@@ -103,6 +103,9 @@ pub fn parse_callback(input: &[u8], state: &str) -> Result<String, Error> {
         return Err(Error::Callback);
     }
     let path = parts.next().ok_or(Error::Callback)?;
+    if !path.starts_with("/callback?") {
+        return Err(Error::Callback);
+    }
     let url = url::Url::parse(&format!("http://127.0.0.1{path}")).map_err(|_| Error::Callback)?;
     if url.path() != "/callback" {
         return Err(Error::Callback);

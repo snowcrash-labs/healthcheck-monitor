@@ -31,8 +31,8 @@ pub fn evaluate(
         to: window.from,
     };
     let mut result = Assessment {
-        scope:query.filter.clone(),
-        assessed_checks:evidence.required_checks.to_vec(),
+        scope: query.filter.clone(),
+        assessed_checks: evidence.required_checks.to_vec(),
         outcome: Outcome::Pending,
         window,
         baseline,
@@ -44,12 +44,16 @@ pub fn evaluate(
         worsened_findings: vec![],
         pre_existing_findings: vec![],
         recovered_findings: vec![],
+        unclassified_findings: vec![],
         next_cursor: evidence.next_cursor,
         error_count: evidence.error_count,
         failed_check_count: evidence.failed_checks,
     };
     let mut baseline_severity = BTreeMap::new();
     for r in evidence.baseline {
+        if r.closed_at.is_some_and(|at| at < window.from) {
+            continue;
+        }
         if let Some(severity) = r.severity() {
             baseline_severity
                 .entry(r.identity.as_str())
@@ -58,17 +62,24 @@ pub fn evaluate(
         }
     }
     for record in evidence.findings {
-        if record.state() == Some(FindingState::Recovered) {
+        if record.state() == Some(FindingState::Recovered)
+            && record
+                .closed_at
+                .is_some_and(|at| at >= window.from && at < window.to)
+        {
             result.recovered_findings.push(record.clone());
         }
         let old = baseline_severity.get(record.identity.as_str()).copied();
         let earlier = matches!(&record.details,Details::Finding {first_detected_at:Some(at),..} if *at<window.from);
-        if old.is_some_and(|s| record.severity().is_some_and(|severity| severity > s)) {
+        let started = matches!(&record.details,Details::Finding {first_detected_at:Some(at),..} if *at>=window.from&&*at<window.to);
+        if started {
+            result.new_findings.push(record.clone());
+        } else if old.is_some_and(|s| record.severity().is_some_and(|severity| severity > s)) {
             result.worsened_findings.push(record.clone());
         } else if old.is_some() || earlier {
             result.pre_existing_findings.push(record.clone());
         } else {
-            result.new_findings.push(record.clone());
+            result.unclassified_findings.push(record.clone());
         }
     }
     let mut checks: BTreeMap<&str, &Record> = BTreeMap::new();
@@ -156,7 +167,7 @@ pub fn evaluate(
     }
     result.reasons.sort();
     result.reasons.dedup();
-    result.outcome = if evidence.error_count > 0 || revision_mismatch && now>=window.to {
+    result.outcome = if evidence.error_count > 0 || revision_mismatch && now >= window.to {
         if revision_mismatch {
             result
                 .reasons

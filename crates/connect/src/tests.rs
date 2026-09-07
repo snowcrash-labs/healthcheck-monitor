@@ -36,6 +36,21 @@ fn callback_rejects_wrong_state_duplicates_and_errors() {
     );
 }
 #[tokio::test]
+async fn writable_connection_profiles_are_rejected() -> Result<(), Box<dyn std::error::Error>> {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("config.toml");
+    std::fs::write(
+        &path,
+        toml::to_string(&config(dir.path().join("credentials"))?)?,
+    )?;
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))?;
+    assert!(Config::load(Some(path.clone())).await.is_ok());
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o666))?;
+    assert!(Config::load(Some(path)).await.is_err());
+    Ok(())
+}
+#[tokio::test]
 async fn file_credentials_are_private_and_profile_bound() -> Result<(), Box<dyn std::error::Error>>
 {
     use std::os::unix::fs::PermissionsExt;

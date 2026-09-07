@@ -143,6 +143,13 @@ impl History {
             return Err(Error::Migration);
         }
         let mut filter = filter.clone();
+        if severity.is_some_and(|requested| {
+            filter
+                .severity
+                .is_some_and(|selected| selected != requested)
+        }) {
+            return Ok(0);
+        }
         if severity.is_some() {
             filter.severity = severity;
         }

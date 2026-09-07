@@ -26,6 +26,29 @@ pub fn validate(record: &Record) -> Result<(), Error> {
     Name::try_new(record.scope.target.clone()).map_err(|_| Error::Record)?;
     Resource::try_new(record.scope.scope.clone()).map_err(|_| Error::Record)?;
     Resource::try_new(record.identity.clone()).map_err(|_| Error::Record)?;
+    for value in [
+        &record.resource,
+        &record.location.region,
+        &record.location.cluster,
+        &record.location.namespace,
+        &record.location.service,
+    ]
+    .into_iter()
+    .flatten()
+    {
+        Resource::try_new(value.clone()).map_err(|_| Error::Record)?;
+        if value.len() > 2048 {
+            return Err(Error::Record);
+        }
+    }
+    if record
+        .location
+        .hostname
+        .as_ref()
+        .is_some_and(|s| s.is_empty() || s.len() > 253)
+    {
+        return Err(Error::Record);
+    }
     if record.last_observed_at < record.observed_at {
         return Err(Error::Record);
     }

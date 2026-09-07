@@ -56,8 +56,8 @@ pub struct Summary {
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct Assessment {
-    pub scope:crate::filter::Filter,
-    pub assessed_checks:Vec<String>,
+    pub scope: crate::filter::Filter,
+    pub assessed_checks: Vec<String>,
     pub outcome: Outcome,
     pub window: Window,
     pub baseline: Window,
@@ -69,6 +69,7 @@ pub struct Assessment {
     pub worsened_findings: Vec<Record>,
     pub pre_existing_findings: Vec<Record>,
     pub recovered_findings: Vec<Record>,
+    pub unclassified_findings: Vec<Record>,
     pub next_cursor: Option<String>,
     pub error_count: u64,
     pub failed_check_count: u64,

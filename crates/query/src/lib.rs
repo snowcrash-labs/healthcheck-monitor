@@ -3,6 +3,8 @@ pub mod assessment;
 #[cfg(test)]
 mod assessment_tests;
 pub mod enums;
+#[cfg(test)]
+mod episode_tests;
 pub mod filter;
 pub mod matching;
 pub mod record;

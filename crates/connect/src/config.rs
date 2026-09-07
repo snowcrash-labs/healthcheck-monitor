@@ -90,25 +90,36 @@ impl Config {
         Ok(())
     }
     pub async fn load(path: Option<PathBuf>) -> Result<Self, Error> {
-        let path = match path {
-            Some(path) => path,
-            None => {
-                let root = std::env::var_os("XDG_CONFIG_HOME")
-                    .map(PathBuf::from)
-                    .or_else(|| std::env::var_os("HOME").map(|p| PathBuf::from(p).join(".config")))
-                    .ok_or(Error::Configuration)?;
-                root.join("healthcheck-connect/config.toml")
+        use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+        let path = Self::path(path)?;
+        let read_path = path.clone();
+        let bytes = tokio::task::spawn_blocking(move || {
+            use std::io::Read;
+            let file = std::fs::OpenOptions::new()
+                .read(true)
+                .custom_flags(libc::O_NONBLOCK)
+                .open(read_path)
+                .map_err(|_| Error::Configuration)?;
+            let metadata = file.metadata().map_err(|_| Error::Configuration)?;
+            let uid = unsafe { libc::geteuid() };
+            if !metadata.is_file()
+                || metadata.len() > 16384
+                || metadata.mode() & 0o022 != 0
+                || (metadata.uid() != uid && metadata.uid() != 0)
+            {
+                return Err(Error::Configuration);
             }
-        };
-        let metadata = tokio::fs::metadata(&path)
-            .await
-            .map_err(|_| Error::Configuration)?;
-        if metadata.len() > 16384 {
-            return Err(Error::Configuration);
-        }
-        let bytes = tokio::fs::read_to_string(&path)
-            .await
-            .map_err(|_| Error::Configuration)?;
+            let mut bytes = String::new();
+            file.take(16385)
+                .read_to_string(&mut bytes)
+                .map_err(|_| Error::Configuration)?;
+            if bytes.len() > 16384 {
+                return Err(Error::Configuration);
+            }
+            Ok(bytes)
+        })
+        .await
+        .map_err(|_| Error::Configuration)??;
         let mut config: Self = toml::from_str(&bytes).map_err(|_| Error::Configuration)?;
         if let Some(file) = &mut config.credential_file
             && file.is_relative()
