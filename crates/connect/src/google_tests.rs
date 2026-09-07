@@ -9,7 +9,12 @@ async fn openssl(
     args: &[&str],
     input: Option<&[u8]>,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-    let mut child = tokio::process::Command::new("openssl")
+    let executable = if cfg!(target_os = "macos") {
+        "/usr/bin/openssl"
+    } else {
+        "openssl"
+    };
+    let mut child = tokio::process::Command::new(executable)
         .args(args)
         .kill_on_drop(true)
         .stdin(std::process::Stdio::piped())
@@ -58,7 +63,11 @@ async fn key() -> Result<(EncodingKey, Keys), Box<dyn std::error::Error>> {
     let jwks = serde_json::from_value(
         json!({"keys":[{"kty":"RSA","kid":"fixture","alg":"RS256","use":"sig","n":URL_SAFE_NO_PAD.encode(bytes),"e":"AQAB"}]}),
     )?;
-    let der = openssl(&["pkey", "-outform", "DER"], Some(&pem)).await?;
+    // OpenSSL 3 needs an explicit PKCS#1 request; macOS LibreSSL uses it by default.
+    let der = match openssl(&["rsa", "-traditional", "-outform", "DER"], Some(&pem)).await {
+        Ok(der) => der,
+        Err(_) => openssl(&["rsa", "-outform", "DER"], Some(&pem)).await?,
+    };
     Ok((
         EncodingKey::from_rsa_der(&der),
         Keys {
