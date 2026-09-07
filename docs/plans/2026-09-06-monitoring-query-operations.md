@@ -22,6 +22,8 @@ Codex and Claude launch the connector automatically. Refresh tokens are stored i
 
 `healthcheck-connect logout` revokes the connector's refresh token and removes its stored credentials. It does not modify gcloud or other application credential stores. Expired or revoked access returns a login-required result; tool calls never start interactive authentication. If Google sign-in succeeds but IAP returns forbidden, an administrator must check existing dashboard group membership.
 
+For an SSH session without a browser, forward local port 48881 to the same loopback port on the remote machine, then run `healthcheck-connect login --no-browser --callback-port 48881` there. Open the printed authorization URL in the local browser. Only the temporary callback listener uses this port; credentials stay on the machine running the connector. The authorization URL contains no access or refresh token.
+
 ## Queries
 
 The connector exposes `list_scopes`, `get_health_summary`, `search_findings`, `search_diagnostics`, `get_resource`, `get_checks`, and `assess_deployment`. Useful requests include “Show errors in api during the last hour,” “Which Kubernetes checks were incomplete yesterday?”, and “Assess api for five minutes after this deployment.”

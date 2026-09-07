@@ -3,8 +3,13 @@ use crate::{client::Client, credentials::Credentials, error::Error};
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-pub async fn login(client: &Client) -> Result<(), Error> {
-    let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+pub async fn login(
+    client: &Client,
+    no_browser: bool,
+    callback_port: Option<u16>,
+) -> Result<(), Error> {
+    let port = callback_port.unwrap_or(if no_browser { 48881 } else { 0 });
+    let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, port))
         .await
         .map_err(|_| Error::Callback)?;
     let address = listener.local_addr().map_err(|_| Error::Callback)?;
@@ -26,11 +31,15 @@ pub async fn login(client: &Client) -> Result<(), Error> {
         ("code_challenge", challenge.as_str()),
         ("code_challenge_method", "S256"),
     ]);
-    let browser_url = url.to_string();
-    tokio::task::spawn_blocking(move || webbrowser::open(&browser_url))
-        .await
-        .map_err(|_| Error::Callback)?
-        .map_err(|_| Error::Callback)?;
+    if no_browser {
+        tracing::info!(authorization_url=%url,callback_port=address.port(),"Open the authorization URL in a browser; forward the callback port when using SSH");
+    } else {
+        let browser_url = url.to_string();
+        tokio::task::spawn_blocking(move || webbrowser::open(&browser_url))
+            .await
+            .map_err(|_| Error::Callback)?
+            .map_err(|_| Error::Callback)?;
+    }
     let code = tokio::time::timeout(Duration::from_secs(180), callback(listener, state.secret()))
         .await
         .map_err(|_| Error::Callback)??;

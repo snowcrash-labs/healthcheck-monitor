@@ -100,9 +100,17 @@ impl Filter {
             return Err(Error::Filter);
         }
         let to = self.to.unwrap_or(now);
-        let from = self
-            .from
-            .unwrap_or(to - Duration::seconds(i64::from(self.lookback_seconds.unwrap_or(3600))));
+        let from = match self.from {
+            Some(from) => from,
+            None => to
+                .checked_sub_signed(Duration::seconds(i64::from(
+                    self.lookback_seconds.unwrap_or(3600),
+                )))
+                .ok_or(Error::Filter)?,
+        };
+        if to.checked_sub_signed(Duration::days(31)).is_none() {
+            return Err(Error::Filter);
+        }
         if from >= to || to > now + Duration::seconds(30) || to - from > Duration::days(31) {
             return Err(Error::Filter);
         }
@@ -149,9 +157,17 @@ impl Deployment {
                 return Err(Error::Filter);
             }
         }
+        let duration = Duration::seconds(i64::from(seconds));
+        self.deployed_at
+            .checked_sub_signed(duration)
+            .ok_or(Error::Filter)?;
+        let to = self
+            .deployed_at
+            .checked_add_signed(duration)
+            .ok_or(Error::Filter)?;
         Ok(Window {
             from: self.deployed_at,
-            to: self.deployed_at + Duration::seconds(i64::from(seconds)),
+            to,
         })
     }
 }

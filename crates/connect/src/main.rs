@@ -35,7 +35,12 @@ enum Command {
         #[arg(long)]
         client_json: PathBuf,
     },
-    Login,
+    Login {
+        #[arg(long)]
+        no_browser: bool,
+        #[arg(long,value_parser=clap::value_parser!(u16).range(1024..))]
+        callback_port: Option<u16>,
+    },
     Status,
     Logout,
     Mcp,
@@ -66,7 +71,10 @@ async fn run(args: Args) -> Result<(), error::Error> {
     let client = client::Client::new(config)?;
     match args.command {
         Command::Configure { .. } => Err(error::Error::Configuration),
-        Command::Login => login::login(&client).await,
+        Command::Login {
+            no_browser,
+            callback_port,
+        } => login::login(&client, no_browser, callback_port).await,
         Command::Status => {
             let credentials = client.store.load().await?;
             client

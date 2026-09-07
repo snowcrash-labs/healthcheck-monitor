@@ -37,6 +37,12 @@ pub fn resolve_scope(
         let cursor: ScopeCursor = serde_json::from_str(text).map_err(|_| ApiError::BadQuery)?;
         if cursor.fingerprint != fingerprint(filter, "scopes")?
             || cursor.window.from >= cursor.window.to
+            || cursor
+                .window
+                .to
+                .checked_sub_signed(chrono::Duration::days(31))
+                .is_none()
+            || cursor.window.to - cursor.window.from > chrono::Duration::days(31)
         {
             return Err(ApiError::BadQuery);
         }
@@ -65,6 +71,11 @@ pub fn resolve(filter: &mut Filter, endpoint: &str) -> Result<(Window, RecordPos
     if let Some(cursor) = &filter.cursor {
         let cursor: Cursor = serde_json::from_str(cursor).map_err(|_| ApiError::BadQuery)?;
         if cursor.version != 1
+            || cursor
+                .window
+                .to
+                .checked_sub_signed(chrono::Duration::days(31))
+                .is_none()
             || cursor.fingerprint != fingerprint(filter, endpoint)?
             || cursor.window.from >= cursor.window.to
             || cursor.window.to - cursor.window.from > chrono::Duration::days(31)

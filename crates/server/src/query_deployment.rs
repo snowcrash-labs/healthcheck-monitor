@@ -21,7 +21,7 @@ pub async fn deployment(
     query.filter.normalize().map_err(|_| ApiError::BadQuery)?;
     let window = query.window().map_err(|_| ApiError::BadQuery)?;
     let now = chrono::Utc::now();
-    if query.deployed_at > now + chrono::Duration::seconds(30) {
+    if query.deployed_at > now {
         return Err(ApiError::BadQuery);
     }
     let baseline = Window {

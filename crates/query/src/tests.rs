@@ -100,6 +100,30 @@ fn unknown_fields_and_enum_values_fail_closed() {
     }
 }
 #[test]
+fn extreme_dates_are_rejected_without_arithmetic_panics() {
+    let filter = Filter {
+        to: Some(chrono::DateTime::<Utc>::MIN_UTC),
+        ..Default::default()
+    };
+    assert!(filter.window(Utc::now()).is_err());
+    for at in [
+        chrono::DateTime::<Utc>::MIN_UTC,
+        chrono::DateTime::<Utc>::MAX_UTC,
+    ] {
+        let query = Deployment {
+            deployed_at: at,
+            window_seconds: Some(60),
+            expected_revision: None,
+            expected_digest: None,
+            filter: Filter {
+                target: Some("api".into()),
+                ..Default::default()
+            },
+        };
+        assert!(query.window().is_err());
+    }
+}
+#[test]
 fn deployment_flattened_filter_round_trips() -> Result<(), Box<dyn std::error::Error>> {
     let source = r#"{"deployed_at":"2026-09-06T17:00:00Z","target":"api","window_seconds":60}"#;
     let value: Deployment = serde_json::from_str(source)?;
