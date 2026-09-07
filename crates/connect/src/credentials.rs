@@ -49,7 +49,7 @@ impl CredentialsStore {
                 Store::Keyring => store
                     .entry()?
                     .get_password()
-                    .map_err(|_| Error::LoginRequired)?,
+                    .map_err(Error::credential_read)?,
                 Store::File => {
                     let path = store
                         .config

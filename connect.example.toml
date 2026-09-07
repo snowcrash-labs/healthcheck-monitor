@@ -5,6 +5,6 @@ client_id = "REPLACE_WITH_DESKTOP_CLIENT_ID.apps.googleusercontent.com"
 # client_secret = "DESKTOP_CLIENT_CONFIGURATION"
 credential_store = "keyring"
 
-# Headless Linux only, explicitly selected:
+# Headless sessions without access to an OS credential store, explicitly selected:
 # credential_store = "file"
 # credential_file = "credentials.json"

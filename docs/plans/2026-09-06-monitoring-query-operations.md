@@ -18,7 +18,9 @@ claude mcp add --transport stdio --scope user health -- healthcheck-connect mcp
 
 The default profile is `$XDG_CONFIG_HOME/healthcheck-connect/config.toml`, or `~/.config/healthcheck-connect/config.toml` when XDG_CONFIG_HOME is unset. `--config /absolute/path/config.toml` selects another profile; include the same argument in the registered MCP command. Configuration import refuses to overwrite an existing profile.
 
-Codex and Claude launch the connector automatically. Refresh tokens are stored in macOS Keychain or Linux Secret Service. For headless Linux without a credential store, explicitly set `credential_store = "file"` and an absolute `credential_file` path in the profile. The file must be owned by the current user with mode `0600`; insecure or symlinked files are rejected. No credentials belong in MCP configuration, Git, command arguments, or tool output.
+Codex and Claude launch the connector automatically. Refresh tokens are stored in macOS Keychain or Linux Secret Service. For headless sessions without access to a credential store, explicitly set `credential_store = "file"` and an absolute `credential_file` path in the profile. The file must be owned by the current user with mode `0600`; insecure or symlinked files are rejected. No credentials belong in MCP configuration, Git, command arguments, or tool output.
+
+macOS can deny Keychain access from SSH even when login succeeds in a local Terminal. A credential-store error requires restoring access in the calling session or explicitly selecting file storage. Repeating Google login does not repair a Keychain permission failure. The connector never switches storage automatically.
 
 `healthcheck-connect logout` revokes the connector's refresh token and removes its stored credentials. It does not modify gcloud or other application credential stores. Expired or revoked access returns a login-required result; tool calls never start interactive authentication. If Google sign-in succeeds but IAP returns forbidden, an administrator must check existing dashboard group membership.
 
