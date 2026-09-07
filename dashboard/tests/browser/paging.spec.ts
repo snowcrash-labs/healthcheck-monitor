@@ -51,7 +51,7 @@ test("failed initial reads can be retried", async ({ page }) => {
     await route.fulfill({ json: { generation: 1, items: [], total: 0, next_cursor: null, previous_cursor: null } });
   });
   await page.goto("/resources");
-  await expect(page.getByRole("alert")).toContainText("temporarily unavailable");
+  await expect(page.getByRole("button", { name: "Retry", exact: true })).toBeVisible();
   unavailable = false;
   await page.getByRole("button", { name: "Retry", exact: true }).click();
   await expect(page.getByRole("heading", { name: "No matching resources" })).toBeVisible();

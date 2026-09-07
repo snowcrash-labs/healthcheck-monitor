@@ -19,6 +19,8 @@ const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
 pub struct History {
     pub(crate) pool: Pool,
     pub(crate) read_pool: Pool,
+    pub(crate) cost_pool: Pool,
+    pub(crate) cost_read_pool: Pool,
     pub(crate) config: Config,
     url: String,
     ready: AtomicBool,
@@ -54,7 +56,11 @@ impl History {
                 url.clone(),
                 read_options,
             ));
+        let cost_pool = billing_pool(&url);
+        let cost_read_pool = billing_pool(&url);
         Ok(Arc::new(Self {
+            cost_pool,
+            cost_read_pool,
             pool,
             read_pool,
             config,
@@ -84,6 +90,21 @@ impl History {
         self.ready.store(true, Ordering::Release);
         Ok(())
     }
+}
+fn billing_pool(url: &str) -> Pool {
+    let mut options = ManagerConfig::default();
+    options.custom_setup = Box::new(|url| connect(url).boxed());
+    Pool::builder()
+        .max_size(1)
+        .min_idle(Some(0))
+        .test_on_check_out(true)
+        .connection_timeout(Duration::from_secs(5))
+        .idle_timeout(Some(Duration::from_secs(60)))
+        .max_lifetime(Some(Duration::from_secs(900)))
+        .build_unchecked(AsyncDieselConnectionManager::new_with_config(
+            url.to_owned(),
+            options,
+        ))
 }
 async fn connect(url: &str) -> diesel::ConnectionResult<AsyncPgConnection> {
     use rustls_platform_verifier::BuilderVerifierExt;

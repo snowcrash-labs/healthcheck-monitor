@@ -55,12 +55,17 @@ impl Filter {
 }
 impl Keyed for CheckView {
     fn key(&self) -> (u8, &str, &str) {
-        (0, &self.key, "")
+        let complete = self.complete && self.expires_at.is_some_and(|at| at >= chrono::Utc::now());
+        (u8::from(complete), &self.key, "")
     }
 }
 impl Keyed for Operation {
     fn key(&self) -> (u8, &str, &str) {
-        (0, &self.id, "")
+        (
+            u8::from(self.coverage == monitor_core::model::Coverage::Complete),
+            &self.id,
+            "",
+        )
     }
 }
 fn page<T: Keyed + Clone + serde::Serialize>(

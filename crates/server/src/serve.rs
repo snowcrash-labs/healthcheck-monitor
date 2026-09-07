@@ -33,9 +33,15 @@ pub async fn serve(
     let (journal, mut journal_task) =
         monitor_history::journal::Journal::start(history.clone(), journal_stop.clone());
     let bus = Bus::new(journal.clone());
+    let mut billing = tokio::spawn(crate::cost_worker::run(
+        history.clone(),
+        config.costs.clone(),
+        stop.clone(),
+    ));
     let app = Arc::new(App {
         bus: bus.clone(),
         history,
+        costs: config.costs.clone(),
         security,
         requests: Arc::new(tokio::sync::Semaphore::new(config.requests)),
         streams: Arc::new(tokio::sync::Semaphore::new(config.event_streams)),
@@ -71,6 +77,13 @@ pub async fn serve(
     tokio::select! {_=stop.cancelled()=>{},result=&mut monitor=>{monitor_result=Some(result);},result=&mut http=>{http_result=Some(result);}}
     stop.cancel();
     let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    if tokio::time::timeout_at(deadline, &mut billing)
+        .await
+        .is_err()
+    {
+        billing.abort();
+        let _ = billing.await;
+    }
     if monitor_result.is_none() {
         match tokio::time::timeout_at(deadline, &mut monitor).await {
             Ok(result) => monitor_result = Some(result),

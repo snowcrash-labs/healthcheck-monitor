@@ -73,6 +73,15 @@ impl From<&Diagnostic> for DiagnosticView {
             value.observation.context.as_ref(),
             &value.observation.data,
         ));
+        if !matches!(
+            value.observation.data,
+            Data::Log { .. } | Data::LogWindow { .. }
+        ) {
+            links.extend(crate::log_links::incident(
+                value.observation.context.as_ref(),
+                value.last_detected_at,
+            ));
+        }
         Self {
             first_detected_at: value.first_detected_at,
             last_detected_at: value.last_detected_at,

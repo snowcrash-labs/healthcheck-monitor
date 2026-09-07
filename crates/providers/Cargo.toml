@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+monitor-costs.workspace = true
 monitor-core.workspace = true
 monitor-integrations.workspace = true
 chrono.workspace = true

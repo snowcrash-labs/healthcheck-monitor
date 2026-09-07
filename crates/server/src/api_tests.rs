@@ -52,6 +52,10 @@ async fn deep_links_are_documents_and_unknown_assets_stay_missing()
     let routes = router(app, &config);
     for path in [
         "/findings",
+        "/problems",
+        "/recent-errors",
+        "/costs",
+        "/monitor",
         "/checks",
         "/checks/fixture/edge?target=fixture",
         "/targets/fixture?target=fixture",

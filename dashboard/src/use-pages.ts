@@ -2,6 +2,7 @@ import { createEffect, createMemo, createSignal, onSettled } from "solid-js";
 import type { Accessor } from "solid-js";
 import type { z } from "zod";
 import { get } from "./api";
+import { useDashboard } from "./context";
 
 export interface Page<T> { generation: number; items: T[]; next_cursor: string | null; previous_cursor: string | null; total: number }
 interface Position { cursor?: string; direction?: "next" | "previous" }
@@ -10,6 +11,7 @@ const windowPages = 3;
 
 /** Evicted pages remain reachable through the server's previous/next cursors. */
 export function usePages<T extends { id: string }>(path: Accessor<string>, schema: z.ZodType<Page<T>>, refresh: Accessor<number>) {
+  const dashboard = useDashboard();
   const [pages, setPages] = createSignal<Loaded<T>[]>([]);
   const [loading, setLoading] = createSignal(true);
   const [error, setError] = createSignal("");
@@ -59,7 +61,7 @@ export function usePages<T extends { id: string }>(path: Accessor<string>, schem
     for (let index = 0; index < count; index++) {
       const result = await get(address(position), schema, request.signal);
       if (version !== sequence || request.signal.aborted) return;
-      if (!result.ok) { setLoading(false); if (!result.cancelled) setError(result.message); return; }
+      if (!result.ok) { setLoading(false); if (result.unauthorized) setPages([]); if (!result.cancelled) setError(result.message); return; }
       loaded.push({ position, page: result.value });
       if (!result.value.next_cursor) break;
       position = { cursor: result.value.next_cursor, direction: "next" };
@@ -76,6 +78,7 @@ export function usePages<T extends { id: string }>(path: Accessor<string>, schem
     return () => clearTimeout(timer);
   });
   createEffect(refresh, () => { if (activePath && !loading()) void collect(); });
+  createEffect(() => dashboard?.paused() ?? false, (paused) => { if (paused) { controller?.abort(); sequence++; setLoading(false); } });
   onSettled(() => () => { controller?.abort(); sequence++; cancelAnimationFrame(frame); });
   return { data, loading, error, next: () => void collect("next"), previous: () => void collect("previous"), retry: () => void collect() };
 }

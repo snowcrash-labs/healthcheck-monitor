@@ -52,13 +52,17 @@ pub fn kubernetes(job: &Job, kind: &str, value: &Value) -> Option<ResourceContex
     context.name = identifier(name);
     context.namespace = text(value, &["/metadata/namespace"]).and_then(identifier);
     context.uid = text(value, &["/metadata/uid"]).and_then(identifier);
-    context.cluster = None;
+    context.cluster = job.target.cluster.as_deref().and_then(identifier);
+    if let Some(location) = job.target.cluster_location.as_deref().and_then(identifier) {
+        context.region = Some(location);
+    }
     // gcloud contexts explicitly encode project, location and cluster; other context names do not.
-    if let Some(parts) = job
-        .target
-        .context
-        .as_deref()
-        .and_then(|value| value.strip_prefix("gke_"))
+    if context.cluster.is_none()
+        && let Some(parts) = job
+            .target
+            .context
+            .as_deref()
+            .and_then(|value| value.strip_prefix("gke_"))
     {
         let parts: Vec<_> = parts.splitn(3, '_').collect();
         if let [project, location, cluster] = parts.as_slice() {

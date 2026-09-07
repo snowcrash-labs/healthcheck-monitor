@@ -17,6 +17,8 @@ pub enum Error {
     Task,
     #[error("history retention capacity unavailable")]
     Capacity,
+    #[error("billing publication changed; refresh required")]
+    Revision,
 }
 impl Error {
     pub fn retryable(&self) -> bool {

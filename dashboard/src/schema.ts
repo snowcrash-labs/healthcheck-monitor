@@ -36,6 +36,8 @@ export const checkView = z.object({
   failures: z.array(z.object({ operation: z.string(), coverage, required: z.boolean() })),
 });
 export const overview = z.object({
+  total_problem_groups: count.default(0),
+  problem_groups: z.array(z.object({ target: z.string(), rule: z.string(), check: check.nullable(), severity, resources: count, findings: count, first_detected_at: timestamp.nullable(), last_detected_at: timestamp, stale: z.boolean(), example_resource: z.string() })).default([]),
   generation: count, configuration_revision: z.string(), captured_at: timestamp,
   heartbeat_at: timestamp.nullable(), running: z.boolean(), persistence_fault: z.boolean(),
   history: z.object({ available: z.boolean(), last_persisted_at: timestamp.nullable(), dropped_events: count, dropped_runs: count, queued_batches: count, gaps: count }),

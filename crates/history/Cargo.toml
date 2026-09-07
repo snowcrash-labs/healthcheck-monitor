@@ -5,6 +5,8 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+rust_decimal = { version = "1.43.0", default-features = false, features = ["std", "db-diesel-postgres"] }
+monitor-costs.workspace = true
 monitor-query.workspace = true
 monitor-core.workspace = true
 chrono.workspace = true
@@ -26,7 +28,7 @@ uuid = { version = "1.26.0", default-features = false, features = ["std","serde"
 bb8 = { version = "0.9.1", default-features = false, features = ["parking_lot"] }
 tokio-postgres = { version = "0.7.18", default-features = false, features = ["runtime"] }
 tokio-postgres-rustls = { version = "0.14.0", default-features = false, features = ["aws-lc-rs"] }
-rustls = { version = "0.23.43", default-features = false, features = ["std","aws_lc_rs","tls12"] }
+rustls = { version = "0.23.44", default-features = false, features = ["std","aws_lc_rs","tls12"] }
 rustls-platform-verifier = { version = "0.7.0", default-features = false }
 
 [lints]

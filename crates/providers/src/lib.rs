@@ -53,6 +53,7 @@ mod azure_operational;
 mod azure_projection;
 pub mod azure_registry;
 mod azure_registry_auth;
+pub mod billing_gcp;
 mod cloud_logs;
 pub mod common;
 mod common_parallel;

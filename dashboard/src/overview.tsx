@@ -1,26 +1,29 @@
 import { For, Show } from "solid-js";
 import { useDashboard } from "./context";
-import { CheckCard } from "./check-card";
 import { targetPath } from "./check-catalog";
-import { age } from "./format";
+import { query } from "./api";
+import { age, rule } from "./format";
+import { findingTitle } from "./diagnostics";
 import { Empty, Notice, Status } from "./components";
+import { CostOverview } from "./cost-overview";
 
 export default function OverviewPage() {
   const dashboard = useDashboard();
   if (!dashboard) return <Notice error>Dashboard state is unavailable.</Notice>;
   const targets = () => dashboard.overview()?.targets.filter((target) => !dashboard.target() || target.name === dashboard.target()) ?? [];
+  const path = (route: string, values: Record<string, string> = {}) => query(route, { target: dashboard.target(), ...values });
   return <>
-    <div class="page-heading"><div><span class="eyebrow">CONFIGURED INFRASTRUCTURE</span><h1>System health</h1><p>Current findings and the evidence behind them.</p></div><span class="scope-tag">{dashboard.target() || "All configured targets"}</span></div>
-    <Show when={dashboard.overview()} fallback={<Empty title="Waiting for monitoring" detail="Checks run autonomously. The first observations will appear here." />}>{(overview) => <>
-      <div class="stats-grid">
-        <a href={`/findings?severity=error${dashboard.target() ? `&target=${encodeURIComponent(dashboard.target())}` : ""}`} class="stat-card"><span>Error findings</span><strong class={overview().totals.error_findings ? "text-error" : ""}>{overview().totals.error_findings}</strong><small>{overview().totals.warning_findings} warnings also active</small></a>
-        <a class="stat-card" href={`/checks?target=${encodeURIComponent(dashboard.target())}&status=needs_attention`}><span>Incomplete checks</span><strong class={overview().totals.incomplete_checks ? "text-warning" : ""}>{overview().totals.incomplete_checks}</strong><small>Missing, failed, or stale evidence</small></a>
-        <a href={`/resources${dashboard.target() ? `?target=${encodeURIComponent(dashboard.target())}` : ""}`} class="stat-card"><span>Observed resources</span><strong>{overview().totals.resources.toLocaleString()}</strong><small>Across {overview().totals.targets} selected targets</small></a>
-        <div class="stat-card"><span>History storage</span><strong class={`stat-word ${overview().history.available ? "text-healthy" : "text-warning"}`}>{overview().history.available ? "Available" : "Unavailable"}</strong><small>{age(overview().history.last_persisted_at, dashboard.now())}</small></div>
+    <div class="page-heading"><div><h1>{dashboard.target() || "Overview"}</h1><p>{dashboard.target() ? targets()[0]?.scope : "All configured targets"} · Current health and recent spending</p></div><span class="scope-tag">Current state</span></div>
+    <Show when={dashboard.overview()} fallback={<Empty title="Waiting for monitoring" detail="Observations appear as configured checks finish." />}>{(overview) => <>
+      <div class="health-summary"><a href={path("/problems")}><strong class={overview().totals.error_findings ? "text-error" : ""}>{overview().totals.error_findings} errors</strong><span>{overview().totals.warning_findings} warnings</span></a><a href={path("/checks", { status: "needs_attention" })}><strong>{overview().totals.incomplete_checks} checks need attention</strong></a><a href={path("/resources")}>{overview().totals.resources.toLocaleString()} resources</a></div>
+      <div class="overview-grid">
+        <section class="panel"><div class="panel-heading"><h2>Problems</h2><a href={path("/problems")}>View all →</a></div>
+          <For each={overview().problem_groups} keyed={(group) => group.target + "/" + group.rule} fallback={<Empty title={overview().totals.error_findings + overview().totals.warning_findings ? "Problems require investigation" : "No active problems"} detail="Collection coverage is listed separately under Checks." />}>{(group) => <a class="problem-preview" href={query("/problems", { target: group().target, rule: group().rule })}><span class={`severity severity-${group().severity}`}>{rule(group().severity)}</span><div><strong>{findingTitle(group().rule)}</strong><span>{group().target} · {group().resources} {group().resources === 1 ? "resource" : "resources"} · {age(group().last_detected_at, dashboard.now())}{group().stale ? " · Stale evidence" : ""}</span></div></a>}</For>
+          <Show when={overview().total_problem_groups > 5}><p class="panel-note">{overview().total_problem_groups - 5} more problem groups</p></Show>
+        </section>
+        <CostOverview />
       </div>
-      <Show when={!overview().history.available || overview().history.dropped_events > 0 || overview().history.dropped_runs > 0}><Notice>Historical coverage is incomplete. Current collection continues independently of the history database.</Notice></Show>
-      <section class="panel"><div class="panel-heading"><div><h2>Targets</h2><p>Health does not imply complete telemetry.</p></div><span class="count-label">{targets().length} targets</span></div><div class="target-grid"><For each={targets()}>{(target) => <article class="target-card"><a class="target-card-main" href={targetPath(target.name)}><h3>{target.name}</h3><p>{target.provider.toUpperCase()} · {target.scope}</p><Status health={target.health} /><p>{target.errors} errors · {target.warnings} warnings · {target.resources.toLocaleString()} resources</p><small>{age(target.latest_observation, dashboard.now())}</small><span class="quiet-link">Open target →</span></a><a class="target-coverage" href={`/checks?target=${encodeURIComponent(target.name)}`}>{target.complete_checks} of {target.total_checks} checks have complete, fresh required evidence →</a></article>}</For></div></section>
-      <section class="panel"><div class="panel-heading"><div><h2>Check coverage</h2><p>Collection failures remain visible alongside health findings.</p></div></div><div class="check-grid"><For each={overview().checks}>{(check) => <CheckCard check={check} now={dashboard.now()} />}</For></div></section>
+      <section class="panel"><div class="panel-heading"><h2>Targets</h2><span class="muted">{targets().length} configured scopes</span></div><div class="table-scroll"><table class="targets-table"><thead><tr><th>Target / provider scope</th><th>Health</th><th>Problems</th><th>Checks collected</th><th>Last observation</th></tr></thead><tbody><For each={targets()} keyed={(target) => target.name}>{(target) => <tr><td><a class="primary-link" href={targetPath(target().name)}>{target().name}</a><span class="cell-detail">{target().provider.toUpperCase()} · {target().scope}</span></td><td><Status health={target().health} /></td><td><a href={query("/problems", { target: target().name })}>{target().errors} errors · {target().warnings} warnings</a></td><td><a href={query("/checks", { target: target().name })}>{target().complete_checks} of {target().total_checks} checks</a></td><td><time datetime={target().latest_observation ?? undefined}>{age(target().latest_observation, dashboard.now())}</time></td></tr>}</For></tbody></table></div></section>
     </>}</Show>
   </>;
 }

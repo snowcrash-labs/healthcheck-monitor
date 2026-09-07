@@ -24,6 +24,7 @@ pub async fn app(config: &Config) -> Result<(Arc<App>, Effective), Box<dyn std::
     let app = Arc::new(App {
         bus,
         history,
+        costs: config.costs.clone(),
         security: Security::new(config, |_| Some("s".repeat(32)))?,
         requests: Arc::new(tokio::sync::Semaphore::new(config.requests)),
         streams: Arc::new(tokio::sync::Semaphore::new(config.event_streams)),

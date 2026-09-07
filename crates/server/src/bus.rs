@@ -15,6 +15,7 @@ use std::sync::{
     atomic::{AtomicBool, AtomicI64, AtomicU64, Ordering},
 };
 pub struct Bus {
+    pub epoch: String,
     views: scc::HashMap<(), Arc<View>>,
     recorder: scc::HashMap<(), crate::query_recorder::Recorder>,
     generation: AtomicU64,
@@ -27,6 +28,7 @@ impl Bus {
     pub fn new(journal: Arc<Journal>) -> Arc<Self> {
         let (changed, _) = tokio::sync::watch::channel(0);
         Arc::new(Self {
+            epoch: format!("{}-{}", std::process::id(), chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()),
             views: scc::HashMap::new(),
             recorder: scc::HashMap::new(),
             generation: AtomicU64::new(0),

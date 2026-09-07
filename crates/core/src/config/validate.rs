@@ -175,12 +175,16 @@ impl Config {
                 .chain(&target.repositories)
                 .chain(&target.watched_secrets)
                 .chain(target.context.iter())
+                .chain(target.cluster.iter())
+                .chain(target.cluster_location.iter())
             {
                 if !identifier(value) {
                     return Err(Error::Config("invalid resource selector".into()));
                 }
             }
             if target.regions.len() > 32
+                || target.cluster.is_some() != target.cluster_location.is_some()
+                || target.cluster.is_some() && target.context.is_none()
                 || target.regions.iter().any(|region| {
                     region.len() > 64
                         || !region.bytes().all(|byte| {

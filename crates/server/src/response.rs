@@ -13,6 +13,7 @@ pub enum ApiError {
     Unauthorized,
     Busy,
     Capacity,
+    Refresh,
 }
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
@@ -24,6 +25,7 @@ impl IntoResponse for ApiError {
             Self::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized"),
             Self::Busy => (StatusCode::SERVICE_UNAVAILABLE, "busy"),
             Self::Capacity => (StatusCode::SERVICE_UNAVAILABLE, "response_limit"),
+            Self::Refresh => (StatusCode::CONFLICT, "refresh_required"),
         };
         (
             status,
@@ -37,8 +39,11 @@ impl IntoResponse for ApiError {
     }
 }
 impl From<monitor_history::error::Error> for ApiError {
-    fn from(_: monitor_history::error::Error) -> Self {
-        Self::Unavailable
+    fn from(error: monitor_history::error::Error) -> Self {
+        match error {
+            monitor_history::error::Error::Revision => Self::Refresh,
+            _ => Self::Unavailable,
+        }
     }
 }
 struct Limited {

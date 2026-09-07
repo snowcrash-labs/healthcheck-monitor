@@ -52,6 +52,8 @@ impl Job {
                 self.target.provider,
                 &self.target.scope,
                 &self.target.context,
+                &self.target.cluster,
+                &self.target.cluster_location,
                 &self.target.credential,
                 regions
             )

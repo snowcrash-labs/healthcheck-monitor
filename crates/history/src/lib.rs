@@ -1,5 +1,11 @@
 //! Bounded PostgreSQL history owned by the monitoring service.
 pub mod config;
+mod cost_read;
+mod cost_cursor;
+mod cost_coverage;
+pub mod cost_rows;
+pub mod cost_schema;
+pub mod cost_write;
 pub mod enums;
 pub mod error;
 mod pool;

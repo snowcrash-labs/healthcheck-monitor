@@ -8,6 +8,7 @@ pub struct Config {
     pub tls: Option<Tls>,
     pub access: Access,
     pub history: monitor_history::config::Config,
+    pub costs: monitor_costs::config::Config,
     pub connections: usize,
     pub requests: usize,
     pub event_streams: usize,
@@ -43,6 +44,7 @@ impl Default for Config {
             tls: None,
             access: Access::Local,
             history: Default::default(),
+            costs: Default::default(),
             connections: 64,
             requests: 16,
             event_streams: 16,
@@ -78,6 +80,9 @@ impl Config {
         Ok(config)
     }
     pub fn validate(&self) -> Result<(), crate::Error> {
+        self.costs
+            .validate()
+            .map_err(|_| crate::Error::Configuration)?;
         self.history
             .validate()
             .map_err(|_| crate::Error::Configuration)?;

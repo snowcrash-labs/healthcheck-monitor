@@ -19,6 +19,7 @@ use std::{
 };
 #[derive(Serialize)]
 struct Announcement {
+    epoch: String,
     generation: u64,
     heartbeat_at: Option<chrono::DateTime<chrono::Utc>>,
     running: bool,
@@ -43,6 +44,7 @@ pub async fn events(
             }
             let generation = *receiver.borrow_and_update();
             let data = Announcement {
+                epoch: app.bus.epoch.clone(),
                 generation,
                 heartbeat_at: chrono::DateTime::from_timestamp_millis(
                     app.bus.heartbeat.load(Ordering::Acquire),

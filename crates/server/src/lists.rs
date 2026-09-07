@@ -12,18 +12,21 @@ use axum::{
 use monitor_core::model::{Health, Severity};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-#[derive(Default, Deserialize)]
+#[derive(Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Filter {
     target: Option<String>,
     check: Option<monitor_core::model::Check>,
     resource: Option<String>,
     q: Option<String>,
+    rule: Option<String>,
     severity: Option<Severity>,
     health: Option<Health>,
+    #[serde(skip_serializing)]
     cursor: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing)]
     direction: Direction,
+    #[serde(skip_serializing)]
     limit: Option<usize>,
 }
 fn bounds(filter: &Filter) -> Result<usize, ApiError> {
@@ -65,7 +68,7 @@ pub async fn resources(
                 })
         })
         .collect();
-    let page = pages::select(rows, filter.cursor.as_deref(), &filter.direction, limit)?;
+    let page = pages::select_scoped(rows, filter.cursor.as_deref(), &filter.direction, limit, &("resources", &filter))?;
     let items = page
         .items
         .into_iter()
@@ -113,12 +116,16 @@ pub async fn findings(
                 && filter
                     .severity
                     .is_none_or(|severity| finding.severity == severity)
+                && filter
+                    .rule
+                    .as_ref()
+                    .is_none_or(|rule| rule == &finding.rule)
                 && (query.is_empty()
                     || finding.resource.to_lowercase().contains(&query)
                     || finding.rule.to_lowercase().contains(&query))
         })
         .collect();
-    let page = pages::select(rows, filter.cursor.as_deref(), &filter.direction, limit)?;
+    let page = pages::select_scoped(rows, filter.cursor.as_deref(), &filter.direction, limit, &("findings", &filter))?;
     let items = page
         .items
         .into_iter()

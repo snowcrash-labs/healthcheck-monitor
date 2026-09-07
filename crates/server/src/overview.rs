@@ -37,6 +37,8 @@ struct Totals {
 }
 #[derive(Serialize)]
 struct Overview<'a> {
+    total_problem_groups: usize,
+    problem_groups: Vec<crate::problem_groups::Group<'a>>,
     generation: u64,
     configuration_revision: &'a str,
     captured_at: chrono::DateTime<chrono::Utc>,
@@ -110,8 +112,12 @@ pub async fn overview(
             check
         })
         .collect();
+    let (total_problem_groups, problem_groups) =
+        crate::problem_groups::groups(&view.findings, selection.target.as_deref());
     json(
         &Overview {
+            total_problem_groups,
+            problem_groups,
             generation: view.generation,
             configuration_revision: &view.revision,
             captured_at: view.captured_at,

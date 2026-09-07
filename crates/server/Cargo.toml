@@ -5,6 +5,9 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+monitor-providers.workspace = true
+monitor-integrations.workspace = true
+monitor-costs.workspace = true
 monitor-query.workspace = true
 schemars.workspace = true
 monitor-core.workspace = true
@@ -30,7 +33,7 @@ axum = { version = "0.8.9", default-features = false, features = ["http1", "http
 tower = { version = "0.5.3", default-features = false, features = ["util"] }
 tower-http = { version = "0.7.1", default-features = false, features = ["compression-gzip", "compression-zstd"] }
 tokio-rustls = { version = "0.26.5", default-features = false, features = ["aws_lc_rs","tls12"] }
-rustls = { version = "0.23.43", default-features = false, features = ["std","aws_lc_rs","tls12"] }
+rustls = { version = "0.23.44", default-features = false, features = ["std","aws_lc_rs","tls12"] }
 ipnet = { version = "2.12.2", default-features = false, features = ["serde", "std"] }
 http-body = { version = "1.1.0", default-features = false }
 

@@ -15,7 +15,7 @@ pub async fn serve(request: Request) -> Response {
     let path = request.uri().path();
     let document = matches!(
         path,
-        "/" | "/findings" | "/resources" | "/history" | "/checks"
+        "/" | "/findings" | "/problems" | "/recent-errors" | "/resources" | "/history" | "/checks" | "/costs" | "/monitor"
     ) || path.starts_with("/resources/")
         || path.starts_with("/targets/")
         || path.starts_with("/checks/");

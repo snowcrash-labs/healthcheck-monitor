@@ -59,6 +59,9 @@ pub struct Target {
     pub regions: Vec<String>,
     pub github_credential: Option<String>,
     pub context: Option<String>,
+    /// Native cluster identity is independent of the local kubeconfig alias.
+    pub cluster: Option<String>,
+    pub cluster_location: Option<String>,
     pub timezone: Option<String>,
     #[serde(default)]
     pub expected: Expected,

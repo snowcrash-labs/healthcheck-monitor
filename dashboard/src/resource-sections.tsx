@@ -21,12 +21,12 @@ export function ResourceFindings(props: { id: string; target: string }) {
     <ScrollBoundary enabled={!!page().next_cursor} loading={result.loading()} total={page().total} load={result.next} />
   </>}</Show></section>;
 }
-export function ResourceEvidence(props: { id: string; target: string }) {
+export function ResourceEvidence(props: { id: string; target: string; check?: "logs" }) {
   const dashboard = useDashboard();
   if (!dashboard) return <Notice error>Dashboard state is unavailable.</Notice>;
   const [search, setSearch] = useSearchParams();
   const q = () => typeof search.evidence === "string" ? search.evidence : "";
-  const result = usePages(() => query("/api/v1/resource/evidence", { id: props.id, q: q() }), evidencePage, dashboard.refreshId);
+  const result = usePages(() => query("/api/v1/resource/evidence", { id: props.id, q: q(), check: props.check }), evidencePage, dashboard.refreshId);
   return <section class="panel"><div class="panel-heading"><div><h2>Observed facts</h2><p>Grouped by source check and component; each observation retains its own age.</p></div><label>Search evidence<input type="search" value={q()} onInput={(event) => setSearch({ evidence: event.currentTarget.value || undefined })} /></label></div>
     <Show when={result.error()}><Notice error>{result.error()}</Notice><button class="button" onClick={result.retry}>Retry</button></Show>
     <Show when={result.data()}>{(page) => <><Show when={page().previous_cursor}><ScrollBoundary previous enabled loading={result.loading()} load={result.previous} /></Show>

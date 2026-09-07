@@ -62,7 +62,7 @@ export function FindingDetail(props: { finding: Finding; now: number }) {
     <p>Expected state: {rule(props.finding.expected)} · {rule(props.finding.confidence)} evidence{props.finding.stale ? " · Stale" : ""}</p>
     <Show when={props.finding.diagnostic} fallback={<p class="muted">Triggering metadata was not recorded. Last observation: <Timestamp at={props.finding.observed_at} now={props.now} /></p>}>{(diagnostic) => <>
       <div class="detail-meta"><span>First detected <Timestamp at={diagnostic().first_detected_at} now={props.now} /></span><span>Latest confirmed failure <Timestamp at={diagnostic().last_detected_at} now={props.now} /></span></div>
-      <Facts values={diagnostic().facts} /><Location context={diagnostic().context} /><ConsoleLinks links={diagnostic().links} />
+      <Facts values={diagnostic().facts} /><ConsoleLinks links={diagnostic().links} />
     </>}</Show>
     <Show when={props.finding.check}>{(check) => <a class="quiet-link" href={checkPath(props.finding.target, check())}>{checkCatalog[check()].title} →</a>}</Show>
     <details><summary>Evidence sources</summary><ul><For each={props.finding.evidence}>{(source) => <li>{source}</li>}</For></ul></details>

@@ -6,8 +6,10 @@ pub struct Link {
     pub label: String,
     pub url: String,
 }
-fn encoded(value: &str) -> String {
-    url::form_urlencoded::byte_serialize(value.as_bytes()).collect()
+pub(crate) fn encoded(value: &str) -> String {
+    url::form_urlencoded::byte_serialize(value.as_bytes())
+        .collect::<String>()
+        .replace('+', "%20")
 }
 pub fn links(context: Option<&ResourceContext>) -> Vec<Link> {
     let Some(c) = context else {
@@ -19,7 +21,10 @@ pub fn links(context: Option<&ResourceContext>) -> Vec<Link> {
     {
         return vec![];
     }
-    let name = c.native_id.rsplit('/').next().unwrap_or(&c.native_id);
+    let name = c
+        .name
+        .as_deref()
+        .unwrap_or_else(|| c.native_id.rsplit('/').next().unwrap_or(&c.native_id));
     let (label, destination) = match c.provider {
         Provider::Azure
             if c.native_id
@@ -49,6 +54,7 @@ pub fn links(context: Option<&ResourceContext>) -> Vec<Link> {
             let project = encoded(&c.scope);
             let resource = encoded(name);
             let region = c.region.as_deref().map(encoded);
+            let location = c.zone.as_deref().or(c.region.as_deref()).map(encoded);
             let path = match c.service.as_str() {
                 "sql" | "sql-instances" => Some(format!("sql/instances/{resource}/overview")),
                 "buckets" => Some(format!("storage/browser/{resource}")),
@@ -64,7 +70,7 @@ pub fn links(context: Option<&ResourceContext>) -> Vec<Link> {
                 "run" | "cloud-run" => region
                     .as_ref()
                     .map(|region| format!("run/detail/{region}/{resource}/metrics")),
-                "clusters" => region.as_ref().map(|region| {
+                "clusters" => location.as_ref().map(|region| {
                     format!("kubernetes/clusters/details/{region}/{resource}/details")
                 }),
                 "topics" | "pubsub-topics" => Some(format!("cloudpubsub/topic/detail/{resource}")),
@@ -74,7 +80,7 @@ pub fn links(context: Option<&ResourceContext>) -> Vec<Link> {
                 "redis" => region.as_ref().map(|region| {
                     format!("memorystore/redis/locations/{region}/instances/{resource}/details")
                 }),
-                "pods" => match (&region, &c.cluster, &c.namespace, &c.name) {
+                "pods" => match (&location, &c.cluster, &c.namespace, &c.name) {
                     (Some(region), Some(cluster), Some(namespace), Some(name)) => Some(format!(
                         "kubernetes/pod/{region}/{}/{}/{}/details",
                         encoded(cluster),
@@ -83,6 +89,30 @@ pub fn links(context: Option<&ResourceContext>) -> Vec<Link> {
                     )),
                     _ => None,
                 },
+                "deployments" | "statefulsets" | "daemonsets" | "jobs" | "cronjobs" => {
+                    match (&location, &c.cluster, &c.namespace, &c.name) {
+                        (Some(location), Some(cluster), Some(namespace), Some(name)) => {
+                            Some(format!(
+                                "kubernetes/{}/{}/{}/{}/{}/overview",
+                                c.service.trim_end_matches('s'),
+                                location,
+                                encoded(cluster),
+                                encoded(namespace),
+                                encoded(name)
+                            ))
+                        }
+                        _ => None,
+                    }
+                }
+                "dns-zones" => Some(format!("net-services/dns/zones/{resource}/details")),
+                "secrets" => Some(format!("security/secret-manager/secret/{resource}/details")),
+                "alert-policies" => Some(format!("monitoring/alerting/policies/{resource}")),
+                "scheduler" => region
+                    .as_ref()
+                    .map(|region| format!("cloudscheduler/jobs/edit/{region}/{resource}")),
+                "artifact-repositories" => region
+                    .as_ref()
+                    .map(|region| format!("artifacts/docker/{project}/{region}/{resource}")),
                 _ => None,
             };
             match path {
@@ -122,6 +152,18 @@ pub fn links(context: Option<&ResourceContext>) -> Vec<Link> {
                     encoded(c.native_id.rsplit(':').next().unwrap_or(name))
                 )),
                 "eks" | "clusters" => Some(format!("eks/home#/clusters/{}", encoded(name))),
+                "ecs-clusters" | "ecs-services" => {
+                    Some(format!("ecs/v2/clusters/{}", encoded(name)))
+                }
+                "ecr" => Some(format!(
+                    "ecr/repositories/private/{}/{}",
+                    encoded(&c.scope),
+                    encoded(name)
+                )),
+                "codebuild" => Some(format!(
+                    "codesuite/codebuild/{}/projects",
+                    encoded(&c.scope)
+                )),
                 "rds" | "rds-instances" | "databases" => Some(format!(
                     "rds/home#database:id={};is-cluster=false",
                     encoded(c.native_id.rsplit(':').next().unwrap_or(name))
