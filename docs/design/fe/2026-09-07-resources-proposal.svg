@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="920" viewBox="0 0 1440 920" role="img" aria-labelledby="title desc">
+<title id="title">Resources: proposed dashboard layout</title>
+<desc id="desc">A searchable resource table with the selected pod's incident evidence in a side panel, including source, time, expected state, and cloud actions. All names, amounts, and states are synthetic examples. Static design reference, not a working application.</desc>
+<style>text{font-family:Arial,Helvetica,sans-serif;fill:#18263b}.body{font-size:14px}.small{font-size:12px}.muted{font-size:13px;fill:#52627a}.heading{font-size:20px;font-weight:700}.title{font-size:28px;font-weight:700}.number{font-size:30px;font-weight:700}.strong{font-size:14px;font-weight:700}.link{font-size:14px;fill:#305cc2}.nav{font-size:14px;fill:#c7d1e4}.nav-active{font-size:14px;fill:#fff;font-weight:700}.white{font-size:17px;fill:#fff;font-weight:700}.table-head{font-size:12px;fill:#52627a;font-weight:700}.axis{font-size:12px;fill:#52627a}.chart-grid{stroke:#e6eaf2;stroke-width:1}</style>
+<rect x="0" y="0" width="1440" height="920" rx="0" fill="#f5f7fb" stroke="none"/>
+<rect x="0" y="0" width="210" height="920" rx="0" fill="#172640" stroke="none"/>
+<text x="28" y="42" class="white" >Soundpatrol</text>
+<text x="28" y="66" class="nav" >Health &amp; cost</text>
+<text x="32" y="132" class="nav" >Overview</text>
+<text x="32" y="178" class="nav" >Problems</text>
+<rect x="14" y="199" width="174" height="38" rx="6" fill="#2e4265" stroke="none"/>
+<text x="32" y="224" class="nav-active" >Resources</text>
+<text x="32" y="270" class="nav" >Costs</text>
+<text x="30" y="355" class="small" fill="#9baccc">MONITORING</text>
+<text x="32" y="395" class="nav" >Checks</text>
+<text x="32" y="441" class="nav" >Monitor status</text>
+<text x="30" y="844" class="nav" >Collector running</text>
+<rect x="210" y="0" width="1230" height="72" rx="0" fill="#fff" stroke="none"/>
+<path d="M210 72h1230" stroke="#e5e9f0"/>
+<text x="244" y="43" class="strong" >Resources</text>
+<rect x="984" y="19" width="170" height="34" rx="6" fill="#ffffff" stroke="#d7deea"/>
+<text x="996" y="41" class="body" >All environments ▾</text>
+<rect x="1168" y="19" width="118" height="34" rx="6" fill="#ffffff" stroke="#d7deea"/>
+<text x="1180" y="41" class="body" >Light / Dark</text>
+<rect x="1300" y="19" width="110" height="34" rx="6" fill="#ffffff" stroke="#d7deea"/>
+<text x="1312" y="41" class="body" >Live view</text>
+<text x="244" y="128" class="title" >Resources</text>
+<text x="244" y="157" class="muted" >Find an asset, inspect its problem, open the source evidence.</text>
+<rect x="244" y="181" width="280" height="34" rx="6" fill="#ffffff" stroke="#d7deea"/>
+<text x="256" y="203" class="body" >Search resources…</text>
+<rect x="536" y="181" width="138" height="34" rx="6" fill="#ffffff" stroke="#d7deea"/>
+<text x="548" y="203" class="body" >Environment: dev</text>
+<rect x="686" y="181" width="128" height="34" rx="6" fill="#ffffff" stroke="#d7deea"/>
+<text x="698" y="203" class="body" >Add filter +</text>
+<text x="244" y="248" class="muted" >8,420 resources · 3 with active problems</text>
+<rect x="244" y="270" width="624" height="560" rx="8" fill="#ffffff" stroke="#dce2ec"/>
+<text x="264" y="306" class="table-head" >Resource / primary problem</text>
+<text x="572" y="306" class="table-head" >Location</text>
+<text x="748" y="306" class="table-head" >Health</text>
+<path d="M264 324h584" stroke="#e5e9f0"/>
+<rect x="245" y="332" width="622" height="78" rx="0" fill="#edf3ff" stroke="none"/>
+<text x="264" y="356" class="link" >audio-worker-7f4c</text>
+<text x="264" y="380" class="muted" >Terminated after OOM</text>
+<text x="572" y="356" class="small" >dev / processing</text>
+<rect x="748" y="339" width="93" height="25" rx="5" fill="#fff6e3" stroke="none"/>
+<text x="757" y="356" class="small" fill="#885500">Degraded</text>
+<path d="M264 404h584" stroke="#e5e9f0"/>
+<text x="264" y="439" class="link" >audio-worker-91ab</text>
+<text x="264" y="463" class="muted" >Restarted after OOM</text>
+<text x="572" y="439" class="small" >dev / processing</text>
+<rect x="748" y="422" width="93" height="25" rx="5" fill="#fff6e3" stroke="none"/>
+<text x="757" y="439" class="small" fill="#885500">Degraded</text>
+<path d="M264 487h584" stroke="#e5e9f0"/>
+<text x="264" y="522" class="link" >redis-session-cache</text>
+<text x="264" y="546" class="muted" >No active problems</text>
+<text x="572" y="522" class="small" >dev / shared</text>
+<rect x="748" y="505" width="93" height="25" rx="5" fill="#eaf7ef" stroke="none"/>
+<text x="757" y="522" class="small" fill="#216c40">Healthy</text>
+<path d="M264 570h584" stroke="#e5e9f0"/>
+<text x="264" y="605" class="link" >ingestion-events</text>
+<text x="264" y="629" class="muted" >No active problems</text>
+<text x="572" y="605" class="small" >dev / ingestion</text>
+<rect x="748" y="588" width="93" height="25" rx="5" fill="#eaf7ef" stroke="none"/>
+<text x="757" y="605" class="small" fill="#216c40">Healthy</text>
+<path d="M264 653h584" stroke="#e5e9f0"/>
+<text x="264" y="688" class="link" >primary-database</text>
+<text x="264" y="712" class="muted" >No active problems</text>
+<text x="572" y="688" class="small" >dev / data</text>
+<rect x="748" y="671" width="93" height="25" rx="5" fill="#eaf7ef" stroke="none"/>
+<text x="757" y="688" class="small" fill="#216c40">Healthy</text>
+<text x="264" y="802" class="muted" >Showing 50 · Scroll for more</text>
+<text x="704" y="802" class="link" >Next page →</text>
+<rect x="888" y="239" width="528" height="633" rx="8" fill="#ffffff" stroke="#dce2ec"/>
+<text x="910" y="278" class="heading" >audio-worker-7f4c</text>
+<text x="1380" y="278" class="heading" >×</text>
+<text x="910" y="307" class="muted" >Pod · Google Cloud · project-dev</text>
+<text x="910" y="331" class="muted" >Cluster dev-central · processing · us-central1</text>
+<rect x="910" y="349" width="145" height="34" rx="6" fill="#ffffff" stroke="#d7deea"/>
+<text x="922" y="371" class="body" >Open resource ↗</text>
+<rect x="1067" y="349" width="178" height="34" rx="6" fill="#ffffff" stroke="#d7deea"/>
+<text x="1079" y="371" class="body" >View incident logs ↗</text>
+<text x="910" y="421" class="link" >Summary</text>
+<text x="1001" y="421" class="muted" >Diagnostics</text>
+<text x="1104" y="421" class="muted" >History</text>
+<text x="1176" y="421" class="muted" >Config</text>
+<text x="1257" y="421" class="muted" >Cost</text>
+<path d="M910 434h484" stroke="#e5e9f0"/>
+<path d="M910 434h68" stroke="#305cc2" stroke-width="3"/>
+<rect x="910" y="453" width="75" height="25" rx="5" fill="#fff0ef" stroke="none"/>
+<text x="919" y="470" class="small" fill="#9b2525">Error</text>
+<text x="910" y="510" class="heading" >Container terminated after OOM</text>
+<text x="910" y="538" class="body" >Exit 137 · OOMKilled · container: worker</text>
+<text x="910" y="580" class="table-head" >FIRST DETECTED</text>
+<text x="1160" y="580" class="table-head" >LAST CONFIRMED</text>
+<text x="910" y="605" class="body" >Sep 7, 13:42 UTC</text>
+<text x="1160" y="605" class="body" >Sep 7, 13:48 UTC</text>
+<path d="M910 625h484" stroke="#e5e9f0"/>
+<text x="910" y="655" class="table-head" >Observed</text>
+<text x="1060" y="655" class="body" >OOM termination; 3 restarts</text>
+<text x="910" y="688" class="table-head" >Expected</text>
+<text x="1060" y="688" class="body" >Running; no new OOM exits</text>
+<text x="910" y="721" class="table-head" >Source check</text>
+<text x="1060" y="721" class="link" >Kubernetes →</text>
+<text x="910" y="769" class="strong" >Recent evidence</text>
+<text x="910" y="798" class="muted" >13:42  Termination observed</text>
+<text x="910" y="824" class="muted" >13:48  Restart confirmed; failure retained</text>
+<text x="1240" y="850" class="link" >Open full page →</text>
+<text x="244" y="907" class="small" >DESIGN PROPOSAL · SYNTHETIC DATA · Screens and interactions are specified in the dashboard experience plan.</text>
+</svg>

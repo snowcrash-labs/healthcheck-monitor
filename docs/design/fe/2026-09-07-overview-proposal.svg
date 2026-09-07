@@ -1,0 +1,380 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="920" viewBox="0 0 1440 920" role="img" aria-labelledby="title desc">
+<title id="title">Overview: proposed dashboard layout</title>
+<desc id="desc">A concise operational overview with a problem list beside a daily stacked billing chart and a compact service table. All names, amounts, and states are synthetic examples. Static design reference, not a working application.</desc>
+<style>text{font-family:Arial,Helvetica,sans-serif;fill:#18263b}.body{font-size:14px}.small{font-size:12px}.muted{font-size:13px;fill:#52627a}.heading{font-size:20px;font-weight:700}.title{font-size:28px;font-weight:700}.number{font-size:30px;font-weight:700}.strong{font-size:14px;font-weight:700}.link{font-size:14px;fill:#305cc2}.nav{font-size:14px;fill:#c7d1e4}.nav-active{font-size:14px;fill:#fff;font-weight:700}.white{font-size:17px;fill:#fff;font-weight:700}.table-head{font-size:12px;fill:#52627a;font-weight:700}.axis{font-size:12px;fill:#52627a}.chart-grid{stroke:#e6eaf2;stroke-width:1}</style>
+<rect x="0" y="0" width="1440" height="920" rx="0" fill="#f5f7fb" stroke="none"/>
+<rect x="0" y="0" width="210" height="920" rx="0" fill="#172640" stroke="none"/>
+<text x="28" y="42" class="white" >Soundpatrol</text>
+<text x="28" y="66" class="nav" >Health &amp; cost</text>
+<rect x="14" y="107" width="174" height="38" rx="6" fill="#2e4265" stroke="none"/>
+<text x="32" y="132" class="nav-active" >Overview</text>
+<text x="32" y="178" class="nav" >Problems</text>
+<text x="32" y="224" class="nav" >Resources</text>
+<text x="32" y="270" class="nav" >Costs</text>
+<text x="30" y="355" class="small" fill="#9baccc">MONITORING</text>
+<text x="32" y="395" class="nav" >Checks</text>
+<text x="32" y="441" class="nav" >Monitor status</text>
+<text x="30" y="844" class="nav" >Collector running</text>
+<rect x="210" y="0" width="1230" height="72" rx="0" fill="#fff" stroke="none"/>
+<path d="M210 72h1230" stroke="#e5e9f0"/>
+<text x="244" y="43" class="strong" >Overview</text>
+<rect x="984" y="19" width="170" height="34" rx="6" fill="#ffffff" stroke="#d7deea"/>
+<text x="996" y="41" class="body" >All environments ▾</text>
+<rect x="1168" y="19" width="118" height="34" rx="6" fill="#ffffff" stroke="#d7deea"/>
+<text x="1180" y="41" class="body" >Light / Dark</text>
+<rect x="1300" y="19" width="110" height="34" rx="6" fill="#ffffff" stroke="#d7deea"/>
+<text x="1312" y="41" class="body" >Live view</text>
+<text x="244" y="128" class="title" >Overview</text>
+<text x="244" y="157" class="muted" >Current health across configured environments</text>
+<text x="244" y="205" class="heading" >2 services need attention</text>
+<rect x="548" y="185" width="146" height="25" rx="5" fill="#fff6e3" stroke="none"/>
+<text x="557" y="202" class="small" fill="#885500">1 monitoring gap</text>
+<text x="244" y="236" class="muted" >4 active problem groups · Last confirmation 2 min ago</text>
+<rect x="244" y="265" width="654" height="344" rx="8" fill="#ffffff" stroke="#dce2ec"/>
+<text x="266" y="300" class="heading" >Needs attention</text>
+<text x="774" y="300" class="link" >View all 4 →</text>
+<path d="M266 321h610" stroke="#e5e9f0"/>
+<text x="266" y="359" class="strong" >Worker terminated after OOM</text>
+<text x="266" y="382" class="muted" >Processing · dev · 2 affected pods</text>
+<rect x="699" y="342" width="57" height="25" rx="5" fill="#fff0ef" stroke="none"/>
+<text x="708" y="359" class="small" fill="#9b2525">Error</text>
+<text x="809" y="362" class="small" text-anchor="middle">2 min ago</text>
+<path d="M266 401h610" stroke="#e5e9f0"/>
+<text x="266" y="438" class="strong" >Queue has no consumer progress</text>
+<text x="266" y="461" class="muted" >Ingestion · api · 1 affected queue</text>
+<rect x="699" y="421" width="57" height="25" rx="5" fill="#fff0ef" stroke="none"/>
+<text x="708" y="438" class="small" fill="#9b2525">Error</text>
+<text x="809" y="441" class="small" text-anchor="middle">1 min ago</text>
+<path d="M266 480h610" stroke="#e5e9f0"/>
+<text x="266" y="517" class="strong" >Release metadata is incomplete</text>
+<text x="266" y="540" class="muted" >Source · dev · 1 affected deployment</text>
+<rect x="699" y="500" width="76" height="25" rx="5" fill="#fff6e3" stroke="none"/>
+<text x="708" y="517" class="small" fill="#885500">Warning</text>
+<text x="809" y="520" class="small" text-anchor="middle">5 min ago</text>
+<rect x="920" y="265" width="496" height="344" rx="8" fill="#ffffff" stroke="#dce2ec"/>
+<text x="942" y="300" class="heading" >Cloud cost</text>
+<text x="1285" y="300" class="link" >View costs →</text>
+<text x="942" y="331" class="muted" >Last 30 days · USD · Billed cost</text>
+<text x="942" y="374" class="number" >$5,567</text>
+<text x="1105" y="370" class="muted" >+8.7% vs previous period</text>
+<path d="M980 502h404" class="chart-grid"/>
+<text x="971" y="506" class="axis" text-anchor="end">$0</text>
+<path d="M980 467h404" class="chart-grid"/>
+<text x="971" y="471" class="axis" text-anchor="end">$80</text>
+<path d="M980 432h404" class="chart-grid"/>
+<text x="971" y="436" class="axis" text-anchor="end">$160</text>
+<path d="M980 397h404" class="chart-grid"/>
+<text x="971" y="401" class="axis" text-anchor="end">$240</text>
+<rect x="982" y="460.4375" width="9.263333333333332" height="41.5625" fill="#467bdd">
+<title>Day 1; Google Cloud: $95</title>
+</rect>
+<rect x="982" y="442.0625" width="9.263333333333332" height="18.375" fill="#8970cc">
+<title>Day 1; AWS: $42</title>
+</rect>
+<rect x="982" y="432.4375" width="9.263333333333332" height="9.625" fill="#289487">
+<title>Day 1; Azure: $22</title>
+</rect>
+<rect x="995.2333333333333" y="458.6875" width="9.263333333333332" height="43.3125" fill="#467bdd">
+<title>Day 2; Google Cloud: $99</title>
+</rect>
+<rect x="995.2333333333333" y="438.5625" width="9.263333333333332" height="20.125" fill="#8970cc">
+<title>Day 2; AWS: $46</title>
+</rect>
+<rect x="995.2333333333333" y="427.625" width="9.263333333333332" height="10.9375" fill="#289487">
+<title>Day 2; Azure: $25</title>
+</rect>
+<rect x="1008.4666666666667" y="456.9375" width="9.263333333333332" height="45.0625" fill="#467bdd">
+<title>Day 3; Google Cloud: $103</title>
+</rect>
+<rect x="1008.4666666666667" y="435.0625" width="9.263333333333332" height="21.875" fill="#8970cc">
+<title>Day 3; AWS: $50</title>
+</rect>
+<rect x="1008.4666666666667" y="422.8125" width="9.263333333333332" height="12.25" fill="#289487">
+<title>Day 3; Azure: $28</title>
+</rect>
+<rect x="1021.7" y="455.1875" width="9.263333333333332" height="46.8125" fill="#467bdd">
+<title>Day 4; Google Cloud: $107</title>
+</rect>
+<rect x="1021.7" y="431.5625" width="9.263333333333332" height="23.625" fill="#8970cc">
+<title>Day 4; AWS: $54</title>
+</rect>
+<rect x="1021.7" y="418" width="9.263333333333332" height="13.562500000000002" fill="#289487">
+<title>Day 4; Azure: $31</title>
+</rect>
+<rect x="1034.9333333333334" y="453.4375" width="9.263333333333332" height="48.5625" fill="#467bdd">
+<title>Day 5; Google Cloud: $111</title>
+</rect>
+<rect x="1034.9333333333334" y="428.0625" width="9.263333333333332" height="25.375" fill="#8970cc">
+<title>Day 5; AWS: $58</title>
+</rect>
+<rect x="1034.9333333333334" y="418.4375" width="9.263333333333332" height="9.625" fill="#289487">
+<title>Day 5; Azure: $22</title>
+</rect>
+<rect x="1048.1666666666667" y="451.6875" width="9.263333333333332" height="50.3125" fill="#467bdd">
+<title>Day 6; Google Cloud: $115</title>
+</rect>
+<rect x="1048.1666666666667" y="433.3125" width="9.263333333333332" height="18.375" fill="#8970cc">
+<title>Day 6; AWS: $42</title>
+</rect>
+<rect x="1048.1666666666667" y="422.375" width="9.263333333333332" height="10.9375" fill="#289487">
+<title>Day 6; Azure: $25</title>
+</rect>
+<rect x="1061.4" y="449.9375" width="9.263333333333332" height="52.0625" fill="#467bdd">
+<title>Day 7; Google Cloud: $119</title>
+</rect>
+<rect x="1061.4" y="429.8125" width="9.263333333333332" height="20.125" fill="#8970cc">
+<title>Day 7; AWS: $46</title>
+</rect>
+<rect x="1061.4" y="417.5625" width="9.263333333333332" height="12.25" fill="#289487">
+<title>Day 7; Azure: $28</title>
+</rect>
+<rect x="1074.6333333333332" y="460.4375" width="9.263333333333332" height="41.5625" fill="#467bdd">
+<title>Day 8; Google Cloud: $95</title>
+</rect>
+<rect x="1074.6333333333332" y="438.5625" width="9.263333333333332" height="21.875" fill="#8970cc">
+<title>Day 8; AWS: $50</title>
+</rect>
+<rect x="1074.6333333333332" y="425" width="9.263333333333332" height="13.562500000000002" fill="#289487">
+<title>Day 8; Azure: $31</title>
+</rect>
+<rect x="1087.8666666666666" y="458.6875" width="9.263333333333332" height="43.3125" fill="#467bdd">
+<title>Day 9; Google Cloud: $99</title>
+</rect>
+<rect x="1087.8666666666666" y="435.0625" width="9.263333333333332" height="23.625" fill="#8970cc">
+<title>Day 9; AWS: $54</title>
+</rect>
+<rect x="1087.8666666666666" y="425.4375" width="9.263333333333332" height="9.625" fill="#289487">
+<title>Day 9; Azure: $22</title>
+</rect>
+<rect x="1101.1" y="456.9375" width="9.263333333333332" height="45.0625" fill="#467bdd">
+<title>Day 10; Google Cloud: $103</title>
+</rect>
+<rect x="1101.1" y="431.5625" width="9.263333333333332" height="25.375" fill="#8970cc">
+<title>Day 10; AWS: $58</title>
+</rect>
+<rect x="1101.1" y="420.625" width="9.263333333333332" height="10.9375" fill="#289487">
+<title>Day 10; Azure: $25</title>
+</rect>
+<rect x="1114.3333333333333" y="455.1875" width="9.263333333333332" height="46.8125" fill="#467bdd">
+<title>Day 11; Google Cloud: $107</title>
+</rect>
+<rect x="1114.3333333333333" y="436.8125" width="9.263333333333332" height="18.375" fill="#8970cc">
+<title>Day 11; AWS: $42</title>
+</rect>
+<rect x="1114.3333333333333" y="424.5625" width="9.263333333333332" height="12.25" fill="#289487">
+<title>Day 11; Azure: $28</title>
+</rect>
+<rect x="1127.5666666666666" y="453.4375" width="9.263333333333332" height="48.5625" fill="#467bdd">
+<title>Day 12; Google Cloud: $111</title>
+</rect>
+<rect x="1127.5666666666666" y="433.3125" width="9.263333333333332" height="20.125" fill="#8970cc">
+<title>Day 12; AWS: $46</title>
+</rect>
+<rect x="1127.5666666666666" y="419.75" width="9.263333333333332" height="13.562500000000002" fill="#289487">
+<title>Day 12; Azure: $31</title>
+</rect>
+<rect x="1140.8" y="451.6875" width="9.263333333333332" height="50.3125" fill="#467bdd">
+<title>Day 13; Google Cloud: $115</title>
+</rect>
+<rect x="1140.8" y="429.8125" width="9.263333333333332" height="21.875" fill="#8970cc">
+<title>Day 13; AWS: $50</title>
+</rect>
+<rect x="1140.8" y="420.1875" width="9.263333333333332" height="9.625" fill="#289487">
+<title>Day 13; Azure: $22</title>
+</rect>
+<rect x="1154.0333333333333" y="449.9375" width="9.263333333333332" height="52.0625" fill="#467bdd">
+<title>Day 14; Google Cloud: $119</title>
+</rect>
+<rect x="1154.0333333333333" y="426.3125" width="9.263333333333332" height="23.625" fill="#8970cc">
+<title>Day 14; AWS: $54</title>
+</rect>
+<rect x="1154.0333333333333" y="415.375" width="9.263333333333332" height="10.9375" fill="#289487">
+<title>Day 14; Azure: $25</title>
+</rect>
+<rect x="1167.2666666666667" y="460.4375" width="9.263333333333332" height="41.5625" fill="#467bdd">
+<title>Day 15; Google Cloud: $95</title>
+</rect>
+<rect x="1167.2666666666667" y="435.0625" width="9.263333333333332" height="25.375" fill="#8970cc">
+<title>Day 15; AWS: $58</title>
+</rect>
+<rect x="1167.2666666666667" y="422.8125" width="9.263333333333332" height="12.25" fill="#289487">
+<title>Day 15; Azure: $28</title>
+</rect>
+<rect x="1180.5" y="458.6875" width="9.263333333333332" height="43.3125" fill="#467bdd">
+<title>Day 16; Google Cloud: $99</title>
+</rect>
+<rect x="1180.5" y="440.3125" width="9.263333333333332" height="18.375" fill="#8970cc">
+<title>Day 16; AWS: $42</title>
+</rect>
+<rect x="1180.5" y="426.75" width="9.263333333333332" height="13.562500000000002" fill="#289487">
+<title>Day 16; Azure: $31</title>
+</rect>
+<rect x="1193.7333333333333" y="456.9375" width="9.263333333333332" height="45.0625" fill="#467bdd">
+<title>Day 17; Google Cloud: $103</title>
+</rect>
+<rect x="1193.7333333333333" y="436.8125" width="9.263333333333332" height="20.125" fill="#8970cc">
+<title>Day 17; AWS: $46</title>
+</rect>
+<rect x="1193.7333333333333" y="427.1875" width="9.263333333333332" height="9.625" fill="#289487">
+<title>Day 17; Azure: $22</title>
+</rect>
+<rect x="1206.9666666666667" y="455.1875" width="9.263333333333332" height="46.8125" fill="#467bdd">
+<title>Day 18; Google Cloud: $107</title>
+</rect>
+<rect x="1206.9666666666667" y="433.3125" width="9.263333333333332" height="21.875" fill="#8970cc">
+<title>Day 18; AWS: $50</title>
+</rect>
+<rect x="1206.9666666666667" y="422.375" width="9.263333333333332" height="10.9375" fill="#289487">
+<title>Day 18; Azure: $25</title>
+</rect>
+<rect x="1220.2" y="453.4375" width="9.263333333333332" height="48.5625" fill="#467bdd">
+<title>Day 19; Google Cloud: $111</title>
+</rect>
+<rect x="1220.2" y="429.8125" width="9.263333333333332" height="23.625" fill="#8970cc">
+<title>Day 19; AWS: $54</title>
+</rect>
+<rect x="1220.2" y="417.5625" width="9.263333333333332" height="12.25" fill="#289487">
+<title>Day 19; Azure: $28</title>
+</rect>
+<rect x="1233.4333333333334" y="448.1875" width="9.263333333333332" height="53.81249999999999" fill="#467bdd">
+<title>Day 20; Google Cloud: $123</title>
+</rect>
+<rect x="1233.4333333333334" y="422.8125" width="9.263333333333332" height="25.375" fill="#8970cc">
+<title>Day 20; AWS: $58</title>
+</rect>
+<rect x="1233.4333333333334" y="409.25" width="9.263333333333332" height="13.562500000000002" fill="#289487">
+<title>Day 20; Azure: $31</title>
+</rect>
+<rect x="1246.6666666666665" y="446.4375" width="9.263333333333332" height="55.5625" fill="#467bdd">
+<title>Day 21; Google Cloud: $127</title>
+</rect>
+<rect x="1246.6666666666665" y="428.0625" width="9.263333333333332" height="18.375" fill="#8970cc">
+<title>Day 21; AWS: $42</title>
+</rect>
+<rect x="1246.6666666666665" y="418.4375" width="9.263333333333332" height="9.625" fill="#289487">
+<title>Day 21; Azure: $22</title>
+</rect>
+<rect x="1259.9" y="456.9375" width="9.263333333333332" height="45.0625" fill="#467bdd">
+<title>Day 22; Google Cloud: $103</title>
+</rect>
+<rect x="1259.9" y="436.8125" width="9.263333333333332" height="20.125" fill="#8970cc">
+<title>Day 22; AWS: $46</title>
+</rect>
+<rect x="1259.9" y="425.875" width="9.263333333333332" height="10.9375" fill="#289487">
+<title>Day 22; Azure: $25</title>
+</rect>
+<rect x="1273.1333333333332" y="455.1875" width="9.263333333333332" height="46.8125" fill="#467bdd">
+<title>Day 23; Google Cloud: $107</title>
+</rect>
+<rect x="1273.1333333333332" y="433.3125" width="9.263333333333332" height="21.875" fill="#8970cc">
+<title>Day 23; AWS: $50</title>
+</rect>
+<rect x="1273.1333333333332" y="421.0625" width="9.263333333333332" height="12.25" fill="#289487">
+<title>Day 23; Azure: $28</title>
+</rect>
+<rect x="1286.3666666666668" y="453.4375" width="9.263333333333332" height="48.5625" fill="#467bdd">
+<title>Day 24; Google Cloud: $111</title>
+</rect>
+<rect x="1286.3666666666668" y="429.8125" width="9.263333333333332" height="23.625" fill="#8970cc">
+<title>Day 24; AWS: $54</title>
+</rect>
+<rect x="1286.3666666666668" y="416.25" width="9.263333333333332" height="13.562500000000002" fill="#289487">
+<title>Day 24; Azure: $31</title>
+</rect>
+<rect x="1299.6" y="451.6875" width="9.263333333333332" height="50.3125" fill="#467bdd">
+<title>Day 25; Google Cloud: $115</title>
+</rect>
+<rect x="1299.6" y="426.3125" width="9.263333333333332" height="25.375" fill="#8970cc">
+<title>Day 25; AWS: $58</title>
+</rect>
+<rect x="1299.6" y="416.6875" width="9.263333333333332" height="9.625" fill="#289487">
+<title>Day 25; Azure: $22</title>
+</rect>
+<rect x="1312.8333333333333" y="449.9375" width="9.263333333333332" height="52.0625" fill="#467bdd">
+<title>Day 26; Google Cloud: $119</title>
+</rect>
+<rect x="1312.8333333333333" y="431.5625" width="9.263333333333332" height="18.375" fill="#8970cc">
+<title>Day 26; AWS: $42</title>
+</rect>
+<rect x="1312.8333333333333" y="420.625" width="9.263333333333332" height="10.9375" fill="#289487">
+<title>Day 26; Azure: $25</title>
+</rect>
+<rect x="1326.0666666666666" y="448.1875" width="9.263333333333332" height="53.81249999999999" fill="#467bdd">
+<title>Day 27; Google Cloud: $123</title>
+</rect>
+<rect x="1326.0666666666666" y="428.0625" width="9.263333333333332" height="20.125" fill="#8970cc">
+<title>Day 27; AWS: $46</title>
+</rect>
+<rect x="1326.0666666666666" y="415.8125" width="9.263333333333332" height="12.25" fill="#289487">
+<title>Day 27; Azure: $28</title>
+</rect>
+<rect x="1339.3" y="446.4375" width="9.263333333333332" height="55.5625" fill="#467bdd">
+<title>Day 28; Google Cloud: $127</title>
+</rect>
+<rect x="1339.3" y="424.5625" width="9.263333333333332" height="21.875" fill="#8970cc">
+<title>Day 28; AWS: $50</title>
+</rect>
+<rect x="1339.3" y="411" width="9.263333333333332" height="13.562500000000002" fill="#289487">
+<title>Day 28; Azure: $31</title>
+</rect>
+<rect x="1352.5333333333333" y="456.9375" width="9.263333333333332" height="45.0625" fill="#467bdd">
+<title>Day 29; Google Cloud: $103</title>
+</rect>
+<rect x="1352.5333333333333" y="433.3125" width="9.263333333333332" height="23.625" fill="#8970cc">
+<title>Day 29; AWS: $54</title>
+</rect>
+<rect x="1352.5333333333333" y="423.6875" width="9.263333333333332" height="9.625" fill="#289487">
+<title>Day 29; Azure: $22</title>
+</rect>
+<rect x="1365.7666666666667" y="455.1875" width="9.263333333333332" height="46.8125" fill="#467bdd">
+<title>Day 30; Google Cloud: $107</title>
+</rect>
+<rect x="1365.7666666666667" y="429.8125" width="9.263333333333332" height="25.375" fill="#8970cc">
+<title>Day 30; AWS: $58</title>
+</rect>
+<rect x="1365.7666666666667" y="418.875" width="9.263333333333332" height="10.9375" fill="#289487">
+<title>Day 30; Azure: $25</title>
+</rect>
+<text x="980" y="522" class="axis" >Aug 8</text>
+<text x="1072.6333333333332" y="522" class="axis" >Aug 15</text>
+<text x="1165.2666666666667" y="522" class="axis" >Aug 22</text>
+<text x="1257.9" y="522" class="axis" >Aug 29</text>
+<text x="1363.7666666666667" y="522" class="axis" text-anchor="end">Sep 6</text>
+<rect x="980" y="536" width="9" height="9" rx="2" fill="#467bdd" stroke="none"/>
+<text x="995" y="545" class="small" >Google Cloud</text>
+<rect x="1105" y="536" width="9" height="9" rx="2" fill="#8970cc" stroke="none"/>
+<text x="1120" y="545" class="small" >AWS</text>
+<rect x="1230" y="536" width="9" height="9" rx="2" fill="#289487" stroke="none"/>
+<text x="1245" y="545" class="small" >Azure</text>
+<text x="942" y="591" class="muted" >Data through Sep 6 · 3 sources connected</text>
+<rect x="244" y="633" width="1172" height="239" rx="8" fill="#ffffff" stroke="#dce2ec"/>
+<text x="266" y="669" class="heading" >Services &amp; targets</text>
+<text x="1220" y="669" class="link" >All resources →</text>
+<path d="M266 687h1128" stroke="#e5e9f0"/>
+<text x="266" y="711" class="table-head" >Service / target</text>
+<text x="670" y="711" class="table-head" >Environment</text>
+<text x="835" y="711" class="table-head" >Health</text>
+<text x="1080" y="711" class="table-head" >Problems</text>
+<text x="1250" y="711" class="table-head" >Coverage</text>
+<text x="266" y="748" class="link" >Processing workers</text>
+<text x="670" y="748" class="body" >dev</text>
+<rect x="835" y="731" width="90" height="25" rx="5" fill="#fff6e3" stroke="none"/>
+<text x="844" y="748" class="small" fill="#885500">Degraded</text>
+<text x="1080" y="748" class="body" >2</text>
+<text x="1250" y="748" class="link" >10 / 12</text>
+<path d="M266 764h1128" stroke="#e5e9f0"/>
+<text x="266" y="791" class="link" >Ingestion API</text>
+<text x="670" y="791" class="body" >api</text>
+<rect x="835" y="774" width="90" height="25" rx="5" fill="#fff6e3" stroke="none"/>
+<text x="844" y="791" class="small" fill="#885500">Degraded</text>
+<text x="1080" y="791" class="body" >1</text>
+<text x="1250" y="791" class="link" >12 / 12</text>
+<path d="M266 807h1128" stroke="#e5e9f0"/>
+<text x="266" y="834" class="link" >Shared operations</text>
+<text x="670" y="834" class="body" >operations</text>
+<rect x="835" y="817" width="90" height="25" rx="5" fill="#eaf7ef" stroke="none"/>
+<text x="844" y="834" class="small" fill="#216c40">Healthy</text>
+<text x="1080" y="834" class="body" >0</text>
+<text x="1250" y="834" class="link" >6 / 6</text>
+<text x="244" y="907" class="small" >DESIGN PROPOSAL · SYNTHETIC DATA · Screens and interactions are specified in the dashboard experience plan.</text>
+</svg>
