@@ -63,12 +63,8 @@ pub async fn events(
     Ok(Sse::new(events).keep_alive(KeepAlive::new().interval(Duration::from_secs(15))))
 }
 pub async fn health(State(app): State<Arc<App>>) -> Result<Response, ApiError> {
-    let heartbeat = app.bus.heartbeat.load(Ordering::Acquire);
-    let healthy = app.bus.running.load(Ordering::Acquire)
-        && chrono::Utc::now()
-            .timestamp_millis()
-            .saturating_sub(heartbeat)
-            < 15000;
+    // Collector delays affect evidence freshness, not the ability to serve the dashboard.
+    let healthy = app.bus.running.load(Ordering::Acquire) && !app.stop.is_cancelled();
     if !healthy {
         return Err(ApiError::Unavailable);
     }
