@@ -13,6 +13,7 @@ struct Cursor {
     at: DateTime<Utc>,
     id: Id,
 }
+type RecordPosition = Option<(DateTime<Utc>, Id)>;
 fn fingerprint(filter: &Filter, endpoint: &str) -> Result<String, ApiError> {
     let mut filter = filter.clone();
     filter.cursor = None;
@@ -21,10 +22,45 @@ fn fingerprint(filter: &Filter, endpoint: &str) -> Result<String, ApiError> {
         .map(|s| s.as_ref().to_owned())
         .map_err(|_| ApiError::BadQuery)
 }
-pub fn resolve(
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ScopeCursor {
+    fingerprint: String,
+    window: Window,
+    after: monitor_query::record::Scope,
+}
+pub fn resolve_scope(
     filter: &mut Filter,
-    endpoint: &str,
-) -> Result<(Window, Option<(DateTime<Utc>, Id)>), ApiError> {
+) -> Result<(Window, Option<monitor_query::record::Scope>), ApiError> {
+    filter.normalize().map_err(|_| ApiError::BadQuery)?;
+    if let Some(text) = &filter.cursor {
+        let cursor: ScopeCursor = serde_json::from_str(text).map_err(|_| ApiError::BadQuery)?;
+        if cursor.fingerprint != fingerprint(filter, "scopes")?
+            || cursor.window.from >= cursor.window.to
+        {
+            return Err(ApiError::BadQuery);
+        }
+        Ok((cursor.window, Some(cursor.after)))
+    } else {
+        Ok((
+            filter.window(Utc::now()).map_err(|_| ApiError::BadQuery)?,
+            None,
+        ))
+    }
+}
+pub fn next_scope(
+    filter: &Filter,
+    window: Window,
+    after: monitor_query::record::Scope,
+) -> Result<String, ApiError> {
+    serde_json::to_string(&ScopeCursor {
+        fingerprint: fingerprint(filter, "scopes")?,
+        window,
+        after,
+    })
+    .map_err(|_| ApiError::BadQuery)
+}
+pub fn resolve(filter: &mut Filter, endpoint: &str) -> Result<(Window, RecordPosition), ApiError> {
     filter.normalize().map_err(|_| ApiError::BadQuery)?;
     if let Some(cursor) = &filter.cursor {
         let cursor: Cursor = serde_json::from_str(cursor).map_err(|_| ApiError::BadQuery)?;

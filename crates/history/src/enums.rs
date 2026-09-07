@@ -8,6 +8,9 @@ macro_rules! mapped {
         impl From<$core> for $name {
             fn from(value: $core) -> Self { use $core as Core; match value { $(Core::$variant => Self::$variant),+ } }
         }
+        impl From<$name> for $core {
+            fn from(value: $name) -> Self { match value { $($name::$variant => Self::$variant),+ } }
+        }
     };
 }
 mapped!(
@@ -26,7 +29,7 @@ mapped!(
     QueryProvider,
     "crate::query_schema::sql_types::QueryProvider",
     monitor_query::enums::Provider,
-    [Gcp, Aws, Azure, Kubernetes, Github, Edge, Nats]
+    [Gcp, Aws, Azure, Kubernetes, Github, Edge, Nats, Unknown]
 );
 
 impl From<monitor_query::enums::Check> for Check {

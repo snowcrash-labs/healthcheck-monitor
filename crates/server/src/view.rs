@@ -46,6 +46,8 @@ pub struct FindingView {
 }
 #[derive(Clone, Serialize)]
 pub struct CheckView {
+    #[serde(skip)]
+    pub required: bool,
     pub started_at: Option<DateTime<Utc>>,
     pub required_failures: usize,
     pub optional_gaps: usize,

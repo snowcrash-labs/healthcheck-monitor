@@ -7,5 +7,7 @@
 /dashboard/test-results
 /dashboard/playwright-report
 /server.local.toml
+/connect.local.toml
+/healthcheck-desktop-client.json
 /.env
 /.env.local

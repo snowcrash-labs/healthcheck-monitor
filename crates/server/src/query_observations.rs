@@ -55,7 +55,7 @@ pub fn observation(
                     }),
             );
             Details::Diagnostic {
-                signature: format!("{signature:?}"),
+                signature: crate::query_projection::log_class(*signature),
                 count: *count,
                 first_seen: *first_seen,
                 last_seen: *last_seen,

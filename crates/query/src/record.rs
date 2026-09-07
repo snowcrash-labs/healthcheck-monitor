@@ -44,14 +44,14 @@ pub enum Details {
         severity: Severity,
         state: FindingState,
         first_detected_at: Option<DateTime<Utc>>,
-        expected: String,
-        confidence: String,
+        expected: Expected,
+        confidence: Confidence,
         facts: Vec<Fact>,
         links: Vec<Link>,
         legacy: bool,
     },
     Diagnostic {
-        signature: String,
+        signature: LogClass,
         count: u64,
         first_seen: DateTime<Utc>,
         last_seen: DateTime<Utc>,
@@ -65,6 +65,7 @@ pub enum Details {
         links: Vec<Link>,
     },
     Check {
+        required: bool,
         started_at: DateTime<Utc>,
         finished_at: DateTime<Utc>,
         oldest_observation_at: Option<DateTime<Utc>>,
@@ -90,7 +91,7 @@ pub enum Details {
 #[serde(deny_unknown_fields)]
 pub struct Operation {
     pub name: String,
-    pub coverage: String,
+    pub coverage: Coverage,
     pub required: bool,
     pub observed_at: DateTime<Utc>,
 }

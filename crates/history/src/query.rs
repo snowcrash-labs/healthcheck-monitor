@@ -54,7 +54,7 @@ impl History {
                         .and(finding_event::finding_event_id.lt(id))),
             );
         }
-        let mut connection = self.pool.get().await.map_err(|_| Error::Pool)?;
+        let mut connection = self.read_pool.get().await.map_err(|_| Error::Pool)?;
         query
             .order((
                 finding_event::finding_event_at.desc(),
@@ -99,7 +99,7 @@ impl History {
                         .and(check_run::check_run_id.lt(id))),
             );
         }
-        let mut connection = self.pool.get().await.map_err(|_| Error::Pool)?;
+        let mut connection = self.read_pool.get().await.map_err(|_| Error::Pool)?;
         query
             .order((
                 check_run::check_run_finished_at.desc(),
@@ -115,7 +115,7 @@ impl History {
         if !self.ready() {
             return Err(Error::Migration);
         }
-        let mut connection = self.pool.get().await.map_err(|_| Error::Pool)?;
+        let mut connection = self.read_pool.get().await.map_err(|_| Error::Pool)?;
         history_gap::table
             .count()
             .get_result(&mut connection)

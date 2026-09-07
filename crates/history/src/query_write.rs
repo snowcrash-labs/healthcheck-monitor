@@ -16,6 +16,30 @@ pub(crate) async fn write(
     let unique: std::collections::BTreeMap<&str, &QueryRecord> =
         records.iter().map(|r| (r.key.as_ref(), r)).collect();
     let unique: Vec<_> = unique.into_values().collect();
+    let continuing: Vec<_> = unique
+        .iter()
+        .filter(|r| {
+            matches!(
+                r.record.category(),
+                monitor_query::enums::Category::Finding | monitor_query::enums::Category::Release
+            )
+        })
+        .map(|r| r.record.identity.clone())
+        .collect();
+    let keys: Vec<_> = unique.iter().map(|r| r.key.clone()).collect();
+    if !continuing.is_empty() {
+        // A new process can begin another interval for an existing source identity.
+        // Close superseded versions in one query, without inventing a recovery event.
+        diesel::update(
+            r::table
+                .filter(r::query_record_identity.eq_any(continuing))
+                .filter(r::query_record_key.ne_all(keys))
+                .filter(r::query_record_closed_at.is_null()),
+        )
+        .set(r::query_record_closed_at.eq(diesel::dsl::now))
+        .execute(connection)
+        .await?;
+    }
     for batch in unique.chunks(128) {
         let rows: Vec<_> = batch
             .iter()

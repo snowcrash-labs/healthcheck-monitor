@@ -84,10 +84,7 @@ impl Observer for Bus {
                     .ok_or(monitor_history::error::Error::Record)?;
                 Event::new(&old.target, transition, &old.source())
             });
-            let mut recorder = self
-                .recorder
-                .entry_sync(())
-                .or_insert_with(Default::default);
+            let mut recorder = self.recorder.entry_sync(()).or_default();
             recorder
                 .get_mut()
                 .retain(&view.resources.iter().map(|r| r.id.as_str()).collect());

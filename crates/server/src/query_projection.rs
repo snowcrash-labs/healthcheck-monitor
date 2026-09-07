@@ -21,6 +21,49 @@ convert!(
     ]
 );
 convert!(severity, Severity, [Info, Warning, Error]);
+convert!(
+    expected,
+    Expected,
+    [Active, Dormant, ScaleToZero, Suspended]
+);
+convert!(confidence, Confidence, [Direct, Correlated, Insufficient]);
+convert!(
+    coverage,
+    Coverage,
+    [
+        Complete,
+        Denied,
+        Unauthenticated,
+        Unavailable,
+        Unsupported,
+        Missing,
+        Truncated,
+        Timeout,
+        Cancelled,
+        Malformed,
+        Stale,
+        InventoryOnly
+    ]
+);
+convert!(
+    log_class,
+    LogClass,
+    [
+        Import,
+        Panic,
+        OutOfMemory,
+        Connection,
+        Permission,
+        Timeout,
+        Warning,
+        OtherError
+    ]
+);
+convert!(
+    health,
+    Health,
+    [Healthy, Degraded, Unhealthy, Unknown, ExpectedInactive]
+);
 
 pub fn scope(target: &crate::view::Target) -> Scope {
     Scope {
@@ -91,8 +134,8 @@ pub fn finding(f: &crate::view::FindingView, targets: &[crate::view::Target]) ->
             severity: severity(f.severity),
             state: q::FindingState::Active,
             first_detected_at: f.diagnostic.as_ref().and_then(|d| d.first_detected_at),
-            expected: format!("{:?}", f.expected),
-            confidence: format!("{:?}", f.confidence),
+            expected: expected(f.expected),
+            confidence: confidence(f.confidence),
             facts: f.diagnostic.as_ref().map_or_else(Vec::new, |d| {
                 d.facts
                     .iter()
@@ -137,6 +180,7 @@ pub fn result<'a>(
         closed_at: None,
         stale: false,
         details: Details::Check {
+            required: job.settings.required,
             started_at: result.started_at,
             finished_at: result.finished_at,
             oldest_observation_at: result.observations.iter().map(|o| o.observed_at).min(),
@@ -164,7 +208,7 @@ pub fn result<'a>(
                 .take(128)
                 .map(|o| Operation {
                     name: o.id.clone(),
-                    coverage: format!("{:?}", o.coverage),
+                    coverage: coverage(o.coverage),
                     required: o.required,
                     observed_at: o.observed_at,
                 })

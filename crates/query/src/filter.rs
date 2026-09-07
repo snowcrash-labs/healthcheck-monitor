@@ -125,6 +125,9 @@ impl Deployment {
     pub fn window(&self) -> Result<Window, Error> {
         let seconds = self.window_seconds.unwrap_or(300);
         if !(60..=86400).contains(&seconds)
+            || self.filter.severity.is_some()
+            || self.filter.state.is_some()
+            || self.filter.q.is_some()
             || self.filter.from.is_some()
             || self.filter.to.is_some()
             || self.filter.lookback_seconds.is_some()

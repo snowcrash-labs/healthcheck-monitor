@@ -39,18 +39,21 @@ pub fn records<'a>(
         .iter()
         .filter_map(|f| crate::query_projection::finding(f, &view.targets));
     enum Input {
-        Observation(monitor_query::record::Record),
+        Observation(Box<monitor_query::record::Record>),
         Closure(Transition),
     }
-    let input = checks.chain(findings).map(Input::Observation).chain(
-        transitions
-            .iter()
-            .filter(|t| matches!(t.kind, TransitionKind::Recovered | TransitionKind::Removed))
-            .cloned()
-            .map(Input::Closure),
-    );
+    let input = checks
+        .chain(findings)
+        .map(|record| Input::Observation(Box::new(record)))
+        .chain(
+            transitions
+                .iter()
+                .filter(|t| matches!(t.kind, TransitionKind::Recovered | TransitionKind::Removed))
+                .cloned()
+                .map(Input::Closure),
+        );
     input.flat_map(move |input| match input {
-        Input::Observation(record) => match recorder.capture(record, snapshot.captured_at) {
+        Input::Observation(record) => match recorder.capture(*record, snapshot.captured_at) {
             Ok(rows) => rows.into_iter().map(Ok).collect::<Vec<_>>(),
             Err(error) => vec![Err(error)],
         },

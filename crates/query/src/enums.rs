@@ -11,7 +11,42 @@ macro_rules! vocabulary {
         }
     };
 }
-vocabulary!(Provider, [Gcp, Aws, Azure, Kubernetes, Github, Edge, Nats]);
+vocabulary!(
+    Provider,
+    [Gcp, Aws, Azure, Kubernetes, Github, Edge, Nats, Unknown]
+);
+vocabulary!(Expected, [Active, Dormant, ScaleToZero, Suspended]);
+vocabulary!(Confidence, [Direct, Correlated, Insufficient]);
+vocabulary!(
+    Coverage,
+    [
+        Complete,
+        Denied,
+        Unauthenticated,
+        Unavailable,
+        Unsupported,
+        Missing,
+        Truncated,
+        Timeout,
+        Cancelled,
+        Malformed,
+        Stale,
+        InventoryOnly
+    ]
+);
+vocabulary!(
+    LogClass,
+    [
+        Import,
+        Panic,
+        OutOfMemory,
+        Connection,
+        Permission,
+        Timeout,
+        Warning,
+        OtherError
+    ]
+);
 vocabulary!(
     Check,
     [

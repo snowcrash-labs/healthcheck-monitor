@@ -19,11 +19,17 @@ mod log_links;
 mod overview;
 mod pages;
 mod query_api;
+mod query_availability;
 mod query_cursor;
+mod query_deployment;
+mod query_deployment_pages;
 mod query_observations;
+mod query_openapi;
 mod query_projection;
 mod query_publish;
 mod query_recorder;
+#[cfg(test)]
+mod query_tests;
 mod resource_evidence;
 mod resource_rows;
 mod response;

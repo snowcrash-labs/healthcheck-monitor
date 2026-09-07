@@ -31,7 +31,7 @@ tower = { version = "0.5.3", default-features = false, features = ["util"] }
 tower-http = { version = "0.7.1", default-features = false, features = ["compression-gzip", "compression-zstd"] }
 tokio-rustls = { version = "0.26.5", default-features = false, features = ["aws_lc_rs","tls12"] }
 rustls = { version = "0.23.43", default-features = false, features = ["std","aws_lc_rs","tls12"] }
-ipnet = { version = "2.12.1", default-features = false, features = ["serde", "std"] }
+ipnet = { version = "2.12.2", default-features = false, features = ["serde", "std"] }
 http-body = { version = "1.1.0", default-features = false }
 
 [lints]

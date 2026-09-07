@@ -17,7 +17,7 @@ use monitor_query::{
     record::Record,
 };
 
-fn selection(
+pub(crate) fn selection(
     filter: &Filter,
     window: Window,
     category: Option<Category>,

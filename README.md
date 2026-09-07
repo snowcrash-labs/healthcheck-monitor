@@ -11,6 +11,7 @@ The monitor keeps **system health**, **collection coverage**, and **evidence fre
 - **Configurable execution:** TOML profiles, target/check/resource selection, sampling, per-check schedules, thresholds, grace periods, finite limits, and atomic SIGHUP reload.
 - **Persistent dashboard:** Axum, SolidJS 2 RC, Solid router, and Vite; paginated findings and resources, evidence details, transition history, live updates, persistent top bars, and light/dark/system themes.
 - **Evidence and history:** Atomic JSON snapshots, Markdown reports, rotated NDJSON transitions, offline comparisons, and PostgreSQL dashboard history with native UUIDv7 keys.
+- **Monitoring queries:** Seven days of diagnostic history, scoped JSON APIs and OpenAPI, and an MCP connector for Codex CLI and Claude Code using individual Google sign-in through IAP.
 - **Bounded operation:** Fair scheduling, independent provider scopes, reused clients and observations, batched metrics, bounded caches, response limits, and cancellation deadlines.
 
 Collection does not change infrastructure, consume queue messages, read application database records or secret values, perform synthetic transactions, or send notifications. Endpoint probes do not retain response bodies. PostgreSQL writes belong only to the monitor's own history store.
@@ -102,6 +103,8 @@ For a terminal-only build without Node or dashboard assets, use `cargo build --l
 For frontend development, run the loopback service and `npm --prefix dashboard run dev`. Vite serves the application on port 5173 and proxies API requests to port 9840.
 
 ## Configuration and credentials
+
+To query an existing continuous monitor, install `healthcheck-connect` and follow the [query access runbook](docs/plans/2026-09-06-monitoring-query-operations.md). The connector needs no local collectors or provider credentials. It supports time ranges, cloud scopes, monitoring categories, resources, redacted logs, and post-deployment assessments as short as one minute. These queries read collected evidence; they do not start scans.
 
 Settings resolve in this order: built-in defaults, global configuration, selected profile, target settings, check settings, and explicit CLI overrides. Detailed monitoring runs only against configured targets; organization discovery does not silently expand that scope.
 

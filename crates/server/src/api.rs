@@ -17,6 +17,11 @@ pub struct App {
 pub fn router(app: Arc<App>, _config: &Config) -> Router {
     let api = Router::new()
         .route("/query/scopes", get(crate::query_api::scopes))
+        .route("/query/openapi.json", get(crate::query_openapi::openapi))
+        .route(
+            "/query/deployment",
+            get(crate::query_deployment::deployment),
+        )
         .route("/query/summary", get(crate::query_api::summary))
         .route("/query/findings", get(crate::query_api::findings))
         .route("/query/diagnostics", get(crate::query_api::diagnostics))

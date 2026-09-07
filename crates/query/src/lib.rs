@@ -1,8 +1,12 @@
 //! Shared, allowlisted monitoring query contracts independent of collectors and HTTP frameworks.
+pub mod assessment;
+#[cfg(test)]
+mod assessment_tests;
 pub mod enums;
 pub mod filter;
 pub mod matching;
 pub mod record;
+pub mod release_assessment;
 pub mod response;
 #[cfg(test)]
 mod tests;

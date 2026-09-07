@@ -179,7 +179,14 @@ pub async fn guard(State(app): State<Arc<App>>, request: Request, next: Next) ->
         Some(permit)
     };
     let asset = request.uri().path().starts_with("/assets/");
-    let mut response = next.run(request).await;
+    let mut response = if request.uri().path().starts_with("/api/v1/query/") {
+        match tokio::time::timeout(std::time::Duration::from_secs(20), next.run(request)).await {
+            Ok(response) => response,
+            Err(_) => ApiError::Unavailable.into_response(),
+        }
+    } else {
+        next.run(request).await
+    };
     for (name, value) in [
         (
             "content-security-policy",

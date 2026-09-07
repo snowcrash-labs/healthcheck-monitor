@@ -69,6 +69,7 @@ pub fn build(snapshot: &Snapshot, effective: &Effective, generation: u64) -> Vie
             });
         }
         checks.push(CheckView {
+            required: job.settings.required,
             started_at: result.map(|r| r.started_at),
             required_failures: failures.iter().filter(|f| f.required).count(),
             optional_gaps: failures.iter().filter(|f| !f.required).count(),

@@ -1,0 +1,10 @@
+server = "https://health.soundpatrol.com/"
+client_id = "REPLACE_WITH_DESKTOP_CLIENT_ID.apps.googleusercontent.com"
+# Native desktop clients are public clients. This is the desktop client's configuration,
+# never a service-account key or a user's refresh token.
+# client_secret = "DESKTOP_CLIENT_CONFIGURATION"
+credential_store = "keyring"
+
+# Headless Linux only, explicitly selected:
+# credential_store = "file"
+# credential_file = "credentials.json"

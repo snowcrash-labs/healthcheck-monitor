@@ -11,9 +11,10 @@ mode = "local"
 [history]
 database_url_env = "HEALTHCHECK_DATABASE_URL"
 connections = 2
-retention = "24h"
-event_rows = 10000
-run_rows = 100000
+retention = "168h"
+event_rows = 100000
+run_rows = 1000000
+diagnostic_rows = 250000
 gap_rows = 1000
 configuration_rows = 32
 queue_bytes = 16777216
