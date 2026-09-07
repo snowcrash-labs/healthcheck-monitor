@@ -8,16 +8,17 @@ automatically discovered repository skill set.
 
 ## Layout
 
-Store the snapshot under
-`docs/offline-agent-skills/agentdeck-daily-q-a-and-review/`. Keep the upstream
-`SKILL.md` unchanged, place its small risk catalog beneath `references/`, and
-add a local README that records provenance, runtime dependencies, and the
-reference-only boundary.
+Store the adapted snapshot under
+`docs/offline-agent-skills/daily-q-a-and-review/`. Place its small risk catalog
+beneath `references/`, and add a local README that records provenance, explains
+how to use the skill from a local agent, and states the reference-only boundary.
 
-The large state and PDF-report helpers remain in `move-agent-deck`, their source
-of truth. Copying those helpers here would create a second executable workflow
-that could drift. The README will point colleagues to the upstream repository
-when they want to install or run the skill.
+Remove the Agent Deck pad, transaction state, PDF-report, column-eight feedback,
+and Ben-specific path assumptions from the copied instructions. Those helpers
+remain in `move-agent-deck`, their source of truth. Copying them here would
+create a second executable workflow that could drift. The portable version
+instead reviews a caller-specified window, defaulting to the preceding 24 hours,
+and returns a compact Markdown report in the current session.
 
 ## Safety and maintenance
 
@@ -25,13 +26,14 @@ when they want to install or run the skill.
   dashboard code, or deployment manifests.
 - The path is deliberately outside `.agents/skills`, `.claude/skills`, and the
   plugin tree, so ordinary skill discovery does not load it.
-- Provenance includes the upstream repository, source path, commit, and snapshot
-  date.
+- Provenance includes the upstream repository, source path, commit, snapshot
+  date, and a concise list of intentional adaptations.
 - Future refreshes replace the copied files from a named upstream revision and
   update the provenance record in the same change.
 
 ## Verification
 
-Verify that the copied skill and risk catalog match their upstream files byte
-for byte, validate the copied skill's frontmatter, check documentation links,
-and inspect the final diff for any runtime integration.
+Verify that the risk catalog matches its upstream file byte for byte, validate
+the adapted skill's frontmatter, assert that Agent Deck-specific terms and paths
+are absent from the runnable instructions, check documentation links, and
+inspect the final diff for any runtime integration.
