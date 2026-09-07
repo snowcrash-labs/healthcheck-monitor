@@ -1,5 +1,7 @@
 # Dashboard diagnostics and navigation
 
+Status: implemented diagnostics baseline. The [current structure and investigation plan](2026-09-07-dashboard-structure-clouds-and-costs.md) supersedes its presentation decisions and adds reported console-link and refresh defects. Existing URL tests verify generation and encoding, not authenticated destination correctness. Dependency versions below record the implementation sweep, not a continuing claim that every dependency is current.
+
 The dashboard previously rendered coverage enum names without explanations, linked targets only to filtered resources, and retained one observation's facts per resource. Operators could see incomplete coverage or an error without identifying the underlying check, source, location, or triggering values.
 
 ## Behavior
@@ -30,4 +32,4 @@ Frontend packages match current registry releases. The requested Solid 2 channel
 
 Regression tests cover readable labels, complete check lists, operation pagination beyond previews, scoped navigation, direct-load target selection, multi-source evidence, detection timestamps, restart, legacy snapshots, pod replacement, console destinations, log-query encoding and retained findings without inventory. Desktop and mobile browser scenarios cover both themes. Existing authentication, response bounds, freshness and collection tests remain required.
 
-Use development builds and the existing IAP-protected deployment path. The embedded migration adds only a history-query index. The existing VM, compile-time assets and devops-only access policy continue to serve the dashboard.
+Use development builds and the existing IAP-protected deployment path. The embedded migration adds only a history-query index. The existing VM and compile-time assets continue to serve the dashboard. The current reader policy grants healthcheck-access alongside infrastructure-admin; it does not grant those readers provider-console or SSH permissions.

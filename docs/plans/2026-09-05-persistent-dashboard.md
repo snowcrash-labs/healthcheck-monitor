@@ -1,6 +1,8 @@
 # Persistent monitoring service and dashboard
 
-Implemented for native local demonstration. The shared monitoring engine runs autonomously under an Axum service and exposes a read-only SolidJS 2.0 RC dashboard. Collection continues without browsers. Health, coverage, observation age, history gaps, and the monitor's own condition remain separate. Existing command-line run, watch, report and diff behavior remains supported. Setup and operating limits are in the [dashboard runbook](2026-09-05-dashboard-operations.md).
+Status: implemented baseline; verification below records the original native local demonstration. Subsequent deployment and access verification are in [query access](2026-09-06-monitoring-query-access.md). The [dashboard, cloud coverage, and cost plan](2026-09-07-dashboard-structure-clouds-and-costs.md) governs upcoming changes.
+
+The shared monitoring engine runs autonomously under an Axum service and exposes a read-only SolidJS 2.0 RC dashboard. Collection continues without browsers. Health, coverage, observation age, history gaps, and the monitor's own condition remain separate. Existing command-line run, watch, report and diff behavior remains supported. Setup and operating limits are in the [dashboard runbook](2026-09-05-dashboard-operations.md).
 
 ## Runtime and API
 
@@ -32,7 +34,7 @@ A one-off development queue assessment returned 0 with 20 queue observations and
 
 Formatting and Clippy passed. The final `cargo upgrade --incompatible` sweep reported 89 direct packages current; RustSec audited 583 locked packages without advisories or warnings. npm reported zero vulnerabilities. Collection and database transports use rustls, with no native-tls, OpenSSL or libpq dependency. The unmaintained PEM helper was removed in favor of the maintained parser in rustls's PKI types. The user-built release binary and all 37 original source-bundle files retained their checksums; no Rust release build ran.
 
-The GitHub workflow now includes frontend checks on Linux/macOS and an isolated PostgreSQL 18.6 contract job. The repository has no remote, so that workflow has not run. Current dashboard changes have only been executed on native macOS; live GCP/AWS/Azure credentials, production load and the external SSO proxy remain validation gaps. The [monitor verification record](2026-09-05-monitor-verification.md) describes the original provider and Linux validation separately.
+At this original verification, the repository had no remote and the prepared frontend/Linux/macOS/PostgreSQL workflow had not run. The local demonstration therefore did not establish production access, load, or provider coverage. Subsequent CI and IAP verification are recorded in [query access](2026-09-06-monitoring-query-access.md); AWS/Azure production onboarding and sustained-load validation remain separate work. The [monitor verification record](2026-09-05-monitor-verification.md) describes the original provider and Linux validation separately.
 
 ## References
 

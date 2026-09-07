@@ -1,6 +1,6 @@
 # Configurable health monitoring
 
-Status: implementation and synthetic/platform verification are complete; live cloud validation retains the credential and telemetry-mapping gaps below. The service performs read-only observations of explicitly configured Soundpatrol targets. A one-off run and continuous monitoring use the same collection, evaluation, and evidence pipeline. Deployment, remediation, synthetic transactions, message consumption, notifications, application database connections, and historical evidence import remain outside this implementation.
+Status: original requirements and implementation record. Synthetic/platform verification below describes the initial implementation, not proof of complete live coverage. The service performs read-only observations of explicitly configured Soundpatrol targets. A one-off run and continuous monitoring use the same collection, evaluation, and evidence pipeline. Deployment was outside this initial scope and was implemented subsequently; remediation, synthetic transactions, message consumption, notifications, application database connections, and historical evidence import remain excluded. The [current dashboard, cloud coverage, and cost plan](2026-09-07-dashboard-structure-clouds-and-costs.md) governs the next changes without reducing this coverage requirement.
 
 ## Execution and configuration
 
@@ -78,7 +78,7 @@ The [verification record](2026-09-05-monitor-verification.md) maps all 30 source
 
 The final full development run attempted all 17 selected checks and references, completed in 25 seconds, and published its report with exit 3. It retained 4,067 Kubernetes observations, 20 queue observations, nine endpoint observations and 1,305 GitHub observations while independent GCP API checks reported missing ADC. The report includes current health errors, incomplete provenance and unmapped required flow telemetry; it does not claim fleet health.
 
-GCP ADC, applicable AWS/Azure credentials, direct NATS TLS access and deployment-specific aggregate flow mappings remain live-validation gaps. Production-scale RSS and provider behavior under sustained live load require operational validation. The repository has no remote; the prepared GitHub workflow has not run, but its development checks were executed locally on both platforms. These gaps do not reduce required implementation coverage or authorize infrastructure changes.
+At the initial verification, GCP ADC, applicable AWS/Azure credentials, direct NATS TLS access and deployment-specific aggregate flow mappings remained live-validation gaps. The repository then had no remote; development checks ran locally on both platforms. These are historical limitations, not current deployment status. Subsequent GCP deployment, IAP access, and CI verification are recorded in [query access](2026-09-06-monitoring-query-access.md) and the [security review](2026-09-07-monitor-security-review.md). AWS/Azure onboarding, sustained production-load validation, and missing operational telemetry still require explicit evidence; prior test completion does not establish them.
 
 ## References
 

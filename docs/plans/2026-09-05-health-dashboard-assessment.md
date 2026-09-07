@@ -1,5 +1,7 @@
 # Persistent health service and dashboard assessment
 
+Status: historical feasibility assessment from before the dashboard implementation. Its effort ranges and descriptions of missing runtime/API features are not estimates of remaining work. See the [implementation record](2026-09-05-persistent-dashboard.md), [current access and operations](2026-09-06-monitoring-query-operations.md), and [next dashboard, cloud, and cost plan](2026-09-07-dashboard-structure-clouds-and-costs.md).
+
 A persistent internal health dashboard is a moderate extension of the current implementation. Continuous scheduling already works without a browser or operator triggering each check. The product would make Soundpatrol's operational checklist continuously visible: what is unhealthy, what changed, whether work is progressing, and where evidence is missing. Replacing a general observability platform requires substantially more than presenting these findings in a frontend.
 
 This is an assessment, not a deployment specification. Estimates assume one experienced Rust/TypeScript engineer, one internal organization, modest dashboard traffic, and access to an existing hosting environment and SSO. They are cumulative planning ranges, not commitments; unresolved provider access or new application instrumentation can extend them.

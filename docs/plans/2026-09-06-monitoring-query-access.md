@@ -16,6 +16,8 @@ The SSH installation uses explicitly selected credential-file storage: mode `060
 
 ## Remaining work
 
+The [dashboard, cloud coverage, and cost plan](2026-09-07-dashboard-structure-clouds-and-costs.md) reuses these contracts. It distinguishes current state from selected-period evidence and adds separate cost date/revision semantics; it must preserve existing query and connector compatibility. A frozen query time window is not a durable snapshot of records that can arrive late or be corrected.
+
 Explicit deployment-assessment page sizes are rejected by query parsing; the current finding preview is fixed at 50 records. Correct numeric parsing for the flattened request and apply the requested preview size, with an encoded HTTP request regression test and live verification. The default assessment and ordinary finding/diagnostic pagination were verified.
 
 Live results expose collection gaps and dropped history records. Successful authentication and query execution do not establish complete monitoring coverage. Investigate those operational gaps separately; queries must continue to disclose them until supported by complete evidence. Scheduled delivery from the devops main branch still awaits the deployment pull request's independent review.
