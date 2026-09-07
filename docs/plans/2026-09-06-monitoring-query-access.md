@@ -7,3 +7,15 @@ Queries cover current and recovered findings, grouped redacted logs, resource me
 Post-deployment assessments accept deployment time, scope, a window of at least one minute (five minutes by default), and optional revision or digest expectations. They compare an equally sized baseline and require fresh post-deployment evidence. Existing sampling and rollout grace remain authoritative. Queries do not trigger scans or change schedules.
 
 Implementation includes shared contracts, indexed PostgreSQL history, additive API routes and OpenAPI, the MCP connector and credential store, devops-owned OAuth settings, client installation instructions, Linux/macOS development checks, and live IAP verification. Historical payloads remain allowlisted metadata; customer data, secret values, raw logs, and provider objects are excluded.
+
+## Verification
+
+Live validation on 2026-09-07 confirmed individual Google sign-in, credential refresh from a fresh process over SSH, and all seven MCP tools against the deployed monitor. Queries covered dev/api summaries, check history, resource details, redacted diagnostics, cursor pagination with a frozen time window, and a scoped one-minute deployment assessment using its default page size. The assessment reported observed errors and missing evidence. Anonymous API requests still redirected to Google, and the infrastructure-admin group remained the sole IAP reader.
+
+The SSH installation uses explicitly selected credential-file storage: mode `0600` files in a mode `0700` directory outside Git. macOS Keychain accepted login from a local Terminal but denied reads from SSH. The connector now distinguishes unavailable storage from missing Google authorization. [Linux/macOS development checks and PostgreSQL contract tests passed](https://github.com/snowcrash-labs/healthcheck-monitor/actions/runs/34106090813), including the credential-error regression. Setup and troubleshooting are in the [query access runbook](2026-09-06-monitoring-query-operations.md).
+
+## Remaining work
+
+Explicit deployment-assessment page sizes are rejected by query parsing; the current finding preview is fixed at 50 records. Correct numeric parsing for the flattened request and apply the requested preview size, with an encoded HTTP request regression test and live verification. The default assessment and ordinary finding/diagnostic pagination were verified.
+
+Live results expose collection gaps and dropped history records. Successful authentication and query execution do not establish complete monitoring coverage. Investigate those operational gaps separately; queries must continue to disclose them until supported by complete evidence. Scheduled delivery from the devops main branch still awaits the deployment pull request's independent review.

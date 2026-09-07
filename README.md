@@ -187,12 +187,14 @@ npm --prefix dashboard audit
 
 PostgreSQL contract tests require an isolated database named `healthcheck_monitor_dashboard_test`. Browser tests require a running dashboard with at least one observed resource and Playwright Chromium. Commands are in the [dashboard runbook](docs/plans/2026-09-05-dashboard-operations.md). Dependency maintenance uses `cargo upgrade --incompatible` and committed Rust/npm lockfiles.
 
-Native macOS verification passed 258 regular Rust tests plus the PostgreSQL contract test, five frontend tests, and two browser scenarios. The original engine was also tested on Linux ARM64; the workflow covers Linux/macOS checks and PostgreSQL. Live cloud credentials, environment-specific telemetry mappings, shared SSO integration, and production load remain deployment-specific validation work.
+The [development workflow passed Linux/macOS checks and PostgreSQL contract tests](https://github.com/snowcrash-labs/healthcheck-monitor/actions/runs/34106090813). Live Google IAP verification also covered credential refresh over SSH, all seven MCP tools, diagnostic pagination, and a one-minute deployment assessment. See [query verification and remaining work](docs/plans/2026-09-06-monitoring-query-access.md#verification) for the explicit assessment-page-size limitation and observed coverage gaps. Earlier engine and dashboard verification, including Linux ARM64 and browser scenarios, is recorded in the documents below. Provider credentials, telemetry mappings, and production load remain deployment-specific validation work.
 
 ## Documentation
 
 - [Monitoring configuration, permissions, and operation](docs/plans/2026-09-05-monitor-operations.md)
 - [Dashboard setup, access controls, and history](docs/plans/2026-09-05-dashboard-operations.md)
+- [Google login, SSH setup, MCP/API queries, and known limitations](docs/plans/2026-09-06-monitoring-query-operations.md)
+- [Query design, live verification, and remaining work](docs/plans/2026-09-06-monitoring-query-access.md)
 - [Backend design](docs/architecture/be/design.md) and [frontend conventions](docs/design/fe/dashboard.md)
 - [Monitoring verification](docs/plans/2026-09-05-monitor-verification.md) and [dashboard verification](docs/plans/2026-09-05-persistent-dashboard.md)
 - [Collection optimization and concurrency measurements](docs/plans/2026-09-05-collection-optimization.md)
