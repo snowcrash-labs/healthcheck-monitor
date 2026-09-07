@@ -1,4 +1,4 @@
-//! Non-secret connection settings are kept separate from per-user credentials.
+//! Private connection profiles are kept separate from per-user refresh tokens.
 use crate::error::Error;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -44,15 +44,28 @@ impl Config {
             client_id: String,
             client_secret: Option<String>,
         }
-        let meta = tokio::fs::metadata(source)
-            .await
-            .map_err(|_| Error::Configuration)?;
-        if meta.len() > 16384 {
-            return Err(Error::Configuration);
-        }
-        let bytes = tokio::fs::read(source)
-            .await
-            .map_err(|_| Error::Configuration)?;
+        let source = source.to_owned();
+        let bytes = tokio::task::spawn_blocking(move || {
+            use std::io::Read;
+            let file = std::fs::OpenOptions::new()
+                .read(true)
+                .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
+                .open(source)
+                .map_err(|_| Error::Configuration)?;
+            if !file.metadata().map_err(|_| Error::Configuration)?.is_file() {
+                return Err(Error::Configuration);
+            }
+            let mut bytes = Vec::new();
+            file.take(16385)
+                .read_to_end(&mut bytes)
+                .map_err(|_| Error::Configuration)?;
+            if bytes.len() > 16384 {
+                return Err(Error::Configuration);
+            }
+            Ok(bytes)
+        })
+        .await
+        .map_err(|_| Error::Configuration)??;
         let client: Download = serde_json::from_slice(&bytes).map_err(|_| Error::Configuration)?;
         let config = Self {
             server: "https://health.soundpatrol.com/"
@@ -73,6 +86,7 @@ impl Config {
                 std::fs::set_permissions(parent, std::fs::Permissions::from_mode(0o700))
                     .map_err(|_| Error::Configuration)?;
             }
+            private_parent(&path)?;
             let mut file = std::fs::OpenOptions::new()
                 .write(true)
                 .create_new(true)
@@ -95,16 +109,17 @@ impl Config {
         let read_path = path.clone();
         let bytes = tokio::task::spawn_blocking(move || {
             use std::io::Read;
+            private_parent(&read_path)?;
             let file = std::fs::OpenOptions::new()
                 .read(true)
-                .custom_flags(libc::O_NONBLOCK)
+                .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
                 .open(read_path)
                 .map_err(|_| Error::Configuration)?;
             let metadata = file.metadata().map_err(|_| Error::Configuration)?;
             let uid = unsafe { libc::geteuid() };
             if !metadata.is_file()
                 || metadata.len() > 16384
-                || metadata.mode() & 0o022 != 0
+                || metadata.mode() & 0o077 != 0
                 || (metadata.uid() != uid && metadata.uid() != 0)
             {
                 return Err(Error::Configuration);
@@ -151,4 +166,22 @@ impl Config {
         }
         Ok(())
     }
+}
+
+/// Reject replaceable profiles even when the file itself has private permissions.
+fn private_parent(path: &std::path::Path) -> Result<(), Error> {
+    use std::os::unix::fs::MetadataExt;
+    let parent = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(std::path::Path::new("."));
+    let metadata = std::fs::symlink_metadata(parent).map_err(|_| Error::Configuration)?;
+    let uid = unsafe { libc::geteuid() };
+    if !metadata.is_dir()
+        || metadata.mode() & 0o022 != 0
+        || (metadata.uid() != uid && metadata.uid() != 0)
+    {
+        return Err(Error::Configuration);
+    }
+    Ok(())
 }

@@ -108,6 +108,14 @@ async fn anonymous_assets_spoofed_headers_and_direct_requests_are_blocked()
         "/assets/app.js",
         "/api/v1/overview",
         "/api/v1/events",
+        "/api/v1/query/scopes",
+        "/api/v1/query/summary",
+        "/api/v1/query/findings",
+        "/api/v1/query/diagnostics",
+        "/api/v1/query/resource",
+        "/api/v1/query/checks",
+        "/api/v1/query/deployment",
+        "/api/v1/query/openapi.json",
     ] {
         let mut request = request(path)?;
         request

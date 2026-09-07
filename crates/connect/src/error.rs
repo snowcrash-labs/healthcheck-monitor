@@ -15,6 +15,8 @@ pub enum Error {
     Callback,
     #[error("network operation failed or exceeded its deadline")]
     Network,
+    #[error("Google revocation was not confirmed; credentials retained so logout can be retried")]
+    Revocation,
     #[error("monitor is unavailable or busy; retry later")]
     Unavailable,
     #[error("query parameters are invalid")]

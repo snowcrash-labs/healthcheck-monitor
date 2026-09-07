@@ -60,7 +60,10 @@ impl CredentialsStore {
                         .read(true)
                         .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
                         .open(path)
-                        .map_err(|_| Error::LoginRequired)?;
+                        .map_err(|error| match error.kind() {
+                            std::io::ErrorKind::NotFound => Error::LoginRequired,
+                            _ => Error::Credentials,
+                        })?;
                     let meta = file.metadata().map_err(|_| Error::Credentials)?;
                     // Metadata belongs to the opened descriptor, preventing symlink and rename races.
                     if !meta.is_file()

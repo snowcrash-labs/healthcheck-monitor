@@ -9,6 +9,8 @@ mod input;
 mod login;
 mod mcp;
 #[cfg(test)]
+mod security_tests;
+#[cfg(test)]
 mod tests;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;

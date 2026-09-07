@@ -102,11 +102,15 @@ impl Client {
             .send()
             .await;
         self.auth.lock().await.token = None;
-        self.store.delete().await?;
-        if !response.is_ok_and(|r| r.status().is_success()) {
-            return Err(Error::Network);
+        self.finish_logout(response.map(|r| r.status().is_success()).unwrap_or(false))
+            .await
+    }
+    /// Keep the revocation handle until Google confirms success, allowing a failed logout to retry.
+    pub(crate) async fn finish_logout(&self, revoked: bool) -> Result<(), Error> {
+        if !revoked {
+            return Err(Error::Revocation);
         }
-        Ok(())
+        self.store.delete().await
     }
 }
 pub async fn decode<T: DeserializeOwned>(

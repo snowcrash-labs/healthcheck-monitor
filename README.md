@@ -16,7 +16,16 @@ The monitor keeps **system health**, **collection coverage**, and **evidence fre
 
 Collection does not change infrastructure, consume queue messages, read application database records or secret values, perform synthetic transactions, or send notifications. Endpoint probes do not retain response bodies. PostgreSQL writes belong only to the monitor's own history store.
 
-## Quick start
+## Start here
+
+| What you need | Where to start |
+| --- | --- |
+| View the running Soundpatrol monitor | Open [health.soundpatrol.com](https://health.soundpatrol.com/) with your work Google account; membership in `healthcheck-access@soundpatrol.com` or the existing infrastructure-admin group is required. |
+| Query recent errors or a deployment from your development machine | Follow [local sign-in and MCP setup](docs/plans/2026-09-06-monitoring-query-operations.md). Install only `healthcheck-connect`; no cloud SDKs, database, Node, or local scans are needed. |
+| Run a fresh one-off check against your own configured targets | Follow the collector quick start below; this uses your provider credentials and makes read-only remote requests. |
+| Develop the dashboard or run your own continuous service | Follow [Dashboard](#dashboard) and the [dashboard runbook](docs/plans/2026-09-05-dashboard-operations.md). |
+
+## Collector quick start
 
 Requirements: current stable Rust, a C compiler for jemalloc, Node 24 or newer with npm to build the embedded dashboard, and credentials for your selected targets. The project uses edition 2024 and the prebuilt Rust standard library. Linux and macOS are supported.
 

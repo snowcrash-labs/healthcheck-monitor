@@ -1,6 +1,6 @@
 # Monitoring query access
 
-The running service exposes a typed, read-only query API behind Google IAP. A small Rust MCP connector handles Google desktop login and credential refresh for Codex CLI and Claude Code; it never collects infrastructure evidence locally. The desktop OAuth client is allowlisted for programmatic IAP access while browser authentication and devops-group authorization remain unchanged.
+The running service exposes a typed, read-only query API behind Google IAP. A small Rust MCP connector handles Google desktop login and credential refresh for Codex CLI and Claude Code; it never collects infrastructure evidence locally. The desktop OAuth client is allowlisted for programmatic IAP access. The dedicated `healthcheck-access@soundpatrol.com` reader group authorizes coworkers without infrastructure-admin privileges; the existing infrastructure-admin group retains access.
 
 Queries cover current and recovered findings, grouped redacted logs, resource metadata, check coverage, and post-deployment assessments. Filters include native cloud scope, target, monitoring category, hostname, resource location, severity, and explicit or relative time windows. Seven days of compact historical evidence are retained with explicit persistence and collection gaps. Pagination does not impose a separate result quota.
 
@@ -10,7 +10,7 @@ Implementation includes shared contracts, indexed PostgreSQL history, additive A
 
 ## Verification
 
-Live validation on 2026-09-07 confirmed individual Google sign-in, credential refresh from a fresh process over SSH, and all seven MCP tools against the deployed monitor. Queries covered dev/api summaries, check history, resource details, redacted diagnostics, cursor pagination with a frozen time window, and a scoped one-minute deployment assessment using its default page size. The assessment reported observed errors and missing evidence. Anonymous API requests still redirected to Google, and the infrastructure-admin group remained the sole IAP reader.
+Live validation on 2026-09-07 confirmed individual Google sign-in, credential refresh from a fresh process over SSH, and all seven MCP tools against the deployed monitor. Queries covered dev/api summaries, check history, resource details, redacted diagnostics, cursor pagination with a frozen time window, and a scoped one-minute deployment assessment using its default page size. The assessment reported observed errors and missing evidence. Anonymous API requests still redirected to Google. The subsequent authorized coworker access change adds healthcheck-access alongside infrastructure-admin; see the [security review](2026-09-07-monitor-security-review.md) for scope and verification limits.
 
 The SSH installation uses explicitly selected credential-file storage: mode `0600` files in a mode `0700` directory outside Git. macOS Keychain accepted login from a local Terminal but denied reads from SSH. The connector now distinguishes unavailable storage from missing Google authorization. [Linux/macOS development checks and PostgreSQL contract tests passed](https://github.com/snowcrash-labs/healthcheck-monitor/actions/runs/34106090813), including the credential-error regression. Setup and troubleshooting are in the [query access runbook](2026-09-06-monitoring-query-operations.md).
 
