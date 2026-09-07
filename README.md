@@ -200,6 +200,7 @@ The [development workflow passed Linux/macOS checks and PostgreSQL contract test
 
 ## Documentation
 
+- [Offline daily Q/A agent-skill reference](docs/offline-agent-skills/daily-q-a-and-review/README.md)
 - [Monitoring configuration, permissions, and operation](docs/plans/2026-09-05-monitor-operations.md)
 - [Dashboard setup, access controls, and history](docs/plans/2026-09-05-dashboard-operations.md)
 - [Google login, SSH setup, MCP/API queries, and known limitations](docs/plans/2026-09-06-monitoring-query-operations.md)
