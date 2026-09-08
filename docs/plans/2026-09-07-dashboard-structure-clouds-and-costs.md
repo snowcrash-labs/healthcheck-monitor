@@ -243,7 +243,7 @@ At implementation time, resolve current dependencies and run the requested `carg
 
 ## Inputs to resolve during implementation
 
-- Exact AWS organization/accounts, Azure tenants/subscriptions, deployed services, and approved read identities; verify through existing devops configuration and authorized read-only discovery.
+- Cloud scope discovery and workload identity setup are complete for four AWS accounts and two Azure subscriptions. Private devops configuration records their identifiers, regions, read roles, and Google federation. Operational checks and billing sources are enabled; see [deployment evidence and remaining coverage](2026-09-07-dashboard-billing-operations.md#verification-and-rollout).
 - Billing accounts/export locations, historical availability, source currencies, external vendor inventory, and who may view cost amounts. Do not infer this from health-monitoring access.
 - Application-service/environment mappings and shared-cost allocation rules; leave unknown mappings explicit until established.
 - Representative authenticated broken-link cases and recorded flicker traces. Do not declare either repaired from URL syntax tests or source inspection alone.
