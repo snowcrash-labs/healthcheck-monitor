@@ -34,6 +34,19 @@ jobs:
       - run: cargo check --locked -p healthcheck-monitor --no-default-features
       - run: cargo build --locked -p healthcheck-connect
       - run: cargo run --locked -p healthcheck-connect --bin connect-checksum -- target/debug/healthcheck-connect target/debug/healthcheck-connect.SHA256SUMS
+      - if: runner.os == 'Linux'
+        run: |
+          cargo build --locked -p healthcheck-monitor --bin healthcheck-monitor
+          cargo run --locked -p healthcheck-connect --bin connect-checksum -- target/debug/healthcheck-monitor target/debug/healthcheck-monitor.SHA256SUMS
+      - if: runner.os == 'Linux'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: healthcheck-monitor-${{ runner.os }}-${{ runner.arch }}
+          path: |
+            target/debug/healthcheck-monitor
+            target/debug/healthcheck-monitor.SHA256SUMS
+          if-no-files-found: error
+          retention-days: 7
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: healthcheck-connect-${{ runner.os }}-${{ runner.arch }}
