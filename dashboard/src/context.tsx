@@ -1,4 +1,4 @@
-import { createContext, createEffect, createSignal, onSettled, useContext } from "solid-js";
+import { createContext, createEffect, createSignal, onSettled, untrack, useContext } from "solid-js";
 import type { Accessor, ParentProps } from "solid-js";
 import { useLocation, useNavigate, useSearchParams } from "@solidjs/router";
 import { get, query } from "./api";
@@ -77,7 +77,7 @@ export function DashboardProvider(props: ParentProps) {
       });
       refresh();
     };
-    connect();
+    untrack(connect);
     window.addEventListener("offline", disconnect);
     window.addEventListener("online", connect);
     window.addEventListener("monitor:unauthorized", revoke);

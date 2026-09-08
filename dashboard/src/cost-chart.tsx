@@ -6,7 +6,21 @@ export function CostChart(props: { view: CostView; select: (day: string, key: st
   const [focusedDate, setFocusedDate] = createSignal<string>();
   const [width, setWidth] = createSignal(800);
   let host: HTMLDivElement | undefined;
-  onSettled(() => { if (!host) return; const observer = new ResizeObserver(([entry]) => { if (entry) setWidth(Math.max(160, entry.contentRect.width)); }); observer.observe(host); return () => observer.disconnect(); });
+  onSettled(() => {
+    if (!host) return;
+    let frame = 0; let measured = 0;
+    const observer = new ResizeObserver(([entry]) => {
+      if (!entry) return;
+      const next = Math.max(160, Math.round(entry.contentRect.width));
+      if (next === measured) return;
+      measured = next;
+      // Changing the SVG ratio changes its height; publish outside the resize delivery.
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => setWidth(next));
+    });
+    observer.observe(host);
+    return () => { observer.disconnect(); cancelAnimationFrame(frame); };
+  });
   const focused = () => points().find((point) => point.date === focusedDate());
   const points = () => props.view.series;
   const keys = createMemo(() => [...new Set(points().flatMap((point) => point.contributors.map((c) => c.key)))]);

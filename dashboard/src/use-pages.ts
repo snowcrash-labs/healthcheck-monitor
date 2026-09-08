@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, onSettled } from "solid-js";
+import { createEffect, createMemo, createSignal, onSettled, untrack } from "solid-js";
 import type { Accessor } from "solid-js";
 import type { z } from "zod";
 import { get } from "./api";
@@ -78,7 +78,8 @@ export function usePages<T extends { id: string }>(path: Accessor<string>, schem
     const timer = setTimeout(() => void collect(), 150);
     return () => clearTimeout(timer);
   });
-  createEffect(refresh, () => { if (activePath && !loading()) void collect(); });
+  // Loading and loaded cursors are snapshots; subscribing would cause a refetch loop.
+  createEffect(refresh, () => untrack(() => { if (activePath && !loading()) void collect(); }));
   createEffect(() => dashboard?.paused() ?? false, (paused) => { if (paused) { controller?.abort(); sequence++; setLoading(false); } });
   onSettled(() => () => { controller?.abort(); sequence++; cancelAnimationFrame(frame); });
   return { data, loading, error, next: () => void collect("next"), previous: () => void collect("previous"), retry: () => { if (resetCursor) { setPages([]); resetCursor = false; } void collect(); } };

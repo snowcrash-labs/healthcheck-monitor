@@ -20,7 +20,7 @@ async function billing(page: Page) {
 }
 
 test("overview puts problems and actual API billing above the target list", async ({ page }, info) => {
-  await fixture(page); await billing(page);
+  const diagnostics = await fixture(page); await billing(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
   await expect(page.getByText("USD 200.00", { exact: true }).first()).toBeVisible();
@@ -28,10 +28,11 @@ test("overview puts problems and actual API billing above the target list", asyn
   expect(chart && chart.y + chart.height).toBeLessThan(900);
   await expect(page.locator(".check-grid")).toHaveCount(0);
   await page.screenshot({ path: info.outputPath("overview.png"), fullPage: true });
+  diagnostics.assertReactiveDiagnostics();
 });
 
 test("cost chart selection filters the table and back restores the range", async ({ page }, info) => {
-  await fixture(page); await billing(page); await page.goto("/costs");
+  const diagnostics = await fixture(page); await billing(page); await page.goto("/costs");
   await expect(page.getByText("USD 200.00", { exact: true }).first()).toBeVisible();
   await expect(page.locator(".chart-bar")).toHaveCount(4);
   await page.locator(".chart-bar").first().focus();
@@ -47,6 +48,7 @@ test("cost chart selection filters the table and back restores the range", async
   await page.screenshot({ path: info.outputPath("costs-dark.png"), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+  diagnostics.assertReactiveDiagnostics();
 });
 
 test("resource preview, tab, row identity, and keyboard focus survive refreshes", async ({ page }) => {
@@ -83,7 +85,7 @@ test("revoked authorization removes previously loaded resource data", async ({ p
 
 test("a minute of revisions preserves resource rows and a paused view", async ({ page }) => {
   await page.clock.install();
-  await fixture(page);
+  const diagnostics = await fixture(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/resources");
   const row = page.locator(".resources-table tbody tr").first();
@@ -103,4 +105,5 @@ test("a minute of revisions preserves resource rows and a paused view", async ({
   await expect(page.getByText("Loaded view paused", { exact: false })).toHaveText(paused ?? "");
   await page.getByRole("button", { name: "Resume live", exact: true }).click();
   await expect(page.getByText("Loaded view paused", { exact: false })).toHaveCount(0);
+  diagnostics.assertReactiveDiagnostics();
 });

@@ -1,8 +1,12 @@
+import { expect } from "@playwright/test";
 import { z } from "zod";
 import type { Page } from "@playwright/test";
 import type { Check, Overview } from "../../src/schema";
 const kinds: Check[] = ["preflight", "inventory", "kubernetes", "edge", "managed", "queues", "releases", "github", "metrics", "logs", "alerts", "slo"];
 export async function fixture(page: Page) {
+  const diagnostics: string[] = [];
+  page.on("console", (message) => { if (/\[(?:STRICT_|PENDING_|REACTIVE_|NO_OWNER_|REACTIVITY_HALTED)/.test(message.text())) diagnostics.push(message.text()); });
+  page.on("pageerror", (error) => diagnostics.push(error.message));
   await page.addInitScript(() => {
     class Stream extends EventTarget {
       onopen: ((event: Event) => void) | null = null;
@@ -30,6 +34,7 @@ export async function fixture(page: Page) {
   const finding = { id: "dev/endpoints/api/endpoint-unreachable", target: "dev", resource: resource.id, check: "edge", rule: "endpoint-unreachable", severity: "error", observed_at: at, valid_until: expires, expected: "active", confidence: "direct", stale: false, evidence: ["endpoints"], diagnostic: { first_detected_at: "2026-09-05T00:00:00Z", last_detected_at: at, context, facts, links } };
   const operations = Array.from({ length: 137 }, (_, i) => ({ id: `operation-${String(i).padStart(4, "0")}`, coverage: i === 0 ? "truncated" : "complete", required: true, observed_at: at, records: 10, pages: 1, attempts: 1 }));
   await page.route("**/api/v1/overview**", (route) => route.fulfill({ json: overview }));
+  await page.route("**/api/v1/query/costs/**", (route) => route.fulfill({ status: 503, json: { error: "Billing is disabled in this fixture" } }));
   await page.route("**/api/v1/checks?**", (route) => route.fulfill({ json: { generation: 1, items: checks, next_cursor: null, previous_cursor: null, total: 12 } }));
   await page.route("**/api/v1/check?**", (route) => route.fulfill({ json: checks.find((check) => check.check === "releases") }));
   await page.route("**/api/v1/check/operations?**", (route) => {
@@ -52,4 +57,5 @@ export async function fixture(page: Page) {
   await page.route("**/api/v1/findings?**", (route) => route.fulfill({ json: { generation: 1, items: [finding], total: 1, next_cursor: null, previous_cursor: null } }));
   await page.route("**/api/v1/runs?**", (route) => route.fulfill({ json: { items: [], next_cursor: null, gaps: 0 } }));
   await page.route("**/api/v1/history?**", (route) => route.fulfill({ json: { items: [], next_cursor: null, gaps: 0 } }));
+  return { assertReactiveDiagnostics: () => expect(diagnostics).toEqual([]) };
 }

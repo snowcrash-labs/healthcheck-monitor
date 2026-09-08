@@ -1,7 +1,9 @@
 import { expect, test } from "@playwright/test";
 import { z } from "zod";
+import { fixture } from "./fixtures";
 
 test("infinite scrolling evicts and reloads pages while search covers all results", async ({ page }) => {
+  const diagnostics = await fixture(page);
   const rows = Array.from({ length: 400 }, (_, index) => ({
     id: `fixture/rows/${String(index).padStart(4, "0")}`, target: "fixture", check: "inventory", health: "healthy", expected: "active",
     observed_at: new Date().toISOString(), expires_at: new Date(Date.now() + 3600_000).toISOString(),
@@ -42,9 +44,11 @@ test("infinite scrolling evicts and reloads pages while search covers all result
   await page.getByRole("searchbox").fill("0005");
   await expect(page.locator("tbody tr")).toHaveCount(1);
   await expect(page.locator("tbody tr")).toHaveAttribute("data-row-key", "fixture/rows/0005");
+  diagnostics.assertReactiveDiagnostics();
 });
 
 test("failed initial reads can be retried", async ({ page }) => {
+  await fixture(page);
   let unavailable = true;
   await page.route(/\/api\/v1\/resources\?/, async (route) => {
     if (unavailable) { await route.fulfill({ status: 503 }); return; }
