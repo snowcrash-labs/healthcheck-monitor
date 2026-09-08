@@ -1,6 +1,6 @@
 # Dashboard structure, cloud coverage, and costs
 
-Status: implementation underway. The dashboard structure, investigation views, billing charts, GCP export ingestion, and explicit AWS/Azure query adapters are implemented locally. See [billing operations and verification](2026-09-07-dashboard-billing-operations.md) for source limits and remaining production acceptance. AWS/Azure export ingestion and provider federation remain distinct onboarding work; the query adapters do not imply invoice-complete coverage.
+Status: partially implemented. The dashboard structure, investigation views, billing charts, and GCP export ingestion are deployed. AWS/Azure monitoring adapters and explicit billing query adapters exist in code, but workload federation, production targets, and production billing sources are not configured. See [billing operations and verification](2026-09-07-dashboard-billing-operations.md) for verification and remaining work. AWS/Azure export ingestion also remains unfinished; query adapters do not imply invoice-complete coverage.
 
 ## Objective and decisions
 
