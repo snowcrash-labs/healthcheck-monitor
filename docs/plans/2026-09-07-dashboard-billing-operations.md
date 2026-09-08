@@ -81,13 +81,17 @@ Selecting Other excludes the parent period's seven largest contributors and open
 
 Local PostgreSQL tests cover exact credits, staged replacements, interrupted imports, native UUIDv7 keys, and cursor invalidation. Browser fixtures cover navigation, inspector state, bounded resource paging, chart selection, themes, and revoked authorization. A live native GCP probe imported 3,528 daily aggregates across seventeen projects for a two-day period; it used a temporary credential from the existing CLI sign-in. This validates query, projection, and publication, not local ADC renewal or production billing IAM.
 
-Native Azure collection exposed and fixed conflicting CLI credential selectors and numeric-offset metrics time ranges. A focused live collection returned 34 metric observations after the timestamp correction. Resource Health authentication failures, unsupported quota APIs, Key Vault metadata denial, and missing metrics remain explicit live coverage outcomes. AWS live validation requires a renewed session. Azure billing validation encountered provider throttling. AWS/Azure workload federation, production monitoring targets, and production billing sources remain unfinished.
+Production monitoring now includes four AWS accounts and two Azure subscriptions alongside GCP. All six cloud identities passed preflight from the VM using Google workload federation. Native inventory and metric probes returned evidence from both clouds; the continuous service schedules inventory, metrics, managed dependencies, queues, logs, alerts, edge discovery, and releases. Empty services and unavailable telemetry remain explicit outcomes. Registering an account does not establish full service coverage.
+
+Google metadata identity tokens are exchanged through native AWS STS and Azure Identity clients. AWS trusts the VM's subject, authorized party, and account-specific audience. Azure trusts the same subject and its token-exchange audience through a user-assigned identity. Refresh uses the VM identity; personal credential stores and cloud CLIs are absent from this production authentication path. Private devops configuration owns identifiers, trust, and grants.
+
+AWS organizational billing has imported through the management account. Azure billing exposed the provider's client-type rate limit; requests identify the monitor and honor the longest reported cooldown within a bounded deadline. The remaining older GCP backfill exceeded its original 2 GiB scan limit. Production configuration raises that limit to 4 GiB with a separate 20 GiB daily allowance. Resumed jobs reserve any increase before execution, and pending reservations survive midnight.
 
 The dashboard and GCP billing were deployed from revision `7c298ae` on 2026-09-08 UTC, with billing approved for every existing IAP dashboard reader. Both configured GCP exports imported successfully through the VM identity. An authenticated billing query returned real daily series over HTTP/2; an anonymous request was denied. Backfill continues in bounded batches. The deployment was explicitly authorized outside the pending CI/CD PR; routine delivery retains its main-branch and review boundaries.
 
 Startup verification includes an existing production snapshot. Global JSON arbitrary-precision mode is incompatible with tagged floating-point health observations; exact Azure billing numbers use raw JSON tokens only in that adapter. Readiness requires successful state restoration and a runtime heartbeat, so a listening HTTP socket alone cannot approve a deployment. The incompatible initial release was rolled back before the corrected release was activated.
 
-Do not claim complete cross-cloud rollout from local fixtures. Remaining acceptance includes authenticated resource-link checks across configured families, sustained VM load measurements, reconciled imported billing periods, and AWS/Azure production identities and targets.
+Remaining acceptance includes authenticated resource-link checks across configured families, sustained VM load measurements, reconciled imported billing periods, and resolution of provider coverage gaps. AWS Health entitlement, Azure Resource Health authentication despite provider registration, missing metrics, and history persistence gaps remain visible. Inventory and completed authentication alone cannot establish normal client behavior.
 
 ## References
 
@@ -97,3 +101,6 @@ Do not claim complete cross-cloud rollout from local fixtures. Remaining accepta
 - [BigQuery scan controls](https://docs.cloud.google.com/bigquery/docs/best-practices-costs).
 - [AWS Cost Explorer query API](https://docs.aws.amazon.com/aws-cost-management/latest/APIReference/API_GetCostAndUsage.html).
 - [Azure Cost Management query API](https://learn.microsoft.com/en-us/rest/api/cost-management/query/usage?view=rest-cost-management-2026-06-01).
+- [Microsoft cost query pagination and rate-limit guidance](https://github.com/microsoft/azure-skills/blob/main/skills/azure-cost/cost-query/workflow.md).
+- [AWS Google workload identity](https://aws.amazon.com/blogs/security/access-aws-using-a-google-cloud-platform-native-workload-identity/).
+- [Azure Google workload federation](https://learn.microsoft.com/en-us/entra/workload-id/workload-identity-federation-google-cloud).

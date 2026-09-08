@@ -47,6 +47,7 @@ impl Reader {
         let options = source.azure_query.as_ref().ok_or(Error::Forbidden)?;
         let settings = Settings {
             response_bytes: 8 * 1024 * 1024,
+            operation_timeout: monitor_core::config::duration::Span(240),
             ..Default::default()
         };
         let http = Http::shared(pools, &settings)?;
@@ -86,6 +87,7 @@ impl Reader {
             .http
             .client()
             .post(url)
+            .header("ClientType", "SoundpatrolHealthcheckMonitor")
             .bearer_auth(token)
             .json(&body)
             .build()

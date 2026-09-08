@@ -219,6 +219,7 @@ async fn corrections_partial_imports_cursors_and_signed_totals()
         i64::from(config.backfill())
     );
     billing::drilldown::verify(&history, &source, &config, period.to).await?;
+    billing::reservation::verify(&history, &source, &config, period).await?;
     history.cost_cleanup().await?;
     Ok(())
 }

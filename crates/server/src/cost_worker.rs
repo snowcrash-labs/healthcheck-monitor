@@ -84,7 +84,7 @@ pub async fn run(
                 if history.cost_fault(&source.id, fault).await.is_err() {
                     tracing::warn!("Billing fault could not be persisted");
                 }
-                tracing::warn!(fault, "Billing import deferred");
+                tracing::warn!(source = source.id, fault, "Billing import deferred");
             }
         }
         if history.cost_cleanup().await.is_err() {

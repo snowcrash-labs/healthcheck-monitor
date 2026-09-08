@@ -153,12 +153,7 @@ impl Http {
                 }
             })?;
         if response.status() == StatusCode::TOO_MANY_REQUESTS {
-            let delay = response
-                .headers()
-                .get("retry-after")
-                .and_then(|v| v.to_str().ok())
-                .and_then(|s| s.parse::<u64>().ok())
-                .map(Duration::from_secs);
+            let delay = crate::retry_delay::from_headers(response.headers());
             drop(response);
             drop(permit);
             if let Some(delay) = delay {

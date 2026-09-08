@@ -53,39 +53,35 @@ impl History {
                 {
                     return Err(Error::Record);
                 }
-                let pending: Option<(Id, NaiveDate, NaiveDate)> = i::table
+                let pending: Option<(Id, NaiveDate, NaiveDate, i64)> = i::table
                     .filter(i::cost_import_source_id.eq(stored.cost_source_id))
                     .filter(i::cost_import_published_at.is_null())
                     .order(i::cost_import_started_at.desc())
-                    .select((i::cost_import_id, i::cost_import_from, i::cost_import_to))
+                    .select((
+                        i::cost_import_id,
+                        i::cost_import_from,
+                        i::cost_import_to,
+                        i::cost_import_reserved_bytes,
+                    ))
                     .first(c)
                     .await
                     .optional()?;
-                let (id, from, to) = if let Some(pending) = pending {
-                    pending
-                } else {
-                    let day = Utc::now()
-                        .date_naive()
-                        .and_hms_opt(0, 0, 0)
-                        .ok_or(Error::Record)?
-                        .and_utc();
-                    let reservations: Vec<(i64, Option<i64>)> = i::table
-                        .filter(i::cost_import_started_at.ge(day))
-                        .select((i::cost_import_reserved_bytes, i::cost_import_billed_bytes))
-                        .limit(4097)
-                        .load(c)
+                let (id, from, to) = if let Some((id, from, to, reserved)) = pending {
+                    if reservation > reserved as u64 {
+                        crate::cost_accounting::reserve(
+                            c,
+                            reservation - reserved as u64,
+                            settings.daily_bytes(),
+                        )
                         .await?;
-                    let used = reservations
-                        .iter()
-                        .try_fold(0u64, |sum, (reserved, billed)| {
-                            sum.checked_add(billed.unwrap_or(*reserved) as u64)
-                                .ok_or(Error::Record)
-                        })?;
-                    if reservations.len() > 4096
-                        || used.saturating_add(reservation) > settings.daily_bytes()
-                    {
-                        return Err(Error::Record);
+                        diesel::update(i::table.find(id))
+                            .set(i::cost_import_reserved_bytes.eq(reservation as i64))
+                            .execute(c)
+                            .await?;
                     }
+                    (id, from, to)
+                } else {
+                    crate::cost_accounting::reserve(c, reservation, settings.daily_bytes()).await?;
                     let id = diesel::insert_into(i::table)
                         .values((
                             i::cost_import_source_id.eq(stored.cost_source_id),

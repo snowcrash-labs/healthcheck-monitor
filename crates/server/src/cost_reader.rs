@@ -77,7 +77,7 @@ pub async fn query_import(
         let (mut rows, next) = reader
             .page(import.period, cursor.clone(), stop)
             .await
-            .map_err(|_| "Billing query failed or access is unavailable")?;
+            .map_err(query_fault)?;
         count += rows.len();
         if count > config.rows() {
             return Err("Billing aggregate exceeds its record bound");
@@ -103,4 +103,20 @@ pub async fn query_import(
         cursor = next;
     }
     Err("Billing query exceeded its page allowance")
+}
+
+/// Only the closed transport error vocabulary is safe to persist and show to readers.
+fn query_fault(error: Error) -> &'static str {
+    match error {
+        Error::Authentication => "Billing credentials unavailable or expired",
+        Error::Denied => "Billing source access denied",
+        Error::Throttled => "Billing provider rate limit reached; import will retry",
+        Error::Unavailable => "Billing provider unavailable; import will retry",
+        Error::Timeout => "Billing query deadline expired; import will retry",
+        Error::Missing => "Billing provider omitted required fields",
+        Error::Malformed => "Billing provider returned an invalid aggregate",
+        Error::Limit => "Billing response exceeds its configured limit",
+        Error::Cancelled => "Billing query cancelled; previous totals retained",
+        Error::Forbidden => "Billing query rejected by the read-only policy",
+    }
 }

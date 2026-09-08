@@ -16,6 +16,7 @@ struct Source {
     id: String,
     state: String,
     fault: Option<String>,
+    imported_at: Option<String>,
 }
 
 #[tokio::test]
@@ -50,6 +51,22 @@ async fn iap_reader_can_query_billing_while_anonymous_access_is_denied()
         !view.series.is_empty(),
         "no imported billing series is available yet"
     );
+    if let Ok(required) = std::env::var("HEALTHCHECK_EXPECT_COST_SOURCES") {
+        if required.len() > 1024 || required.split(',').count() > 16 {
+            return Err("invalid expected billing source list".into());
+        }
+        for id in required.split(',') {
+            let source = view
+                .sources
+                .iter()
+                .find(|source| source.id == id)
+                .ok_or("expected billing source missing")?;
+            assert!(
+                source.imported_at.is_some() && source.fault.is_none(),
+                "expected source has no successful current import: {id}"
+            );
+        }
+    }
     for source in view.sources {
         tracing::info!(
             source = source.id,

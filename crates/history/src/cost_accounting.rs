@@ -7,6 +7,39 @@ use crate::{
 };
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
+
+/// Unfinished jobs retain their reservation across midnight and configuration changes.
+pub(crate) async fn reserve(
+    connection: &mut diesel_async::AsyncPgConnection,
+    additional: u64,
+    allowance: u64,
+) -> Result<(), Error> {
+    let day = chrono::Utc::now()
+        .date_naive()
+        .and_hms_opt(0, 0, 0)
+        .ok_or(Error::Record)?
+        .and_utc();
+    let reservations: Vec<(i64, Option<i64>)> = i::table
+        .filter(
+            i::cost_import_started_at
+                .ge(day)
+                .or(i::cost_import_published_at.is_null()),
+        )
+        .select((i::cost_import_reserved_bytes, i::cost_import_billed_bytes))
+        .limit(4097)
+        .load(connection)
+        .await?;
+    let used = reservations
+        .iter()
+        .try_fold(0u64, |sum, (reserved, billed)| {
+            sum.checked_add(billed.unwrap_or(*reserved) as u64)
+                .ok_or(Error::Record)
+        })?;
+    if reservations.len() > 4096 || used.saturating_add(additional) > allowance {
+        return Err(Error::Record);
+    }
+    Ok(())
+}
 impl History {
     pub async fn cost_settle(&self, import: &Import, bytes: u64) -> Result<(), Error> {
         let bytes = i64::try_from(bytes).map_err(|_| Error::Record)?;

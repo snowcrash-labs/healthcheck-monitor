@@ -26,6 +26,7 @@ pub mod projection;
 pub mod queues;
 mod read_policy;
 pub mod resource_context;
+mod retry_delay;
 pub mod transport;
 mod worker_index;
 pub mod xml;
