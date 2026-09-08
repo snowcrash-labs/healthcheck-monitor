@@ -88,5 +88,53 @@ async fn iap_reader_can_query_billing_while_anonymous_access_is_denied()
         );
     }
     tracing::info!(points = view.series.len(), protocol = ?version, "Authenticated billing query verified");
+    verify_cost_asset(&client).await?;
+    Ok(())
+}
+
+/// An API success cannot prove that the deployed binary embeds the matching browser contract.
+async fn verify_cost_asset(client: &Client) -> Result<(), Box<dyn std::error::Error>> {
+    use sha2::{Digest, Sha256};
+    let Ok(asset) = std::env::var("HEALTHCHECK_DASHBOARD_COST_ASSET") else {
+        return Ok(());
+    };
+    let name = asset
+        .strip_prefix("assets/cost-schema-")
+        .and_then(|s| s.strip_suffix(".js"))
+        .ok_or("invalid billing asset path")?;
+    if name.is_empty()
+        || name.len() > 128
+        || !name
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"-_".contains(&b))
+    {
+        return Err("invalid billing asset path".into());
+    }
+    let expected = std::env::var("HEALTHCHECK_DASHBOARD_COST_ASSET_SHA256")?;
+    if expected.len() != 64 || !expected.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err("invalid billing asset checksum".into());
+    }
+    let mut response = client
+        .http
+        .get(client.config.server.join(&asset)?)
+        .bearer_auth(client.token().await?)
+        .send()
+        .await?;
+    if !response.status().is_success() {
+        return Err("billing asset unavailable".into());
+    }
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response.chunk().await? {
+        if bytes.len().saturating_add(chunk.len()) > 2 * 1024 * 1024 {
+            return Err("billing asset exceeds response bound".into());
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    let actual: String = Sha256::digest(&bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    assert_eq!(actual, expected.to_ascii_lowercase());
+    tracing::info!(asset, "Deployed billing contract asset verified");
     Ok(())
 }

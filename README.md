@@ -209,4 +209,5 @@ The [development workflow passed Linux/macOS checks and PostgreSQL contract test
 - [Backend design](docs/architecture/be/design.md) and [frontend conventions](docs/design/fe/dashboard.md)
 - [Monitoring verification](docs/plans/2026-09-05-monitor-verification.md) and [dashboard verification](docs/plans/2026-09-05-persistent-dashboard.md)
 - [Collection optimization and concurrency measurements](docs/plans/2026-09-05-collection-optimization.md)
+- [Gap-closure priorities](docs/plans/2026-09-07-monitoring-gap-closure.md), [operational coverage and freshness](docs/plans/2026-09-07-cloud-coverage-and-freshness.md), and [billing completeness and contracts](docs/plans/2026-09-07-billing-completeness-and-contracts.md)
 - [Rust/Python benchmark and measurement limits](docs/plans/2026-09-05-release-python-benchmark.md)
