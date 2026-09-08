@@ -68,3 +68,25 @@ jobs:
       - run: cargo test --locked -p monitor-history --test query_history -- --include-ignored
         env:
           HEALTHCHECK_TEST_DATABASE_URL: postgresql://monitor_test:local-ci-only@127.0.0.1:5432/healthcheck_monitor_dashboard_test
+      - run: docker exec ${{ job.services.postgres.id }} psql -U monitor_test -d postgres -v ON_ERROR_STOP=1 -c 'CREATE DATABASE healthcheck_monitor_costs_test'
+      - run: cargo test --locked -p monitor-history --test costs -- --include-ignored
+        env:
+          HEALTHCHECK_COST_TEST_DATABASE_URL: postgresql://monitor_test:local-ci-only@127.0.0.1:5432/healthcheck_monitor_costs_test
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '26'
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+      - run: npm ci
+        working-directory: dashboard
+      - run: npm exec playwright install --with-deps chromium firefox webkit
+        working-directory: dashboard
+      - run: npm run test:browser
+        working-directory: dashboard
