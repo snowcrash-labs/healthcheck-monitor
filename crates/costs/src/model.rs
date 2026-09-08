@@ -53,8 +53,8 @@ impl Amount {
         self.0.clone()
     }
     pub fn from_decimal(value: Decimal) -> Result<Self, Error> {
-        // NUMERIC(38,18) retains fine-grained provider charges without binary floating point.
-        if value.fractional_digit_count() > 18
+        // NUMERIC(58,38) preserves submicro usage charges and twenty integer digits.
+        if value.fractional_digit_count() > 38
             || value.abs() >= Decimal::from(10_000_000_000_000_000_000u64) * 10
         {
             return Err(Error::Amount);
@@ -69,10 +69,10 @@ impl TryFrom<String> for Amount {
     type Error = Error;
     fn try_from(value: String) -> Result<Self, Error> {
         if value.is_empty()
-            || value.len() > 40
+            || value.len() > 60
             || value
                 .split_once('.')
-                .is_some_and(|(_, fraction)| fraction.len() > 18)
+                .is_some_and(|(_, fraction)| fraction.len() > 38)
             || value
                 .bytes()
                 .any(|b| !b.is_ascii_digit() && b != b'.' && b != b'-')

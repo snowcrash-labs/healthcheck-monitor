@@ -90,14 +90,13 @@ fn nats_aggregates_are_numeric_and_bad_headers_fail() {
 fn log_grouping_never_retains_customer_or_credential_values()
 -> Result<(), Box<dyn std::error::Error>> {
     let mut groups = Groups::default();
+    // A live timestamp can coincidentally contain the numeric customer identifiers below.
+    let at = "2026-01-01T00:00:00Z".parse()?;
     groups.add(
         "task 123 failed for customer alice@example.com Bearer abcdefghijklmnopqrstuvwxyz",
-        chrono::Utc::now(),
+        at,
     );
-    groups.add(
-        "task 456 failed for customer bob@example.com",
-        chrono::Utc::now(),
-    );
+    groups.add("task 456 failed for customer bob@example.com", at);
     let values = groups.finish();
     assert_eq!(values.len(), 1);
     let encoded = serde_json::to_string(&values)?;

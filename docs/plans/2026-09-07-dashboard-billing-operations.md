@@ -59,13 +59,13 @@ AWS sources use `aws_query = { region = "us-east-1" }` and a twelve-digit billin
 
 ## Storage and recovery
 
-PostgreSQL owns source identities, import attempts, daily aggregates, and the published day-to-import mapping. Primary keys use native `uuidv7()`; money uses `numeric(38,18)`, with validated decimal strings at the API boundary. Unknown dimensions are SQL nulls. Raw exports remain authoritative. Every stored aggregate can be rebuilt by importing the same source period.
+PostgreSQL owns source identities, import attempts, daily aggregates, and the published day-to-import mapping. Primary keys use native `uuidv7()`; money uses `numeric(58,38)`, with validated decimal strings at the API boundary. Azure returns valid fractional usage charges beyond eighteen decimal places; the wider scale preserves their source values. Unknown dimensions are SQL nulls. Raw exports remain authoritative. Every stored aggregate can be rebuilt by importing the same source period.
 
 Imports stage bounded batches and publish all affected day mappings in one short transaction. A stopped or malformed import cannot replace the previous published partitions. BigQuery jobs use the durable database import identifier, so retrying after a timeout resumes the existing paid job. Scan allowance is reserved before submission and settled to reported bytes after completion. Imports, billing reads, and health-history writes have separate bounded database connections; billing queries have separate admission.
 
-Backfill uses at most seven days per import, prioritizes the current period, and continues missing intervals in bounded passes. Defaults retain 400 days and revisit closed retained partitions for late adjustments. Response bytes, page counts, aggregate rows, scan bytes, and execution time are finite. An exhausted allowance or limit creates a source fault; it never substitutes zero costs.
+GCP and Azure backfill use at most seven days per import, prioritize the current period, and continue missing intervals in bounded passes. AWS queries its configured history once daily to reduce paid requests. Defaults retain 400 days and revisit closed retained partitions for late adjustments. Response bytes, page counts, aggregate rows, scan bytes, and execution time are finite. An exhausted allowance or limit creates a source fault; it never substitutes zero costs.
 
-Embedded migrations use a native PostgreSQL advisory lock on their dedicated connection. The lock survives cancellation of the startup await until the migration connection closes. Schema changes are additive for the previous production binary. Disable billing and roll back the binary without reverting migrations or deleting charges. Retention removes only monitor-owned derived rows.
+Embedded migrations use a native PostgreSQL advisory lock on their dedicated connection. The lock survives cancellation of the startup await until the migration connection closes. The decimal-scale migration preserves existing amounts. After higher-precision charges publish, older binaries cannot decode those values; disable billing when rolling back across this change. Keep the widened database columns and retained charges. Retention removes only monitor-owned derived rows.
 
 ## Read API
 

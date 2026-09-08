@@ -13,13 +13,17 @@ fn amounts_reject_lossy_and_oversized_values() -> Result<(), Box<dyn std::error:
     for bad in [
         "NaN",
         "1e20",
-        "1.0000000000000000001",
+        "1.000000000000000000000000000000000000001",
         "100000000000000000000",
         " 1",
         "+1",
     ] {
         assert!(Amount::try_from(bad.to_owned()).is_err(), "{bad}");
     }
+    assert_eq!(
+        String::from(Amount::provider("1e-38")?),
+        "0.00000000000000000000000000000000000001"
+    );
     Ok(())
 }
 #[test]

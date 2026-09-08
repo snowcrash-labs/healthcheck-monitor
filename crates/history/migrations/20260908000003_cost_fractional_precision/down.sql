@@ -1,0 +1,1 @@
+-- Preserve exact charges on rollback; narrowing the scale would silently round stored costs.
