@@ -31,12 +31,12 @@ export function money(value: string | null, currency: string): string {
   const whole = (cents / 100n).toLocaleString("en-US");
   return `${raw < 0n ? "−" : ""}${currency} ${whole}.${(cents % 100n).toString().padStart(2, "0")}`;
 }
-export function difference(current: string | null, previous: string | null): string {
-  if (current === null || previous === null) return "Comparison unavailable";
+export function difference(current: string | null, previous: string | null, compact = false): string {
+  if (current === null || previous === null) return compact ? "Not available" : "Comparison unavailable";
   const before = units(previous);
-  if (before <= 0n) return "Percentage comparison unavailable";
+  if (before <= 0n) return compact ? "Not applicable" : "Percentage comparison unavailable";
   const change = Number((units(current) - before) * 1000n / before) / 10;
-  return `${change > 0 ? "+" : ""}${change.toFixed(1)}% vs previous period`;
+  return `${change > 0 ? "+" : ""}${change.toFixed(1)}%${compact ? "" : " vs previous period"}`;
 }
 export function contributorLabel(value: string): string { if (value.startsWith("v:")) value = value.slice(2); return value === "__other__" ? "Other" : value === "" ? "Unallocated" : value === "gcp" ? "Google Cloud" : value === "aws" ? "AWS" : value === "azure" ? "Azure" : value; }
 export function colorClass(value: string): string {

@@ -38,8 +38,8 @@ impl History {
             return Err(Error::Revision);
         }
         let mut normalized = filter.clone();
-        normalized.from = Some(period.from);
-        normalized.to = Some(period.to);
+        normalized.from = Some(full.from);
+        normalized.to = Some(full.to);
         normalized.cursor = None;
         normalized.revision = None;
         let fingerprint = hex_digest(serde_json::to_vec(&normalized).map_err(|_| Error::Record)?);
@@ -54,12 +54,13 @@ impl History {
         let mut buckets: Vec<Bucket> = Vec::new();
         let mut breakdown: Vec<Contributor> = Vec::new();
         let contributor_count: i64;
+        let mut excluded: Vec<String> = Vec::new();
         // Each expansion has a statically typed GROUP BY and uses the same scope predicates.
         macro_rules! filter_query {
-            ($query:expr, $from:expr, $dimension:expr) => {{
+            ($query:expr, $from:expr, $to:expr, $dimension:expr, $search:expr) => {{
                 let mut query = $query
                     .filter(d::cost_daily_day.ge($from))
-                    .filter(d::cost_daily_day.lt(period.to))
+                    .filter(d::cost_daily_day.lt($to))
                     .filter(d::cost_daily_currency.eq(currency))
                     .filter(s::cost_source_name.eq_any(&source_names));
                 if let Some(provider) = filter.provider {
@@ -83,10 +84,13 @@ impl History {
                 if let Some(resource) = &filter.resource {
                     query = query.filter(d::cost_daily_resource.eq(resource));
                 }
-                if let Some(key) = &filter.contributor {
+                query = query.filter($dimension.ne_all(&excluded));
+                if let Some(key) = &filter.contributor
+                    && key != "__other__"
+                {
                     query = query.filter($dimension.eq(key));
                 }
-                if let Some(q) = &filter.q {
+                if $search && let Some(q) = &filter.q {
                     let pattern = format!(
                         "%{}%",
                         q.replace('\\', "\\\\")
@@ -111,6 +115,14 @@ impl History {
         }
         macro_rules! aggregate {
             ($dimension:expr, $group:expr) => {{
+                // Other keeps the original range's seven leading contributors excluded while searching.
+                if filter.contributor.as_deref() == Some("__other__") {
+                    let query = table!().group_by($group)
+                        .select($dimension).into_boxed::<diesel::pg::Pg>();
+                    excluded = filter_query!(query, full.from, full.to, $dimension, false)
+                        .order((diesel::dsl::sum(d::cost_daily_billed).desc(), $dimension.asc()))
+                        .limit(7).load(&mut c).await?;
+                }
                 let query = table!()
                     .group_by($group)
                     .select(($dimension, diesel::dsl::sum(d::cost_daily_billed)))
@@ -126,7 +138,7 @@ impl History {
                     None => query,
                 };
                 let rows: Vec<(String, Option<Decimal>)> =
-                    filter_query!(query, period.from, $dimension)
+                    filter_query!(query, period.from, period.to, $dimension, true)
                         .order((
                             diesel::dsl::sum(d::cost_daily_billed).desc(),
                             $dimension.asc(),
@@ -142,10 +154,23 @@ impl History {
                         previous: None,
                     });
                 }
+                let page_keys: Vec<_> = breakdown.iter().map(|row| &row.key).collect();
+                let query = table!().group_by($group)
+                    .select(($dimension, diesel::dsl::sum(d::cost_daily_billed)))
+                    .into_boxed::<diesel::pg::Pg>();
+                let prior: Vec<(String, Option<Decimal>)> =
+                    filter_query!(query, previous.from, previous.to, $dimension, true)
+                        .filter($dimension.eq_any(&page_keys)).limit((limit + 1) as i64)
+                        .load(&mut c).await?;
+                let mut prior: std::collections::BTreeMap<_, _> = prior.into_iter().collect();
+                for row in &mut breakdown {
+                    row.previous = Some(Amount::from_decimal(prior.remove(&row.key).flatten()
+                        .unwrap_or(Decimal::from(0))).map_err(|_| Error::Record)?);
+                }
                 let count = table!()
                     .select(diesel::dsl::count($dimension).aggregate_distinct())
                     .into_boxed::<diesel::pg::Pg>();
-                contributor_count = filter_query!(count, period.from, $dimension)
+                contributor_count = filter_query!(count, period.from, period.to, $dimension, true)
                     .get_result(&mut c)
                     .await?;
                 let query = table!()
@@ -153,7 +178,7 @@ impl History {
                     .select(($dimension, diesel::dsl::sum(d::cost_daily_billed)))
                     .into_boxed::<diesel::pg::Pg>();
                 let top: Vec<(String, Option<Decimal>)> =
-                    filter_query!(query, period.from, $dimension)
+                    filter_query!(query, period.from, period.to, $dimension, true)
                         .order((
                             diesel::dsl::sum(d::cost_daily_billed).desc(),
                             $dimension.asc(),
@@ -171,7 +196,7 @@ impl History {
                     ))
                     .into_boxed::<diesel::pg::Pg>();
                 let rows: Vec<(NaiveDate, String, Option<Decimal>)> =
-                    filter_query!(query, previous.from, $dimension)
+                    filter_query!(query, previous.from, period.to, $dimension, true)
                         .filter($dimension.eq_any(&keys))
                         .limit(6401)
                         .load(&mut c)
@@ -192,7 +217,7 @@ impl History {
                     .select((d::cost_daily_day, diesel::dsl::sum(d::cost_daily_billed)))
                     .into_boxed::<diesel::pg::Pg>();
                 let other: Vec<(NaiveDate, Option<Decimal>)> =
-                    filter_query!(query, previous.from, $dimension)
+                    filter_query!(query, previous.from, period.to, $dimension, true)
                         .filter($dimension.ne_all(&keys))
                         .limit(801)
                         .load(&mut c)
@@ -210,54 +235,27 @@ impl History {
                 }
             }};
         }
+        macro_rules! column {
+            ($column:expr) => {
+                aggregate!(group_key("v:", $column.nullable()), $column)
+            };
+        }
         match filter.group {
-            Group::Provider => {
-                aggregate!(
-                    group_key(
-                        "v:",
-                        s::cost_source_provider
-                            .cast::<diesel::sql_types::Text>()
-                            .nullable()
-                    ),
+            Group::Provider => aggregate!(
+                group_key(
+                    "v:",
                     s::cost_source_provider
-                );
-            }
-            Group::Product => {
-                aggregate!(
-                    group_key("v:", d::cost_daily_product.nullable()),
-                    d::cost_daily_product
-                );
-            }
-            Group::Scope => {
-                aggregate!(
-                    group_key("v:", d::cost_daily_scope.nullable()),
-                    d::cost_daily_scope
-                );
-            }
-            Group::Target => {
-                aggregate!(
-                    group_key("v:", d::cost_daily_target.nullable()),
-                    d::cost_daily_target
-                );
-            }
-            Group::Region => {
-                aggregate!(
-                    group_key("v:", d::cost_daily_region.nullable()),
-                    d::cost_daily_region
-                );
-            }
-            Group::Category => {
-                aggregate!(
-                    group_key("v:", d::cost_daily_category.nullable()),
-                    d::cost_daily_category
-                );
-            }
-            Group::Resource => {
-                aggregate!(
-                    group_key("v:", d::cost_daily_resource.nullable()),
-                    d::cost_daily_resource
-                );
-            }
+                        .cast::<diesel::sql_types::Text>()
+                        .nullable()
+                ),
+                s::cost_source_provider
+            ),
+            Group::Product => column!(d::cost_daily_product),
+            Group::Scope => column!(d::cost_daily_scope),
+            Group::Target => column!(d::cost_daily_target),
+            Group::Region => column!(d::cost_daily_region),
+            Group::Category => column!(d::cost_daily_category),
+            Group::Resource => column!(d::cost_daily_resource),
         }
         drop(c);
         self.cost_response(

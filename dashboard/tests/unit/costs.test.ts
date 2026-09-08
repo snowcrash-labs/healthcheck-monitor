@@ -16,6 +16,9 @@ describe("billing amounts", () => {
     expect(difference("10", "0")).toBe("Percentage comparison unavailable");
     expect(difference("10", "-5")).toBe("Percentage comparison unavailable");
     expect(difference("110", "100")).toBe("+10.0% vs previous period");
+    expect(difference("110", "100", true)).toBe("+10.0%");
+    expect(difference("10", null, true)).toBe("Not available");
+    expect(difference("10", "0", true)).toBe("Not applicable");
   });
   it("keeps contributor colors stable across reordering", () => {
     expect(colorClass("Compute")).toBe(colorClass("Compute"));

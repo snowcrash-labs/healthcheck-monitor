@@ -75,6 +75,8 @@ Cost dates are UTC and use an inclusive `from` and exclusive `to`. The default i
 
 Breakdown cursors bind filters, currency, period, publication revision, and the ordered amount/key boundary. A changed publication returns HTTP 409 with `refresh_required`. The client keeps the previous view until refresh. Contributor keys are opaque; `v:` represents an unallocated dimension and `__other__` is the chart remainder. Totals and chart reduction include all matched contributors, independently of the visible page.
 
+Selecting Other excludes the parent period's seven largest contributors and opens the remaining searchable, paged breakdown. Search then narrows those remaining contributors. Selecting a day retains the parent date range for that exclusion and cursor binding. Contributor comparisons are batched for the visible page and remain unavailable until both comparison periods have complete imported day coverage. Missing resource or environment attribution is labeled Unallocated; configured environment mappings are distinguished from provider-reported dimensions.
+
 ## Verification and rollout
 
 Local PostgreSQL tests cover exact credits, staged replacements, interrupted imports, native UUIDv7 keys, and cursor invalidation. Browser fixtures cover navigation, inspector state, bounded resource paging, chart selection, themes, and revoked authorization. A live native GCP probe imported 3,528 daily aggregates across seventeen projects for a two-day period; it used a temporary credential from the existing CLI sign-in. This validates query, projection, and publication, not local ADC renewal or production billing IAM.

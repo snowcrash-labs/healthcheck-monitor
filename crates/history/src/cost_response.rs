@@ -66,6 +66,11 @@ impl History {
             None
         };
         breakdown.truncate(limit);
+        if !previous_complete {
+            for row in &mut breakdown {
+                row.previous = None;
+            }
+        }
         // Do not mix new partitions into a response selected against an older publication.
         let after = crate::cost_coverage::statuses(config, filter, self.cost_status().await?);
         if serde_json::to_vec(&sources).ok() != serde_json::to_vec(&after).ok() {

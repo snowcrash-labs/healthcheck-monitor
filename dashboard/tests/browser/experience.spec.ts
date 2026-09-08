@@ -2,15 +2,16 @@ import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import { fixture } from "./fixtures";
 
-async function billing(page: Page) {
+async function billing(page: Page, withOther = false) {
   const points = [
     { date: "2026-09-05", total: "110", previous: "100", contributors: [{ key: "gcp", amount: "100", previous: null }, { key: "aws", amount: "10", previous: null }] },
     { date: "2026-09-06", total: "90", previous: "80", contributors: [{ key: "gcp", amount: "100", previous: null }, { key: "aws", amount: "-10", previous: null }] },
   ];
+  if (withOther) for (const point of points) point.contributors.push({ key: "__other__", amount: "5", previous: null });
   await page.route("**/api/v1/query/costs/series**", (route) => {
     const url = new URL(route.request().url()); const day = url.searchParams.get("day"); const key = url.searchParams.get("contributor");
     const series = points.filter((p) => !day || p.date === day).map((p) => {
-      const contributors = p.contributors.filter((c) => !key || c.key === key);
+      const contributors = p.contributors.filter((c) => !key || c.key === key).map((c) => key === "__other__" ? { ...c, key: "v:" } : c);
       return { ...p, contributors, total: String(contributors.reduce((sum, c) => sum + Number(c.amount), 0)) };
     });
     const totals = new Map<string, number>();
@@ -28,6 +29,19 @@ test("overview puts problems and actual API billing above the target list", asyn
   expect(chart && chart.y + chart.height).toBeLessThan(900);
   await expect(page.locator(".check-grid")).toHaveCount(0);
   await page.screenshot({ path: info.outputPath("overview.png"), fullPage: true });
+  diagnostics.assertReactiveDiagnostics();
+});
+
+test("Other opens its remaining contributors and labels missing attribution", async ({ page }) => {
+  const diagnostics = await fixture(page); await billing(page, true); await page.goto("/costs");
+  await page.locator(".chart-legend").getByRole("button", { name: "Other", exact: true }).click();
+  await expect(page).toHaveURL(/contributor=__other__/);
+  await expect(page).toHaveURL(/from=2026-09-01/);
+  await expect(page.getByText("USD 10.00", { exact: true }).first()).toBeVisible();
+  const breakdown = page.locator("section").filter({ has: page.getByRole("heading", { name: "Cost breakdown" }) });
+  await expect(breakdown.getByRole("button", { name: "Unallocated", exact: true })).toBeVisible();
+  await expect(breakdown.getByRole("cell", { name: "Unallocated", exact: true }).last()).toBeVisible();
+  await expect(breakdown.getByRole("columnheader", { name: "Change", exact: true })).toBeVisible();
   diagnostics.assertReactiveDiagnostics();
 });
 

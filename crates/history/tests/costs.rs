@@ -5,6 +5,8 @@ use monitor_costs::{
     query::{Filter, Group, Period},
 };
 use monitor_history::History;
+#[path = "costs/mod.rs"]
+mod billing;
 
 fn charge(
     day: chrono::NaiveDate,
@@ -198,6 +200,7 @@ async fn corrections_partial_imports_cursors_and_signed_totals()
         .await?
         .ok_or("backfill period")?;
     assert!((scheduled.to - scheduled.from).num_days() <= 7);
+    billing::drilldown::verify(&history, &source, &config, period.to).await?;
     history.cost_cleanup().await?;
     Ok(())
 }
