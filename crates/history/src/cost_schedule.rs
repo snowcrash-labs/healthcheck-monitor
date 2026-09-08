@@ -46,7 +46,12 @@ impl History {
             .find(|(day, _)| *day == now.date_naive())
             .and_then(|(_, at)| *at);
         let window = |end: NaiveDate| Period {
-            from: (end - chrono::Duration::days(7)).max(from),
+            // Cost Explorer charges per request; its bounded aggregate query covers the configured history.
+            from: if source.aws_query.is_some() {
+                from
+            } else {
+                (end - chrono::Duration::days(7)).max(from)
+            },
             to: end,
         };
         if recent.is_none_or(|at| now.signed_duration_since(at).num_seconds() >= cadence) {

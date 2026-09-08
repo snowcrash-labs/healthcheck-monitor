@@ -200,6 +200,24 @@ async fn corrections_partial_imports_cursors_and_signed_totals()
         .await?
         .ok_or("backfill period")?;
     assert!((scheduled.to - scheduled.from).num_days() <= 7);
+    let aws_source = Source {
+        id: "synthetic-aws".into(),
+        provider: Provider::Aws,
+        billing_scope: "123456789012".into(),
+        gcp: None,
+        aws_query: Some(monitor_costs::config::AwsQuery {
+            region: "us-east-1".into(),
+        }),
+        ..source.clone()
+    };
+    let aws_window = history
+        .cost_next_period(&aws_source, &config)
+        .await?
+        .ok_or("AWS backfill window")?;
+    assert_eq!(
+        (aws_window.to - aws_window.from).num_days(),
+        i64::from(config.backfill())
+    );
     billing::drilldown::verify(&history, &source, &config, period.to).await?;
     history.cost_cleanup().await?;
     Ok(())
