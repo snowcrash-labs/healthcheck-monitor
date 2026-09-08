@@ -1,13 +1,13 @@
 import type { z } from "zod";
 
-export type Result<T> = { ok: true; value: T } | { ok: false; message: string; cancelled: boolean; unauthorized?: boolean };
+export type Result<T> = { ok: true; value: T } | { ok: false; message: string; cancelled: boolean; unauthorized?: boolean; refreshRequired?: boolean };
 export async function get<T>(path: string, schema: z.ZodType<T>, signal: AbortSignal): Promise<Result<T>> {
   try {
     const response = await fetch(path, { signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]), credentials: "same-origin", cache: "no-store" });
     if (!response.ok) {
       const unauthorized = response.status === 401 || response.status === 403;
       if (unauthorized) window.dispatchEvent(new Event("monitor:unauthorized"));
-      return { ok: false, cancelled: false, unauthorized, message: unauthorized ? "Your sign-in has expired or access was removed. Sign in again to continue." : response.status === 404 ? "This observation is no longer available." : "Monitoring data is temporarily unavailable." };
+      return { ok: false, cancelled: false, unauthorized, refreshRequired: response.status === 409, message: unauthorized ? "Your sign-in has expired or access was removed. Sign in again to continue." : response.status === 409 ? "The published view changed. Refresh this selection." : response.status === 404 ? "This observation is no longer available." : "Monitoring data is temporarily unavailable." };
     }
     const raw: unknown = await response.json();
     const parsed = schema.safeParse(raw);

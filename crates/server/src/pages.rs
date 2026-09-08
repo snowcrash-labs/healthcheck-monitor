@@ -60,26 +60,44 @@ pub struct Slice<'a, T> {
 }
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct ScopedCursor { scope: String, position: String }
+struct ScopedCursor {
+    scope: String,
+    position: String,
+}
 /// Bind current-state cursors to their endpoint, filters, and ordering without claiming snapshot isolation.
 pub fn select_scoped<'a, T: Keyed>(
-    rows: Vec<&'a T>, after: Option<&str>, direction: &Direction, limit: usize,
+    rows: Vec<&'a T>,
+    after: Option<&str>,
+    direction: &Direction,
+    limit: usize,
     scope: &impl Serialize,
 ) -> Result<Slice<'a, T>, ApiError> {
     use sha2::{Digest, Sha256};
     let scope = serde_json::to_vec(scope).map_err(|_| ApiError::BadQuery)?;
-    let scope: String = Sha256::digest(scope).iter().map(|b| format!("{b:02x}")).collect();
+    let scope: String = Sha256::digest(scope)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
     let cursor = match after {
         Some(value) if value.len() <= 32768 => {
-            let cursor: ScopedCursor = serde_json::from_str(value).map_err(|_| ApiError::Refresh)?;
-            if cursor.scope != scope { return Err(ApiError::Refresh); }
+            let cursor: ScopedCursor =
+                serde_json::from_str(value).map_err(|_| ApiError::Refresh)?;
+            if cursor.scope != scope {
+                return Err(ApiError::Refresh);
+            }
             Some(cursor.position)
         }
         Some(_) => return Err(ApiError::BadQuery),
         None => None,
     };
     let mut page = select(rows, cursor.as_deref(), direction, limit)?;
-    let encode = |position: String| serde_json::to_string(&ScopedCursor { scope: scope.clone(), position }).map_err(|_| ApiError::BadQuery);
+    let encode = |position: String| {
+        serde_json::to_string(&ScopedCursor {
+            scope: scope.clone(),
+            position,
+        })
+        .map_err(|_| ApiError::BadQuery)
+    };
     page.next = page.next.map(encode).transpose()?;
     page.previous = page.previous.map(encode).transpose()?;
     Ok(page)

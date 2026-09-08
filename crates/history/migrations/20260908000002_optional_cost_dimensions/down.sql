@@ -1,0 +1,1 @@
+-- Retain nullable dimensions on rollback; replacing unknown values would lose their meaning.

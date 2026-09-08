@@ -75,11 +75,11 @@ fn window(
         }
     } else if matches!(c.service.as_str(), "sql" | "sql-instances") {
         filters.push("resource.type=\"cloudsql_database\"".into());
-        if let Some(name) = c.name.as_deref().or_else(|| c.native_id.rsplit('/').next()) {
-            if let Some(id) = quote(&format!("{}:{name}", c.scope)) {
-                filters.push(format!("resource.labels.database_id={id}"));
-                scoped = true;
-            }
+        if let Some(name) = c.name.as_deref().or_else(|| c.native_id.rsplit('/').next())
+            && let Some(id) = quote(&format!("{}:{name}", c.scope))
+        {
+            filters.push(format!("resource.labels.database_id={id}"));
+            scoped = true;
         }
     }
     vec![Link {

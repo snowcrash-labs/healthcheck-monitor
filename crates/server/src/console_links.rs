@@ -110,9 +110,6 @@ pub fn links(context: Option<&ResourceContext>) -> Vec<Link> {
                 "scheduler" => region
                     .as_ref()
                     .map(|region| format!("cloudscheduler/jobs/edit/{region}/{resource}")),
-                "artifact-repositories" => region
-                    .as_ref()
-                    .map(|region| format!("artifacts/docker/{project}/{region}/{resource}")),
                 _ => None,
             };
             match path {
@@ -152,18 +149,13 @@ pub fn links(context: Option<&ResourceContext>) -> Vec<Link> {
                     encoded(c.native_id.rsplit(':').next().unwrap_or(name))
                 )),
                 "eks" | "clusters" => Some(format!("eks/home#/clusters/{}", encoded(name))),
-                "ecs-clusters" | "ecs-services" => {
-                    Some(format!("ecs/v2/clusters/{}", encoded(name)))
-                }
+                "ecs-clusters" => Some(format!("ecs/v2/clusters/{}", encoded(name))),
                 "ecr" => Some(format!(
                     "ecr/repositories/private/{}/{}",
                     encoded(&c.scope),
                     encoded(name)
                 )),
-                "codebuild" => Some(format!(
-                    "codesuite/codebuild/{}/projects",
-                    encoded(&c.scope)
-                )),
+
                 "rds" | "rds-instances" | "databases" => Some(format!(
                     "rds/home#database:id={};is-cluster=false",
                     encoded(c.native_id.rsplit(':').next().unwrap_or(name))

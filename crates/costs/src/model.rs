@@ -1,7 +1,7 @@
 //! Exact daily aggregates are derived from an identified, replaceable source revision.
 use crate::error::Error;
+use bigdecimal::BigDecimal as Decimal;
 use chrono::{DateTime, NaiveDate, Utc};
-use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -27,34 +27,52 @@ impl Provider {
 #[serde(try_from = "String", into = "String")]
 pub struct Amount(Decimal);
 impl Amount {
-    pub fn zero() -> Self {
-        Self(Decimal::ZERO)
-    }
-    pub fn decimal(&self) -> Decimal {
-        self.0
-    }
-    pub fn from_decimal(value: Decimal) -> Result<Self, Error> {
-        // NUMERIC(28,9): at most nineteen integral and nine fractional digits.
-        if value.scale() > 9
-            || value.abs() >= Decimal::from_i128_with_scale(10_000_000_000_000_000_000, 0)
+    /// Normalize bounded scientific decimal tokens supplied by provider query APIs.
+    pub fn provider(value: &str) -> Result<Self, Error> {
+        if value.len() > 64
+            || value.is_empty()
+            || value
+                .bytes()
+                .any(|b| !b.is_ascii_digit() && !b".+-eE".contains(&b))
         {
             return Err(Error::Amount);
         }
-        Ok(Self(value.normalize()))
+        if let Some((_, exponent)) = value.split_once(['e', 'E'])
+            && !exponent
+                .parse::<i32>()
+                .is_ok_and(|e| e.unsigned_abs() <= 38)
+        {
+            return Err(Error::Amount);
+        }
+        Self::from_decimal(value.parse().map_err(|_| Error::Amount)?)
+    }
+    pub fn zero() -> Self {
+        Self(Decimal::from(0))
+    }
+    pub fn decimal(&self) -> Decimal {
+        self.0.clone()
+    }
+    pub fn from_decimal(value: Decimal) -> Result<Self, Error> {
+        // NUMERIC(38,18) retains fine-grained provider charges without binary floating point.
+        if value.fractional_digit_count() > 18
+            || value.abs() >= Decimal::from(10_000_000_000_000_000_000u64) * 10
+        {
+            return Err(Error::Amount);
+        }
+        Ok(Self(value.normalized()))
     }
     pub fn add(&self, other: &Self) -> Result<Self, Error> {
-        self.0
-            .checked_add(other.0)
-            .ok_or(Error::Amount)
-            .and_then(Self::from_decimal)
+        Self::from_decimal(&self.0 + &other.0)
     }
 }
 impl TryFrom<String> for Amount {
     type Error = Error;
     fn try_from(value: String) -> Result<Self, Error> {
         if value.is_empty()
-            || value.len() > 32
-            || value.split_once('.').is_some_and(|(_, fraction)| fraction.len() > 9)
+            || value.len() > 40
+            || value
+                .split_once('.')
+                .is_some_and(|(_, fraction)| fraction.len() > 18)
             || value
                 .bytes()
                 .any(|b| !b.is_ascii_digit() && b != b'.' && b != b'-')
@@ -69,53 +87,68 @@ impl TryFrom<String> for Amount {
 }
 impl From<Amount> for String {
     fn from(value: Amount) -> Self {
-        value.0.to_string()
+        value.0.to_plain_string()
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Charge {
+    #[serde(default)]
+    pub target: Option<String>,
     pub day: NaiveDate,
-    pub invoice_month: String,
+    pub invoice_month: Option<String>,
     pub provider: Provider,
-    pub scope: String,
-    pub region: String,
+    pub scope: Option<String>,
+    pub region: Option<String>,
     pub product: String,
-    pub resource: String,
-    pub category: String,
+    pub resource: Option<String>,
+    pub category: Option<String>,
     pub currency: String,
     pub billed: Amount,
     pub effective: Option<Amount>,
 }
 impl Charge {
     pub fn validate(&self) -> Result<(), Error> {
-        if !currency(&self.currency)
-            || self.invoice_month.len() != 6
-            || !self.invoice_month.bytes().all(|b| b.is_ascii_digit())
-            || !self.invoice_month[4..]
-                .parse::<u8>()
-                .is_ok_and(|month| (1..=12).contains(&month))
+        if self
+            .target
+            .as_ref()
+            .is_some_and(|v| !crate::config::identifier(v))
+            || !currency(&self.currency)
             || self.product.is_empty()
-            || self.category.is_empty()
             || self.product.len() > 256
-            || self.category.len() > 128
-            || self.scope.len() > 128
-            || self.region.len() > 128
-            || [
-                &self.scope,
-                &self.region,
-                &self.product,
-                &self.resource,
-                &self.category,
-            ]
-            .iter()
-            .any(|v| v.len() > 2048 || v.chars().any(char::is_control))
+            || self.product.chars().any(char::is_control)
         {
             return Err(Error::Record);
         }
+        if self.invoice_month.as_ref().is_some_and(|month| {
+            month.len() != 6
+                || !month.bytes().all(|b| b.is_ascii_digit())
+                || !month[4..]
+                    .parse::<u8>()
+                    .is_ok_and(|n| (1..=12).contains(&n))
+        }) {
+            return Err(Error::Record);
+        }
+        for (value, limit) in [
+            (&self.scope, 128),
+            (&self.region, 128),
+            (&self.resource, 2048),
+            (&self.category, 128),
+        ] {
+            if value
+                .as_ref()
+                .is_some_and(|v| v.is_empty() || v.len() > limit || v.chars().any(char::is_control))
+            {
+                return Err(Error::Record);
+            }
+        }
         Ok(())
     }
+}
+/// Provider empty dimensions represent an explicit absence after projection.
+pub fn optional(value: String) -> Option<String> {
+    if value.is_empty() { None } else { Some(value) }
 }
 pub fn currency(value: &str) -> bool {
     // Explicit supported ISO 4217 billing currencies; additions are reviewed with adapters.

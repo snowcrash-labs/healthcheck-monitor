@@ -121,12 +121,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7d902e3d592a523def97af8f317b08ce16b7ab854c1985a0c671e6f15cebc236"
 
 [[package]]
-name = "arrayvec"
-version = "0.7.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d3fb67a6e08acf24fdeccbac2cb6ac4305825bd1f117462e0e6f2f193345ad56"
-
-[[package]]
 name = "asn1-rs"
 version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -669,6 +663,32 @@ name = "aws-sdk-codepipeline"
 version = "1.120.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f6b90713cda6b812d17249bdbbcebdbb159f0b9a5d228b0c291f688fe89a79ce"
+dependencies = [
+ "arc-swap",
+ "aws-credential-types",
+ "aws-runtime",
+ "aws-smithy-async",
+ "aws-smithy-http",
+ "aws-smithy-json",
+ "aws-smithy-observability",
+ "aws-smithy-runtime",
+ "aws-smithy-runtime-api",
+ "aws-smithy-schema",
+ "aws-smithy-types",
+ "aws-types",
+ "bytes",
+ "fastrand",
+ "http 0.2.12",
+ "http 1.5.0",
+ "regex-lite",
+ "tracing",
+]
+
+[[package]]
+name = "aws-sdk-costexplorer"
+version = "1.127.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "250fcb2e5494f32a5c6243d1e8bffc5edb96c54cf6b6c3dda84654191ad27dec"
 dependencies = [
  "arc-swap",
  "aws-credential-types",
@@ -1721,6 +1741,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "bigdecimal"
+version = "0.4.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4d6867f1565b3aad85681f1015055b087fcfd840d6aeee6eee7f2da317603695"
+dependencies = [
+ "autocfg",
+ "libm",
+ "num-bigint",
+ "num-integer",
+ "num-traits",
+]
+
+[[package]]
 name = "bit-vec"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1779,30 +1812,6 @@ dependencies = [
  "futures-io",
  "futures-lite",
  "piper",
-]
-
-[[package]]
-name = "borsh"
-version = "1.8.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "553c5d846a6ba5150c65e3b1b8ec073bcf1abc20f9b7220de384a4443ea4e20a"
-dependencies = [
- "borsh-derive",
- "bytes",
- "cfg_aliases",
-]
-
-[[package]]
-name = "borsh-derive"
-version = "1.8.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12cdfe656708a01f89b451a7d36466e6fe6c414de0aa18fc54f864f6f9ca9f56"
-dependencies = [
- "once_cell",
- "proc-macro-crate",
- "proc-macro2",
- "quote",
- "syn 3.0.5",
 ]
 
 [[package]]
@@ -2513,12 +2522,16 @@ version = "2.3.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e3b934ddbdcb2abb9f9fc9c30bd47bcc5618b615eea1d334cda5fdf8ff9b072a"
 dependencies = [
+ "bigdecimal",
  "bitflags 2.13.1",
  "byteorder",
  "chrono",
  "diesel_derives",
  "downcast-rs",
  "itoa",
+ "num-bigint",
+ "num-integer",
+ "num-traits",
  "serde_json",
  "uuid",
 ]
@@ -4186,6 +4199,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2"
 
 [[package]]
+name = "libm"
+version = "0.2.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
+
+[[package]]
 name = "libredox"
 version = "0.1.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4401,8 +4420,9 @@ dependencies = [
 name = "monitor-costs"
 version = "0.1.0"
 dependencies = [
+ "bigdecimal",
  "chrono",
- "rust_decimal",
+ "monitor-core",
  "serde",
  "serde_json",
  "sha2 0.11.0",
@@ -4414,6 +4434,7 @@ name = "monitor-history"
 version = "0.1.0"
 dependencies = [
  "bb8",
+ "bigdecimal",
  "chrono",
  "diesel",
  "diesel-async",
@@ -4424,7 +4445,6 @@ dependencies = [
  "monitor-costs",
  "monitor-query",
  "nutype",
- "rust_decimal",
  "rustls",
  "rustls-platform-verifier",
  "serde",
@@ -4490,6 +4510,7 @@ dependencies = [
  "aws-sdk-cloudwatchlogs",
  "aws-sdk-codebuild",
  "aws-sdk-codepipeline",
+ "aws-sdk-costexplorer",
  "aws-sdk-dynamodb",
  "aws-sdk-ec2",
  "aws-sdk-ecr",
@@ -4524,6 +4545,7 @@ dependencies = [
  "http 1.5.0",
  "monitor-core",
  "monitor-costs",
+ "monitor-history",
  "monitor-integrations",
  "reqwest",
  "scc",
@@ -4533,6 +4555,7 @@ dependencies = [
  "thiserror 2.0.20",
  "tokio",
  "tokio-util",
+ "toml 1.1.5+spec-1.1.0",
  "tracing",
  "url",
 ]
@@ -5713,24 +5736,6 @@ checksum = "42ffa149f6aa81b58a5b3011d01a857c4ed12c7a732d2c51947a4c7c692185f0"
 dependencies = [
  "sha2 0.11.0",
  "walkdir",
-]
-
-[[package]]
-name = "rust_decimal"
-version = "1.43.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7653272e75dcac41dc199fbea6f5797633994fafd339943c06c9af16bf29cd3a"
-dependencies = [
- "arrayvec",
- "borsh",
- "bytes",
- "diesel",
- "num-traits",
- "rand 0.8.8",
- "rand 0.9.5",
- "serde",
- "serde_json",
- "wasm-bindgen",
 ]
 
 [[package]]
@@ -7320,7 +7325,6 @@ dependencies = [
  "cfg-if",
  "once_cell",
  "rustversion",
- "serde",
  "wasm-bindgen-macro",
  "wasm-bindgen-shared",
 ]

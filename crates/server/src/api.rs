@@ -10,6 +10,7 @@ pub struct App {
     pub costs: monitor_costs::config::Config,
     pub security: Security,
     pub requests: Arc<Semaphore>,
+    pub cost_requests: Arc<Semaphore>,
     pub streams: Arc<Semaphore>,
     pub stop: CancellationToken,
     pub response_bytes: usize,

@@ -129,8 +129,9 @@ fn endpoint(job: &Job, batch: &[&MetricQuery]) -> Result<Endpoint, Error> {
             "timespan",
             &format!(
                 "{}/{}",
-                (now - Duration::seconds(job.settings.metric_window.0 as i64)).to_rfc3339(),
-                now.to_rfc3339()
+                (now - Duration::seconds(job.settings.metric_window.0 as i64))
+                    .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+                now.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
             ),
         )
         .append_pair("interval", "PT1M")

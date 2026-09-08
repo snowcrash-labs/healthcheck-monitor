@@ -19,6 +19,7 @@ export function usePages<T extends { id: string }>(path: Accessor<string>, schem
   let controller: AbortController | undefined;
   let sequence = 0;
   let frame = 0;
+  let resetCursor = false;
   const data = createMemo(() => {
     const loaded = pages();
     const first = loaded[0]; const last = loaded.at(-1);
@@ -61,7 +62,7 @@ export function usePages<T extends { id: string }>(path: Accessor<string>, schem
     for (let index = 0; index < count; index++) {
       const result = await get(address(position), schema, request.signal);
       if (version !== sequence || request.signal.aborted) return;
-      if (!result.ok) { setLoading(false); if (result.unauthorized) setPages([]); if (!result.cancelled) setError(result.message); return; }
+      if (!result.ok) { setLoading(false); resetCursor = !!result.refreshRequired; if (result.unauthorized) setPages([]); if (!result.cancelled) setError(result.message); return; }
       loaded.push({ position, page: result.value });
       if (!result.value.next_cursor) break;
       position = { cursor: result.value.next_cursor, direction: "next" };
@@ -72,7 +73,7 @@ export function usePages<T extends { id: string }>(path: Accessor<string>, schem
     setLoading(false);
   }
   createEffect(path, (nextPath) => {
-    controller?.abort(); sequence++; activePath = nextPath;
+    controller?.abort(); sequence++; activePath = nextPath; resetCursor = false;
     setPages([]); setLoading(true); setError("");
     const timer = setTimeout(() => void collect(), 150);
     return () => clearTimeout(timer);
@@ -80,5 +81,5 @@ export function usePages<T extends { id: string }>(path: Accessor<string>, schem
   createEffect(refresh, () => { if (activePath && !loading()) void collect(); });
   createEffect(() => dashboard?.paused() ?? false, (paused) => { if (paused) { controller?.abort(); sequence++; setLoading(false); } });
   onSettled(() => () => { controller?.abort(); sequence++; cancelAnimationFrame(frame); });
-  return { data, loading, error, next: () => void collect("next"), previous: () => void collect("previous"), retry: () => void collect() };
+  return { data, loading, error, next: () => void collect("next"), previous: () => void collect("previous"), retry: () => { if (resetCursor) { setPages([]); resetCursor = false; } void collect(); } };
 }

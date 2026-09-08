@@ -53,7 +53,12 @@ impl Auth {
                     azure_identity::AzureCliCredential::new(Some(
                         azure_identity::AzureCliCredentialOptions {
                             tenant_id: profile.and_then(|p| p.tenant.clone()),
-                            subscription: scope.map(String::from),
+                            // Azure CLI rejects combining --tenant with --subscription; ARM reads still use the explicit target subscription.
+                            subscription: if profile.and_then(|p| p.tenant.as_ref()).is_some() {
+                                None
+                            } else {
+                                scope.map(String::from)
+                            },
                             executor: Some(Arc::new(crate::azure_auth::Executor {
                                 processes: processes.clone(),
                                 timeout: settings.attempt_timeout.duration(),

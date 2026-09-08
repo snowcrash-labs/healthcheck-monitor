@@ -9,8 +9,9 @@ export function useQuery<T>(path: Accessor<string>, schema: z.ZodType<T>, refres
   const [data, setData] = createSignal<T>();
   const [error, setError] = createSignal("");
   const [loading, setLoading] = createSignal(true);
+  const [retryId, setRetryId] = createSignal(0);
   let previousPath = "";
-  createEffect(() => [path(), refresh(), dashboard?.paused() ?? false] as const, ([path, , paused]) => {
+  createEffect(() => [path(), refresh(), dashboard?.paused() ?? false, retryId()] as const, ([path, , paused]) => {
     const changed = previousPath !== path;
     if (paused && !changed) { setLoading(false); return; }
     if (changed) setData(undefined);
@@ -27,5 +28,5 @@ export function useQuery<T>(path: Accessor<string>, schema: z.ZodType<T>, refres
     }, changed ? 120 : 0);
     return () => { clearTimeout(timer); controller.abort(); };
   });
-  return { data, error, loading };
+  return { data, error, loading, retry: () => setRetryId((value) => value + 1) };
 }

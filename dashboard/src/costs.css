@@ -37,3 +37,6 @@
  .cost-headline strong { font-size: 24px; }
  .cost-filters label { flex: 1; min-width: 140px; }
 }
+
+.chart-6 { fill: #b47089; background: #b47089; }
+.chart-7 { fill: #6d8774; background: #6d8774; }

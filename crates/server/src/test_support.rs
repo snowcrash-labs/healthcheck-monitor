@@ -27,6 +27,7 @@ pub async fn app(config: &Config) -> Result<(Arc<App>, Effective), Box<dyn std::
         costs: config.costs.clone(),
         security: Security::new(config, |_| Some("s".repeat(32)))?,
         requests: Arc::new(tokio::sync::Semaphore::new(config.requests)),
+        cost_requests: Arc::new(tokio::sync::Semaphore::new(1)),
         streams: Arc::new(tokio::sync::Semaphore::new(config.event_streams)),
         stop: CancellationToken::new(),
         response_bytes: config.response_bytes,

@@ -23,7 +23,7 @@ futures = { version = "0.3.34", default-features = false, features = ["std", "as
 humantime = "2.4.0"
 reqwest = { version = "0.13.4", default-features = false, features = ["rustls", "http2", "gzip", "brotli", "hickory-dns", "json", "query", "form", "stream"] }
 serde = { version = "1.0.229", default-features = false, features = ["derive", "std"] }
-serde_json = "1.0.151"
+serde_json = { version = "1.0.151", features = ["arbitrary_precision"] }
 scc = { version = "3.8.8", default-features = false }
 sha2 = "0.11.0"
 thiserror = "2.0.20"

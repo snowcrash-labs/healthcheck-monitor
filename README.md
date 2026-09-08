@@ -9,12 +9,13 @@ The monitor keeps **system health**, **collection coverage**, and **evidence fre
 - **Cloud and Kubernetes checks:** Inventory, workload state, managed dependencies, metrics, queues, alerts, SLOs, backup/recovery metadata, and provider health across GCP, AWS, Azure, and Kubernetes.
 - **Shared dependencies:** DNS, trusted TLS and expiry, HTTP status and latency, NATS/KEDA aggregates, GitHub workflows, release provenance, and bounded redacted diagnostics.
 - **Configurable execution:** TOML profiles, target/check/resource selection, sampling, per-check schedules, thresholds, grace periods, finite limits, and atomic SIGHUP reload.
-- **Persistent dashboard:** Axum, SolidJS 2 RC, Solid router, and Vite; paginated findings and resources, evidence details, transition history, live updates, persistent top bars, and light/dark/system themes.
+- **Persistent dashboard:** Axum, SolidJS 2 RC, Solid router, and Vite; compact problem and check tables, resource inspectors, billing charts, transition history, live updates, persistent top bars, and light/dark/system themes.
+- **Billing explorer:** Interactive cost charts, provider/project/product breakdowns, exact decimal aggregates, and bounded import workers. See [billing operations](docs/plans/2026-09-07-dashboard-billing-operations.md) for source coverage and enabling access.
 - **Evidence and history:** Atomic JSON snapshots, Markdown reports, rotated NDJSON transitions, offline comparisons, and PostgreSQL dashboard history with native UUIDv7 keys.
 - **Monitoring queries:** Seven days of diagnostic history, scoped JSON APIs and OpenAPI, and an MCP connector for Codex CLI and Claude Code using individual Google sign-in through IAP.
 - **Bounded operation:** Fair scheduling, independent provider scopes, reused clients and observations, batched metrics, bounded caches, response limits, and cancellation deadlines.
 
-Collection does not change infrastructure, consume queue messages, read application database records or secret values, perform synthetic transactions, or send notifications. Endpoint probes do not retain response bodies. PostgreSQL writes belong only to the monitor's own history store.
+Collection does not change infrastructure, consume queue messages, read application database records or secret values, perform synthetic transactions, or send notifications. Endpoint probes do not retain response bodies. PostgreSQL writes belong only to the monitor's history and derived billing store.
 
 ## Start here
 

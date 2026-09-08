@@ -1,10 +1,12 @@
 import { expect, test } from "@playwright/test";
+import { fixture } from "./fixtures";
 
 test("routes, resource details, persistent header, and theme selection", async ({ page }, testInfo) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
+  await fixture(page);
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "System health", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Overview", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Targets", exact: true })).toBeVisible({ timeout: 20_000 });
   await page.getByLabel("Appearance", { exact: true }).selectOption("light");
   await page.screenshot({ path: testInfo.outputPath("overview-light.png"), fullPage: true });
@@ -23,11 +25,12 @@ test("routes, resource details, persistent header, and theme selection", async (
   const box = await page.locator(".topbar").boundingBox();
   expect(box?.y).toBe(0);
   await page.locator("tbody tr").first().getByRole("link").first().click();
+  await page.getByRole("button", { name: "Configuration", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Observed facts" })).toBeVisible();
   await page.reload();
   await expect(page.getByRole("heading", { name: "Observed facts" })).toBeVisible();
-  await page.getByRole("link", { name: "View history" }).click();
-  await expect(page.getByRole("heading", { name: "Finding history" })).toBeVisible();
+  await page.getByRole("button", { name: "History", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Finding timeline" })).toBeVisible();
   await page.getByLabel("Appearance", { exact: true }).selectOption("light");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   expect(errors).toEqual([]);
@@ -35,19 +38,20 @@ test("routes, resource details, persistent header, and theme selection", async (
 
 test("mobile navigation and stale connection state remain visible", async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 });
+  await fixture(page);
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Targets", exact: true })).toBeVisible({ timeout: 20_000 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
   await page.screenshot({ path: testInfo.outputPath("overview-mobile.png"), fullPage: true });
   await page.evaluate(() => window.scrollTo(0, 500));
   const header = await page.locator(".topbar").boundingBox();
-  expect(header?.y).toBe(104);
-  await page.getByRole("navigation").getByRole("link", { name: "Findings" }).click();
-  await expect(page.getByRole("heading", { name: "Findings", exact: true })).toBeVisible();
+  expect(header?.y).toBe(100);
+  await page.getByRole("navigation").getByRole("link", { name: "Problems" }).click();
+  await expect(page.getByRole("heading", { name: "Problems", exact: true, level: 1 })).toBeVisible();
   await expect(page.getByLabel("Appearance", { exact: true })).toBeVisible();
   await page.context().setOffline(true);
-  await expect(page.getByText("Connection interrupted.", { exact: false })).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByRole("heading", { name: "Findings", exact: true })).toBeVisible();
+  await expect(page.getByText("Reconnecting. Showing", { exact: false })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole("heading", { name: "Problems", exact: true, level: 1 })).toBeVisible();
   await page.context().setOffline(false);
-  await expect(page.getByText("Connection interrupted.", { exact: false })).not.toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText("Reconnecting. Showing", { exact: false })).not.toBeVisible({ timeout: 20_000 });
 });

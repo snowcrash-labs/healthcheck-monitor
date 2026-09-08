@@ -8,6 +8,7 @@ mod checks_api;
 pub mod config;
 mod console_links;
 mod cost_api;
+mod cost_reader;
 mod cost_worker;
 mod encoding;
 mod events;

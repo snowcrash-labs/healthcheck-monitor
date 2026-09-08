@@ -68,7 +68,13 @@ pub async fn resources(
                 })
         })
         .collect();
-    let page = pages::select_scoped(rows, filter.cursor.as_deref(), &filter.direction, limit, &("resources", &filter))?;
+    let page = pages::select_scoped(
+        rows,
+        filter.cursor.as_deref(),
+        &filter.direction,
+        limit,
+        &("resources", &filter),
+    )?;
     let items = page
         .items
         .into_iter()
@@ -125,7 +131,13 @@ pub async fn findings(
                     || finding.rule.to_lowercase().contains(&query))
         })
         .collect();
-    let page = pages::select_scoped(rows, filter.cursor.as_deref(), &filter.direction, limit, &("findings", &filter))?;
+    let page = pages::select_scoped(
+        rows,
+        filter.cursor.as_deref(),
+        &filter.direction,
+        limit,
+        &("findings", &filter),
+    )?;
     let items = page
         .items
         .into_iter()

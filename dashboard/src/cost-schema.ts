@@ -1,5 +1,5 @@
 import { z } from "zod";
-export const amount = z.string().regex(/^-?\d{1,19}(?:\.\d{1,9})?$/);
+export const amount = z.string().regex(/^-?\d{1,20}(?:\.\d{1,18})?$/);
 const date = z.iso.date();
 const contributor = z.object({ key: z.string(), amount, previous: amount.nullable() });
 export const costView = z.object({
@@ -14,20 +14,20 @@ export const costView = z.object({
 });
 export type CostView = z.infer<typeof costView>;
 export type CostPoint = CostView["series"][number];
-/** Integer nanounits preserve exact comparisons; floating point is used only for SVG coordinates. */
+/** Integer decimal units preserve exact comparisons; floating point is used only for SVG coordinates. */
 export function units(value: string): bigint {
   const parsed = amount.safeParse(value);
   if (!parsed.success) return 0n;
   const negative = value.startsWith("-");
   const [whole = "0", fraction = ""] = value.replace(/^-/, "").split(".");
-  const result = BigInt(whole) * 1_000_000_000n + BigInt(fraction.padEnd(9, "0"));
+  const result = BigInt(whole) * 1_000_000_000_000_000_000n + BigInt(fraction.padEnd(18, "0"));
   return negative ? -result : result;
 }
 export function money(value: string | null, currency: string): string {
   if (value === null) return "Not available";
   const raw = units(value);
-  const rounded = (raw < 0n ? -raw : raw) + 5_000_000n;
-  const cents = rounded / 10_000_000n;
+  const rounded = (raw < 0n ? -raw : raw) + 5_000_000_000_000_000n;
+  const cents = rounded / 10_000_000_000_000_000n;
   const whole = (cents / 100n).toLocaleString("en-US");
   return `${raw < 0n ? "−" : ""}${currency} ${whole}.${(cents % 100n).toString().padStart(2, "0")}`;
 }
@@ -38,9 +38,18 @@ export function difference(current: string | null, previous: string | null): str
   const change = Number((units(current) - before) * 1000n / before) / 10;
   return `${change > 0 ? "+" : ""}${change.toFixed(1)}% vs previous period`;
 }
-export function contributorLabel(value: string): string { return value === "__other__" ? "Other" : value === "" ? "Unallocated" : value === "gcp" ? "Google Cloud" : value === "aws" ? "AWS" : value === "azure" ? "Azure" : value; }
+export function contributorLabel(value: string): string { if (value.startsWith("v:")) value = value.slice(2); return value === "__other__" ? "Other" : value === "" ? "Unallocated" : value === "gcp" ? "Google Cloud" : value === "aws" ? "AWS" : value === "azure" ? "Azure" : value; }
 export function colorClass(value: string): string {
   if (value === "__other__") return "chart-other";
   const hash = [...value].reduce((sum, c) => (sum * 31 + c.charCodeAt(0)) >>> 0, 0);
   return `chart-${hash % 5 + 1}`;
+}
+
+export function coverageNotice(view: CostView): string {
+  const unavailable = view.sources.filter((source) => !source.imported_at || source.fault || source.state === "stale");
+  if (unavailable.length) return "Some billing sources are unavailable. Totals include only the retained charges.";
+  const starts = view.sources.flatMap((source) => source.from ? [source.from] : []).sort();
+  const latestStart = starts.at(-1);
+  if (latestStart && latestStart > view.period.from) return `Partial period: imported coverage begins ${latestStart} for at least one source.`;
+  return "Provisional provider charges; late adjustments may change totals.";
 }

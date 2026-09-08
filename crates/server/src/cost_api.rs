@@ -15,6 +15,10 @@ pub async fn view(
     Query(filter): Query<Filter>,
 ) -> Result<Response, ApiError> {
     let period = filter.period().map_err(|_| ApiError::BadQuery)?;
+    let _permit = app
+        .cost_requests
+        .try_acquire()
+        .map_err(|_| ApiError::Busy)?;
     if !app.costs.enabled {
         return json(
             &View {

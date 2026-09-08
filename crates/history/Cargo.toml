@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-rust_decimal = { version = "1.43.0", default-features = false, features = ["std", "db-diesel-postgres"] }
+bigdecimal = { version = "0.4.10", default-features = false, features = ["std"] }
 monitor-costs.workspace = true
 monitor-query.workspace = true
 monitor-core.workspace = true
@@ -19,7 +19,7 @@ tokio.workspace = true
 tokio-util.workspace = true
 tracing.workspace = true
 url.workspace = true
-diesel = { version = "2.3.13", default-features = false, features = ["postgres_backend", "chrono", "uuid", "serde_json", "32-column-tables"] }
+diesel = { version = "2.3.13", default-features = false, features = ["postgres_backend", "numeric", "chrono", "uuid", "serde_json", "32-column-tables"] }
 diesel-async = { version = "0.9.2", default-features = false, features = ["postgres", "bb8", "async-connection-wrapper", "migrations"] }
 diesel_migrations = { version = "2.3.2", default-features = false, features = ["postgres"] }
 diesel-derive-enum = { version = "2.1.0", default-features = false, features = ["postgres"] }

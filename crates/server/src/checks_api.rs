@@ -55,8 +55,7 @@ impl Filter {
 }
 impl Keyed for CheckView {
     fn key(&self) -> (u8, &str, &str) {
-        let complete = self.complete && self.expires_at.is_some_and(|at| at >= chrono::Utc::now());
-        (u8::from(complete), &self.key, "")
+        (u8::from(self.complete), &self.key, "")
     }
 }
 impl Keyed for Operation {
@@ -120,8 +119,18 @@ pub async fn checks(
                     .as_deref()
                     .is_none_or(|s| s == state || s == "needs_attention" && state != "complete")
         })
-        .collect();
-    page(rows, &filter, view.generation, app.response_bytes)
+        .cloned()
+        .map(|mut row| {
+            row.complete &= row.expires_at.is_some_and(|at| at >= now);
+            row
+        })
+        .collect::<Vec<_>>();
+    page(
+        rows.iter().collect(),
+        &filter,
+        view.generation,
+        app.response_bytes,
+    )
 }
 pub async fn check(
     State(app): State<Arc<App>>,

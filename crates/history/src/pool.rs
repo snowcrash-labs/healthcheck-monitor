@@ -72,10 +72,17 @@ impl History {
         self.ready.load(Ordering::Acquire)
     }
     pub async fn migrate(&self) -> Result<(), Error> {
-        let connection = tokio::time::timeout(Duration::from_secs(10), connect(&self.url))
+        let mut connection = tokio::time::timeout(Duration::from_secs(10), connect(&self.url))
             .await
             .map_err(|_| Error::Connection)?
             .map_err(|_| Error::Connection)?;
+        use diesel_async::RunQueryDsl;
+        let locked: bool = diesel::select(schema_lock(0x6865616c74680001_i64))
+            .get_result(&mut connection)
+            .await?;
+        if !locked {
+            return Err(Error::Migration);
+        }
         tokio::task::spawn_blocking(move || {
             let mut connection: diesel_async::async_connection_wrapper::AsyncConnectionWrapper<
                 AsyncPgConnection,
@@ -90,6 +97,11 @@ impl History {
         self.ready.store(true, Ordering::Release);
         Ok(())
     }
+}
+// A dedicated connection retains this native session lock even if the startup await is cancelled.
+diesel::define_sql_function! {
+    #[sql_name = "pg_try_advisory_lock"]
+    fn schema_lock(key: diesel::sql_types::BigInt) -> diesel::sql_types::Bool;
 }
 fn billing_pool(url: &str) -> Pool {
     let mut options = ManagerConfig::default();

@@ -16,9 +16,10 @@ test("target panels open scoped overviews and expose every configured check", as
   await expect(page.getByText("Inventory_only", { exact: false })).toHaveCount(0);
   await page.getByRole("link", { name: "Release verification", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Collection operations" })).toBeVisible();
+  await page.locator("td details summary").first().click();
   await expect(page.getByText("The collector did not record which cutoff was reached.", { exact: false }).first()).toBeVisible();
   await page.getByRole("searchbox", { name: "Search operations" }).fill("0136");
-  await expect(page.getByRole("heading", { name: "Operation 0136" })).toBeVisible();
+  await expect(page.getByText("Operation 0136", { exact: true })).toBeVisible();
   await page.reload();
   await expect(page.getByRole("heading", { name: "Release verification" })).toBeVisible();
   await page.goBack();

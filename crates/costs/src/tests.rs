@@ -13,8 +13,8 @@ fn amounts_reject_lossy_and_oversized_values() -> Result<(), Box<dyn std::error:
     for bad in [
         "NaN",
         "1e20",
-        "1.0000000001",
-        "10000000000000000000",
+        "1.0000000000000000001",
+        "100000000000000000000",
         " 1",
         "+1",
     ] {
@@ -74,20 +74,21 @@ fn configuration_requires_explicit_readership_and_finite_allowances() {
 fn charge_and_range_validation_agree_with_storage_constraints()
 -> Result<(), Box<dyn std::error::Error>> {
     let mut row = Charge {
+        target: None,
         day: "2026-08-01".parse()?,
-        invoice_month: "202608".into(),
+        invoice_month: Some("202608".into()),
         provider: Provider::Gcp,
-        scope: "example".into(),
-        region: "".into(),
+        scope: Some("example".into()),
+        region: None,
         product: "Compute".into(),
-        resource: "".into(),
-        category: "usage".into(),
+        resource: None,
+        category: Some("usage".into()),
         currency: "USD".into(),
         billed: Amount::zero(),
         effective: None,
     };
     row.validate()?;
-    row.invoice_month = "202613".into();
+    row.invoice_month = Some("202613".into());
     assert!(row.validate().is_err());
     let invalid = Filter {
         from: Some("2020-01-01".parse()?),

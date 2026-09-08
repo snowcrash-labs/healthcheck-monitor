@@ -1,6 +1,6 @@
 # Dashboard structure, cloud coverage, and costs
 
-Status: proposed implementation plan, reviewed and refined on 2026-09-07 against application commit `1abfd83`. This document governs the next dashboard, cloud-onboarding, and cost changes; earlier plans retain their implementation history. This pass changes documentation only. Existing uncommitted dependency changes are outside this work.
+Status: implementation underway. The dashboard structure, investigation views, billing charts, GCP export ingestion, and explicit AWS/Azure query adapters are implemented locally. See [billing operations and verification](2026-09-07-dashboard-billing-operations.md) for source limits and remaining production acceptance. AWS/Azure export ingestion and provider federation remain distinct onboarding work; the query adapters do not imply invoice-complete coverage.
 
 ## Objective and decisions
 

@@ -26,6 +26,8 @@ pub struct ScopeTarget {
     pub provider: Provider,
     pub scope: String,
     pub target: String,
+    pub valid_from: Option<chrono::NaiveDate>,
+    pub valid_to: Option<chrono::NaiveDate>,
 }
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -34,6 +36,21 @@ pub struct Source {
     pub provider: Provider,
     pub billing_scope: String,
     pub gcp: Option<Gcp>,
+    pub aws_query: Option<AwsQuery>,
+    pub azure_query: Option<AzureQuery>,
+    pub credential: Option<monitor_core::config::types::Credential>,
+}
+/// Cost Explorer is an explicit aggregate bootstrap option with no resource attribution.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AwsQuery {
+    pub region: String,
+}
+/// Azure's read-only cost query adapter is used when an export is not configured.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AzureQuery {
+    pub api_version: String,
 }
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -46,6 +63,19 @@ pub struct Gcp {
     pub detailed: bool,
 }
 impl Config {
+    /// Ambiguous or out-of-period environment mappings remain unallocated.
+    pub fn attribute(&self, charge: &mut crate::model::Charge) {
+        let mut matches = self.scope_targets.iter().filter(|m| {
+            m.provider == charge.provider
+                && charge.scope.as_ref() == Some(&m.scope)
+                && m.valid_from.is_none_or(|d| charge.day >= d)
+                && m.valid_to.is_none_or(|d| charge.day < d)
+        });
+        charge.target = match (matches.next(), matches.next()) {
+            (Some(mapping), None) => Some(mapping.target.clone()),
+            _ => None,
+        };
+    }
     pub fn interval(&self) -> u64 {
         self.interval_seconds.unwrap_or(3600)
     }
@@ -89,11 +119,34 @@ impl Config {
             {
                 return Err(Error::Configuration);
             }
+            let adapters = usize::from(source.gcp.is_some())
+                + usize::from(source.aws_query.is_some())
+                + usize::from(source.azure_query.is_some());
+            if adapters != 1 {
+                return Err(Error::Configuration);
+            }
             match (&source.gcp, source.provider) {
                 (Some(gcp), Provider::Gcp)
                     if [&gcp.project, &gcp.dataset, &gcp.table, &gcp.location]
                         .iter()
                         .all(|v| identifier(v)) => {}
+                (None, Provider::Aws)
+                    if source
+                        .aws_query
+                        .as_ref()
+                        .is_some_and(|a| identifier(&a.region))
+                        && source.billing_scope.len() == 12
+                        && source.billing_scope.bytes().all(|b| b.is_ascii_digit()) => {}
+                (None, Provider::Azure)
+                    if source
+                        .azure_query
+                        .as_ref()
+                        .is_some_and(|a| identifier(&a.api_version))
+                        && source.billing_scope.len() == 36
+                        && source
+                            .billing_scope
+                            .bytes()
+                            .all(|b| b.is_ascii_hexdigit() || b == b'-') => {}
                 _ => return Err(Error::Configuration),
             }
         }

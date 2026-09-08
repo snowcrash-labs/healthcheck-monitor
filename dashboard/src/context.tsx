@@ -90,7 +90,7 @@ export function DashboardProvider(props: ParentProps) {
     setPaused(false);
     setOverview(undefined);
     if (routeTarget()) { void navigate(target ? `/targets/${encodeURIComponent(target)}?target=${encodeURIComponent(target)}` : "/"); }
-    else setParams({ target: target || undefined, cursor: undefined });
+    else setParams({ target: target || undefined, cursor: undefined, selected: undefined, tab: undefined, day: undefined, contributor: undefined, resource: undefined });
   }, refresh };
   return <Context value={value}>{props.children}</Context>;
 }

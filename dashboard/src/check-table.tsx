@@ -9,7 +9,12 @@ export function checkIssue(check: CheckView, now: number): string {
   if (state === "awaiting") return "Waiting for the first run";
   if (state === "stale") return "A fresh observation is overdue";
   const failure = check.failures.find((item) => item.required);
-  if (failure) return coverageText[failure.coverage].title;
+  if (failure) {
+    const operation = failure.operation.split("/")[0] ?? "";
+    const subject = operation.includes("build") ? "Build results" : operation.includes("log") ? "Log results" : operation.includes("metric") ? "Metric results" : "Results";
+    if (failure.coverage === "truncated") return `${subject} incomplete`;
+    return coverageText[failure.coverage].title;
+  }
   return check.optional_gaps ? `${check.optional_gaps} optional coverage gaps` : "No collection failures";
 }
 export function CheckTable(props: { checks: CheckView[]; now: number }) {

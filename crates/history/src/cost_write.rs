@@ -25,6 +25,11 @@ impl History {
         settings: &config::Config,
     ) -> Result<Import, Error> {
         let mut connection = self.cost_pool.get().await.map_err(|_| Error::Pool)?;
+        let reservation = if source.gcp.is_some() {
+            settings.query_bytes()
+        } else {
+            1
+        };
         connection
             .transaction(async |c| {
                 diesel::insert_into(s::table)
@@ -64,17 +69,20 @@ impl History {
                         .and_hms_opt(0, 0, 0)
                         .ok_or(Error::Record)?
                         .and_utc();
-                    let reservations: Vec<i64> = i::table
+                    let reservations: Vec<(i64, Option<i64>)> = i::table
                         .filter(i::cost_import_started_at.ge(day))
-                        .select(i::cost_import_reserved_bytes)
+                        .select((i::cost_import_reserved_bytes, i::cost_import_billed_bytes))
                         .limit(4097)
                         .load(c)
                         .await?;
-                    let used = reservations.iter().try_fold(0u64, |sum, n| {
-                        sum.checked_add(*n as u64).ok_or(Error::Record)
-                    })?;
+                    let used = reservations
+                        .iter()
+                        .try_fold(0u64, |sum, (reserved, billed)| {
+                            sum.checked_add(billed.unwrap_or(*reserved) as u64)
+                                .ok_or(Error::Record)
+                        })?;
                     if reservations.len() > 4096
-                        || used.saturating_add(settings.query_bytes()) > settings.daily_bytes()
+                        || used.saturating_add(reservation) > settings.daily_bytes()
                     {
                         return Err(Error::Record);
                     }
@@ -83,7 +91,7 @@ impl History {
                             i::cost_import_source_id.eq(stored.cost_source_id),
                             i::cost_import_from.eq(period.from),
                             i::cost_import_to.eq(period.to),
-                            i::cost_import_reserved_bytes.eq(settings.query_bytes() as i64),
+                            i::cost_import_reserved_bytes.eq(reservation as i64),
                         ))
                         .returning(i::cost_import_id)
                         .get_result(c)
@@ -103,6 +111,9 @@ impl History {
             .await
     }
     pub async fn cost_stage(&self, import: &Import, charges: Vec<Charge>) -> Result<usize, Error> {
+        if charges.is_empty() {
+            return Ok(0);
+        }
         if charges.len() > 500
             || charges
                 .iter()

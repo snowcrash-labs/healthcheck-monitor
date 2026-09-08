@@ -28,7 +28,11 @@ impl Bus {
     pub fn new(journal: Arc<Journal>) -> Arc<Self> {
         let (changed, _) = tokio::sync::watch::channel(0);
         Arc::new(Self {
-            epoch: format!("{}-{}", std::process::id(), chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()),
+            epoch: format!(
+                "{}-{}",
+                std::process::id(),
+                chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+            ),
             views: scc::HashMap::new(),
             recorder: scc::HashMap::new(),
             generation: AtomicU64::new(0),

@@ -26,6 +26,8 @@ diesel::table! {
         cost_import_from -> Date,
         cost_import_to -> Date,
         cost_import_reserved_bytes -> Int8,
+        cost_import_billed_bytes -> Nullable<Int8>,
+        cost_import_attempted_at -> Nullable<Timestamptz>,
     }
 }
 diesel::table! {
@@ -38,16 +40,17 @@ diesel::table! {
 }
 diesel::table! {
     health_monitor.cost_daily (cost_daily_id) {
+        cost_daily_target -> Nullable<Varchar>,
         cost_daily_id -> Uuid,
         cost_daily_import_id -> Uuid,
         cost_daily_key -> Varchar,
         cost_daily_day -> Date,
-        cost_daily_invoice_month -> Varchar,
-        cost_daily_scope -> Varchar,
-        cost_daily_region -> Varchar,
+        cost_daily_invoice_month -> Nullable<Varchar>,
+        cost_daily_scope -> Nullable<Varchar>,
+        cost_daily_region -> Nullable<Varchar>,
         cost_daily_product -> Varchar,
-        cost_daily_resource -> Varchar,
-        cost_daily_category -> Varchar,
+        cost_daily_resource -> Nullable<Varchar>,
+        cost_daily_category -> Nullable<Varchar>,
         cost_daily_currency -> Varchar,
         cost_daily_billed -> Numeric,
         cost_daily_effective -> Nullable<Numeric>,

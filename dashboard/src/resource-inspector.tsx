@@ -9,6 +9,7 @@ import { ResourceEvidence, ResourceFindings, ResourceHistory } from "./resource-
 import { checkCatalog, checkPath } from "./check-catalog";
 import { locationText, resourceName, resourceType } from "./identity";
 import { Empty, Notice, Status } from "./components";
+import { ResourceCost } from "./resource-cost";
 import { rule, stale } from "./format";
 
 export function ResourceInspector(props: { id: string; panel?: boolean }) {
@@ -39,7 +40,7 @@ export function ResourceInspector(props: { id: string; panel?: boolean }) {
         <section class="panel"><div class="panel-heading"><h2>Identity and location</h2></div><Location context={detail().resource.context} /><p class="panel-note resource-path">{detail().resource.id}</p><button class="button copy-identity" onClick={() => { void navigator.clipboard?.writeText(detail().resource.id).catch(() => undefined); }}>Copy resource ID</button></section>
         <ResourceEvidence id={detail().resource.id} target={detail().resource.target} />
       </Show>
-      <Show when={tab() === "cost"}><Empty title="Resource cost is not attributed" detail="Only charges linked to this resource identity can appear here. Unallocated spend remains visible in Costs." /><a href={query("/costs", { target: detail().resource.target, resource: detail().resource.id })}>Open Costs</a></Show>
+      <Show when={tab() === "cost"}><ResourceCost resource={detail().resource} /></Show>
     </>}</Show>
   </div>;
 }

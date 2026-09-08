@@ -3,6 +3,16 @@ import type { Page } from "@playwright/test";
 import type { Check, Overview } from "../../src/schema";
 const kinds: Check[] = ["preflight", "inventory", "kubernetes", "edge", "managed", "queues", "releases", "github", "metrics", "logs", "alerts", "slo"];
 export async function fixture(page: Page) {
+  await page.addInitScript(() => {
+    class Stream extends EventTarget {
+      onopen: ((event: Event) => void) | null = null;
+      onerror: ((event: Event) => void) | null = null;
+      private timer: number;
+      constructor() { super(); this.timer = window.setInterval(() => this.dispatchEvent(new MessageEvent("revision", { data: JSON.stringify({ generation: Math.floor(Date.now() / 5000), epoch: "fixture" }) })), 5000); queueMicrotask(() => this.onopen?.(new Event("open"))); }
+      close() { window.clearInterval(this.timer); }
+    }
+    Object.defineProperty(window, "EventSource", { value: Stream });
+  });
   const at = new Date().toISOString();
   const expires = new Date(Date.now() + 3600_000).toISOString();
   const checks = kinds.map((check) => ({ key: `dev/${check}`, target: "dev", check, interval_seconds: 300, started_at: at, finished_at: at, expires_at: expires, complete: check !== "releases", observations: 137, required_failures: check === "releases" ? 1 : 0, optional_gaps: check === "releases" ? 2 : 0, prerequisite: false,
@@ -33,6 +43,7 @@ export async function fixture(page: Page) {
     const last = items.at(-1);
     return route.fulfill({ json: { generation: 1, items, total: selected.length, previous_cursor: null, next_cursor: start + items.length < selected.length && last ? JSON.stringify({ priority: 0, resource: last.id, identity: "" }) : null } });
   });
+  await page.route("**/api/v1/resources?**", (route) => route.fulfill({ json: { generation: 1, items: [{ ...resource, findings: [finding], finding_count: 1 }], next_cursor: null, previous_cursor: null, total: 1 } }));
   await page.route("**/api/v1/resource?**", (route) => route.fulfill({ json: { generation: 1, resource, findings: [] } }));
   await page.route("**/api/v1/resource/evidence?**", (route) => route.fulfill({ json: { generation: 1, items: [
     { id: "edge/endpoints", check: "edge", operation: "endpoints", observed_at: at, expires_at: expires, context, facts },

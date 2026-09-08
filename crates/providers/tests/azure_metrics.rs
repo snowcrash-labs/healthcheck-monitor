@@ -106,6 +106,15 @@ async fn discovers_metrics_and_applies_the_documented_aggregation()
     let requests = source.requests.lock().map_err(|_| "lock")?;
     assert_eq!(requests.len(), 3);
     assert!(requests[2].contains("aggregation=Minimum"));
+    let url: url::Url = requests[2].parse()?;
+    let timespan = url
+        .query_pairs()
+        .find(|(key, _)| key == "timespan")
+        .ok_or("timespan")?
+        .1
+        .into_owned();
+    assert!(timespan.split('/').all(|instant| instant.ends_with('Z')));
+    assert!(!timespan.contains('+'));
     Ok(())
 }
 #[tokio::test]

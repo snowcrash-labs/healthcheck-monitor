@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { amount, units, money, difference, colorClass } from "../../src/cost-schema";
 describe("billing amounts", () => {
   it("rejects non-decimal, oversized, and lossy values", () => {
-    for (const value of ["NaN", "1e5", "1.0000000001", "100000000000000000000", "customer payload"]) expect(amount.safeParse(value).success).toBe(false);
+    for (const value of ["NaN", "1e5", "1.0000000000000000001", "100000000000000000000", "customer payload"]) expect(amount.safeParse(value).success).toBe(false);
     expect(amount.safeParse("-0.123456789").success).toBe(true);
   });
   it("keeps nanounits exact and rounds signed display values", () => {

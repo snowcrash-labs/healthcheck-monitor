@@ -25,6 +25,12 @@ pub fn allowed(request: &Request) -> bool {
                 && (!path.contains("/secrets/") || path.ends_with("/versions"))
         }
         reqwest::Method::POST => {
+            if request.url().host_str() == Some("management.azure.com")
+                && path.starts_with("/subscriptions/")
+                && path.ends_with("/providers/microsoft.costmanagement/query")
+            {
+                return true;
+            }
             if request
                 .url()
                 .host_str()
@@ -112,6 +118,7 @@ pub fn allowed(request: &Request) -> bool {
                 .unwrap_or("");
             let action = target.rsplit('.').next().unwrap_or("");
             const READS: &[&str] = &[
+                "GetCostAndUsage",
                 "ListMetrics",
                 "ListCertificates",
                 "DescribeCertificate",

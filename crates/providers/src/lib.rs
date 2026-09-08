@@ -53,7 +53,11 @@ mod azure_operational;
 mod azure_projection;
 pub mod azure_registry;
 mod azure_registry_auth;
+pub mod billing_aws;
+pub mod billing_azure;
 pub mod billing_gcp;
+#[cfg(test)]
+mod billing_tests;
 mod cloud_logs;
 pub mod common;
 mod common_parallel;

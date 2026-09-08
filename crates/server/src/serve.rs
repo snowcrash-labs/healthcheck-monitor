@@ -36,6 +36,7 @@ pub async fn serve(
     let mut billing = tokio::spawn(crate::cost_worker::run(
         history.clone(),
         config.costs.clone(),
+        bus.clone(),
         stop.clone(),
     ));
     let app = Arc::new(App {
@@ -44,6 +45,7 @@ pub async fn serve(
         costs: config.costs.clone(),
         security,
         requests: Arc::new(tokio::sync::Semaphore::new(config.requests)),
+        cost_requests: Arc::new(tokio::sync::Semaphore::new(1)),
         streams: Arc::new(tokio::sync::Semaphore::new(config.event_streams)),
         stop: stop.clone(),
         response_bytes: config.response_bytes,

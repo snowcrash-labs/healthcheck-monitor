@@ -80,3 +80,27 @@ test("revoked authorization removes previously loaded resource data", async ({ p
   await expect(page.getByText("Your sign-in expired", { exact: false })).toBeVisible();
   await expect(page.getByText("private-resource", { exact: true })).toHaveCount(0);
 });
+
+test("a minute of revisions preserves resource rows and a paused view", async ({ page }) => {
+  await page.clock.install();
+  await fixture(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/resources");
+  const row = page.locator(".resources-table tbody tr").first();
+  await expect(row).toBeVisible();
+  const original = await row.elementHandle();
+  await row.getByRole("link").first().click();
+  await page.getByRole("button", { name: "Configuration", exact: true }).click();
+  await page.getByRole("searchbox", { name: "Search evidence" }).fill("kept");
+  for (let tick = 0; tick < 6; tick++) {
+    await page.clock.runFor(10000);
+    expect(await original?.evaluate((node) => node.isConnected)).toBe(true);
+    await expect(page.getByRole("searchbox", { name: "Search evidence" })).toHaveValue("kept");
+  }
+  await page.getByRole("button", { name: "Pause", exact: true }).click();
+  const paused = await page.getByText("Loaded view paused", { exact: false }).textContent();
+  await page.clock.runFor(60000);
+  await expect(page.getByText("Loaded view paused", { exact: false })).toHaveText(paused ?? "");
+  await page.getByRole("button", { name: "Resume live", exact: true }).click();
+  await expect(page.getByText("Loaded view paused", { exact: false })).toHaveCount(0);
+});

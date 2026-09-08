@@ -109,3 +109,5 @@ tr.selected { background: var(--hover); box-shadow: inset 3px 0 var(--accent); }
   .inspector-panel .facts-grid { grid-template-columns: 1fr; }
   .resource-inspector .tabs { position: sticky; top: 160px; background: var(--panel); z-index: 5; }
 }
+
+.eyebrow { font-size: 12px; letter-spacing: .5px; }

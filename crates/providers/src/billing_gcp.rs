@@ -42,12 +42,30 @@ struct Cell {
     v: Option<String>,
 }
 impl Reader {
-    pub async fn new(source: Gcp, pools: Arc<Pools>) -> Result<Self, Error> {
-        let mut settings = Settings::default();
-        settings.response_bytes = 1024 * 1024;
+    pub async fn new(
+        source: Gcp,
+        pools: Arc<Pools>,
+        credential: Option<&monitor_core::config::types::Credential>,
+    ) -> Result<Self, Error> {
+        Self::with_credentials(
+            source,
+            pools,
+            crate::google_credentials::load(credential).await?,
+        )
+    }
+    /// Accept a native credential provider for scoped contract validation and workload integration.
+    pub fn with_credentials(
+        source: Gcp,
+        pools: Arc<Pools>,
+        credentials: google_cloud_auth::credentials::AccessTokenCredentials,
+    ) -> Result<Self, Error> {
+        let settings = Settings {
+            response_bytes: 1024 * 1024,
+            ..Default::default()
+        };
         Ok(Self {
             http: Http::shared(pools, &settings)?,
-            credentials: crate::google_credentials::load(None).await?,
+            credentials,
             source,
             settings,
         })
@@ -112,7 +130,7 @@ impl Reader {
         bytes: u64,
         rows: usize,
         stop: &CancellationToken,
-    ) -> Result<(), Error> {
+    ) -> Result<u64, Error> {
         if !monitor_costs::config::identifier(job) {
             return Err(Error::Forbidden);
         }
@@ -169,7 +187,11 @@ impl Reader {
                 return Err(Error::Malformed);
             }
             if result.pointer("/status/state").and_then(Value::as_str) == Some("DONE") {
-                return Ok(());
+                return result
+                    .pointer("/statistics/query/totalBytesBilled")
+                    .and_then(Value::as_str)
+                    .and_then(|s| s.parse().ok())
+                    .ok_or(Error::Malformed);
             }
             tokio::select! { _=stop.cancelled()=>return Err(Error::Cancelled), _=tokio::time::sleep(std::time::Duration::from_secs(2))=>{} }
         }
@@ -223,14 +245,15 @@ fn decode(row: WireRow) -> Result<Charge, Error> {
     let mut cells = row.f.into_iter();
     let mut next = || cells.next().and_then(|c| c.v).ok_or(Error::Malformed);
     let charge = Charge {
+        target: None,
         day: next()?.parse().map_err(|_| Error::Malformed)?,
-        invoice_month: next()?,
+        invoice_month: monitor_costs::model::optional(next()?),
         provider: Provider::Gcp,
-        scope: next()?,
-        region: next()?,
+        scope: monitor_costs::model::optional(next()?),
+        region: monitor_costs::model::optional(next()?),
         product: next()?,
-        resource: next()?,
-        category: next()?,
+        resource: monitor_costs::model::optional(next()?),
+        category: monitor_costs::model::optional(next()?),
         currency: next()?,
         billed: next()?.try_into().map_err(|_| Error::Malformed)?,
         effective: None,

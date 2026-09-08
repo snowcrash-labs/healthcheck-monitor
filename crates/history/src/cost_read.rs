@@ -1,10 +1,12 @@
 //! Server-side billing aggregation keeps charts independent of visible breakdown pages.
+use crate::cost_cursor::{decode_cursor, hex_digest};
 use crate::{
     History,
     cost_rows::CostProvider,
     cost_schema::{cost_daily as d, cost_partition as p, cost_source as s},
     error::Error,
 };
+use bigdecimal::BigDecimal as Decimal;
 use chrono::NaiveDate;
 use diesel::AggregateExpressionMethods;
 use diesel::prelude::*;
@@ -15,8 +17,6 @@ use monitor_costs::{
     model::Amount,
     query::{Filter, Group, Measure, Period},
 };
-use rust_decimal::Decimal;
-use crate::cost_cursor::{decode_cursor, encode_cursor, hex_digest};
 
 impl History {
     pub async fn cost_view(&self, filter: &Filter, config: &Config) -> Result<View, Error> {
@@ -38,21 +38,17 @@ impl History {
             return Err(Error::Revision);
         }
         let mut normalized = filter.clone();
+        normalized.from = Some(period.from);
+        normalized.to = Some(period.to);
         normalized.cursor = None;
         normalized.revision = None;
         let fingerprint = hex_digest(serde_json::to_vec(&normalized).map_err(|_| Error::Record)?);
-        let offset = decode_cursor(filter.cursor.as_deref(), &revision, &fingerprint)?;
+        let boundary = decode_cursor(filter.cursor.as_deref(), &revision, &fingerprint)?;
         let limit = usize::from(filter.limit.unwrap_or(50));
         let previous = Period {
             from: period.from - (period.to - period.from),
             to: period.from,
         };
-        let target_scopes: Vec<_> = config
-            .scope_targets
-            .iter()
-            .filter(|m| filter.target.as_ref().is_some_and(|t| t == &m.target))
-            .map(|m| m.scope.clone())
-            .collect();
         let source_names: Vec<_> = config.sources.iter().map(|s| s.id.clone()).collect();
         let mut c = self.cost_read_pool.get().await.map_err(|_| Error::Pool)?;
         let mut buckets: Vec<Bucket> = Vec::new();
@@ -69,8 +65,8 @@ impl History {
                 if let Some(provider) = filter.provider {
                     query = query.filter(s::cost_source_provider.eq(CostProvider::from(provider)));
                 }
-                if filter.target.is_some() {
-                    query = query.filter(d::cost_daily_scope.eq_any(&target_scopes));
+                if let Some(target) = &filter.target {
+                    query = query.filter(d::cost_daily_target.eq(target));
                 }
                 if let Some(scope) = &filter.scope {
                     query = query.filter(d::cost_daily_scope.eq(scope));
@@ -119,20 +115,29 @@ impl History {
                     .group_by($group)
                     .select(($dimension, diesel::dsl::sum(d::cost_daily_billed)))
                     .into_boxed::<diesel::pg::Pg>();
+                let query = match &boundary {
+                    Some(boundary) => query.having(
+                        diesel::dsl::sum(d::cost_daily_billed)
+                            .lt(boundary.amount.decimal())
+                            .or(diesel::dsl::sum(d::cost_daily_billed)
+                                .eq(boundary.amount.decimal())
+                                .and($dimension.gt(&boundary.key))),
+                    ),
+                    None => query,
+                };
                 let rows: Vec<(String, Option<Decimal>)> =
                     filter_query!(query, period.from, $dimension)
                         .order((
                             diesel::dsl::sum(d::cost_daily_billed).desc(),
                             $dimension.asc(),
                         ))
-                        .offset(offset as i64)
                         .limit((limit + 1) as i64)
                         .load(&mut c)
                         .await?;
                 for (key, amount) in rows {
                     breakdown.push(Contributor {
                         key,
-                        amount: Amount::from_decimal(amount.unwrap_or(Decimal::ZERO))
+                        amount: Amount::from_decimal(amount.unwrap_or(Decimal::from(0)))
                             .map_err(|_| Error::Record)?,
                         previous: None,
                     });
@@ -178,7 +183,7 @@ impl History {
                     buckets.push(Bucket {
                         day,
                         key,
-                        amount: Amount::from_decimal(amount.unwrap_or(Decimal::ZERO))
+                        amount: Amount::from_decimal(amount.unwrap_or(Decimal::from(0)))
                             .map_err(|_| Error::Record)?,
                     });
                 }
@@ -199,7 +204,7 @@ impl History {
                     buckets.push(Bucket {
                         day,
                         key: "__other__".into(),
-                        amount: Amount::from_decimal(amount.unwrap_or(Decimal::ZERO))
+                        amount: Amount::from_decimal(amount.unwrap_or(Decimal::from(0)))
                             .map_err(|_| Error::Record)?,
                     });
                 }
@@ -208,73 +213,71 @@ impl History {
         match filter.group {
             Group::Provider => {
                 aggregate!(
-                    s::cost_source_provider.cast::<diesel::sql_types::Text>(),
+                    group_key(
+                        "v:",
+                        s::cost_source_provider
+                            .cast::<diesel::sql_types::Text>()
+                            .nullable()
+                    ),
                     s::cost_source_provider
                 );
             }
             Group::Product => {
-                aggregate!(d::cost_daily_product, d::cost_daily_product);
+                aggregate!(
+                    group_key("v:", d::cost_daily_product.nullable()),
+                    d::cost_daily_product
+                );
             }
-            Group::Scope | Group::Target => {
-                aggregate!(d::cost_daily_scope, d::cost_daily_scope);
+            Group::Scope => {
+                aggregate!(
+                    group_key("v:", d::cost_daily_scope.nullable()),
+                    d::cost_daily_scope
+                );
+            }
+            Group::Target => {
+                aggregate!(
+                    group_key("v:", d::cost_daily_target.nullable()),
+                    d::cost_daily_target
+                );
             }
             Group::Region => {
-                aggregate!(d::cost_daily_region, d::cost_daily_region);
+                aggregate!(
+                    group_key("v:", d::cost_daily_region.nullable()),
+                    d::cost_daily_region
+                );
             }
             Group::Category => {
-                aggregate!(d::cost_daily_category, d::cost_daily_category);
+                aggregate!(
+                    group_key("v:", d::cost_daily_category.nullable()),
+                    d::cost_daily_category
+                );
             }
             Group::Resource => {
-                aggregate!(d::cost_daily_resource, d::cost_daily_resource);
+                aggregate!(
+                    group_key("v:", d::cost_daily_resource.nullable()),
+                    d::cost_daily_resource
+                );
             }
         }
         drop(c);
-        // Do not mix new partitions into a response selected against an older publication.
-        let after = crate::cost_coverage::statuses(config, filter, self.cost_status().await?);
-        if serde_json::to_vec(&sources).ok() != serde_json::to_vec(&after).ok() {
-            return Err(Error::Revision);
-        }
-        let has_data = buckets.iter().any(|b| b.day >= period.from && b.day < period.to);
-        let previous_complete = period.to <= chrono::Utc::now().date_naive() && self.cost_covered(&sources, previous).await? && self.cost_covered(&sources, period).await?;
-        let total = if has_data {
-            Some(monitor_costs::aggregate::total(&buckets, period).map_err(|_| Error::Record)?)
-        } else {
-            None
-        };
-        let previous_total = if previous_complete {
-            Some(monitor_costs::aggregate::total(&buckets, previous).map_err(|_| Error::Record)?)
-        } else {
-            None
-        };
-        let series = monitor_costs::aggregate::series(
-            &buckets,
-            period,
-            filter.granularity,
-            previous_complete,
-        )
-        .map_err(|_| Error::Record)?;
-        let next_cursor = if breakdown.len() > limit {
-            Some(encode_cursor(offset + limit, &revision, &fingerprint)?)
-        } else {
-            None
-        };
-        breakdown.truncate(limit);
-        Ok(View {
-            enabled: true,
-            revision,
-            period,
-            currency: currency.into(),
-            measure: filter.measure,
-            group: filter.group,
-            granularity: filter.granularity,
-            total,
-            previous_total,
-            complete: false,
+        self.cost_response(
+            filter,
+            config,
             sources,
-            series,
-            breakdown,
-            next_cursor,
-            contributor_count: contributor_count as usize,
-        })
+            crate::cost_response::Draft {
+                buckets,
+                breakdown,
+                contributor_count,
+                period,
+                previous,
+                revision,
+                fingerprint,
+                limit,
+            },
+        )
+        .await
     }
 }
+
+// PostgreSQL CONCAT gives null dimensions a distinct opaque API key; no sentinel is stored.
+diesel::define_sql_function! { #[sql_name = "concat"] fn group_key(prefix: diesel::sql_types::Text, value: diesel::sql_types::Nullable<diesel::sql_types::Text>) -> diesel::sql_types::Text; }

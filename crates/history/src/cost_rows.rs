@@ -4,10 +4,10 @@ use crate::{
     error::Error,
     types::Id,
 };
+use bigdecimal::BigDecimal as Decimal;
 use chrono::{DateTime, NaiveDate, Utc};
 use diesel::prelude::*;
 use monitor_costs::model::{Charge, Provider};
-use rust_decimal::Decimal;
 use sha2::{Digest, Sha256};
 
 #[derive(Debug, Clone, Copy, diesel_derive_enum::DbEnum)]
@@ -53,15 +53,16 @@ pub struct Source {
 #[derive(Insertable)]
 #[diesel(table_name = d)]
 pub struct Daily {
+    cost_daily_target: Option<String>,
     cost_daily_import_id: Id,
     cost_daily_key: String,
     cost_daily_day: NaiveDate,
-    cost_daily_invoice_month: String,
-    cost_daily_scope: String,
-    cost_daily_region: String,
+    cost_daily_invoice_month: Option<String>,
+    cost_daily_scope: Option<String>,
+    cost_daily_region: Option<String>,
     cost_daily_product: String,
-    cost_daily_resource: String,
-    cost_daily_category: String,
+    cost_daily_resource: Option<String>,
+    cost_daily_category: Option<String>,
     cost_daily_currency: String,
     cost_daily_billed: Decimal,
     cost_daily_effective: Option<Decimal>,
@@ -81,6 +82,7 @@ impl Daily {
         ))
         .map_err(|_| Error::Record)?;
         Ok(Self {
+            cost_daily_target: charge.target,
             cost_daily_import_id: import,
             cost_daily_key: hex_digest(&key),
             cost_daily_day: charge.day,

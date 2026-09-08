@@ -61,12 +61,7 @@ pub struct Period {
 }
 impl Filter {
     pub fn period(&self) -> Result<Period, Error> {
-        let to = self.to.unwrap_or_else(|| {
-            Utc::now()
-                .date_naive()
-                .succ_opt()
-                .unwrap_or(Utc::now().date_naive())
-        });
+        let to = self.to.unwrap_or_else(|| Utc::now().date_naive());
         let from = self.from.unwrap_or(to - chrono::Duration::days(30));
         if from.year() < 1970
             || to <= from
