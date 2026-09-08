@@ -127,16 +127,14 @@ mod tests {
         assert_eq!(setting, "on");
         let (started, ready) = tokio::sync::oneshot::channel();
         {
-            let transaction = connection
-                .build_transaction()
-                .read_only()
-                .run(async |connection| {
-                    diesel::select(scope_setting("enable_incremental_sort", "off", true))
-                        .get_result::<String>(connection)
-                        .await?;
-                    started.send(()).map_err(|_| Error::Task)?;
-                    std::future::pending::<Result<(), Error>>().await
-                });
+            let mut builder = connection.build_transaction().read_only();
+            let transaction = builder.run(async |connection| {
+                diesel::select(scope_setting("enable_incremental_sort", "off", true))
+                    .get_result::<String>(connection)
+                    .await?;
+                started.send(()).map_err(|_| Error::Task)?;
+                std::future::pending::<Result<(), Error>>().await
+            });
             tokio::pin!(transaction);
             tokio::select! {
                 _ = &mut transaction => return Err("transaction unexpectedly completed".into()),
