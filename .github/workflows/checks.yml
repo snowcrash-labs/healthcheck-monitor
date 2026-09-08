@@ -81,6 +81,9 @@ jobs:
       - run: cargo test --locked -p monitor-history --test query_history -- --include-ignored
         env:
           HEALTHCHECK_TEST_DATABASE_URL: postgresql://monitor_test:local-ci-only@127.0.0.1:5432/healthcheck_monitor_dashboard_test
+      - run: cargo test --locked -p monitor-history --lib scope_planner_setting -- --include-ignored
+        env:
+          HEALTHCHECK_TEST_DATABASE_URL: postgresql://monitor_test:local-ci-only@127.0.0.1:5432/healthcheck_monitor_dashboard_test
       - run: docker exec ${{ job.services.postgres.id }} psql -U monitor_test -d postgres -v ON_ERROR_STOP=1 -c 'CREATE DATABASE healthcheck_monitor_costs_test'
       - run: cargo test --locked -p monitor-history --test costs -- --include-ignored
         env:

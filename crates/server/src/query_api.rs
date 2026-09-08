@@ -11,7 +11,7 @@ use monitor_query::{
     enums::{Category, FindingState, Severity},
     filter::{Filter, Window},
     record::Record,
-    response::{Availability, Page, ScopeInfo, Summary},
+    response::{Availability, Page, Summary},
 };
 use std::sync::Arc;
 
@@ -201,76 +201,6 @@ pub async fn summary(
             warnings,
             recovered,
             failed_checks,
-        },
-        app.response_bytes,
-    )
-}
-pub async fn scopes(
-    State(app): State<Arc<App>>,
-    Query(mut filter): Query<Filter>,
-) -> Result<Response, ApiError> {
-    let (window, after) = crate::query_cursor::resolve_scope(&mut filter)?;
-    let availability = availability(&app, window).await;
-    let mut items = std::collections::BTreeMap::new();
-    let key = |s: &monitor_query::record::Scope| (s.target.clone(), s.provider, s.scope.clone());
-    match app
-        .history
-        .query_scopes(&filter, window, after.as_ref())
-        .await
-    {
-        Ok(scopes) => {
-            for scope in scopes {
-                items.insert(
-                    key(&scope),
-                    ScopeInfo {
-                        scope,
-                        checks: vec![],
-                        current: false,
-                    },
-                );
-            }
-        }
-        Err(_) if !availability.history_available => {}
-        Err(error) => return Err(error.into()),
-    }
-    if let Some(view) = app.bus.current() {
-        for target in &view.targets {
-            let scope = crate::query_projection::scope(target);
-            if monitor_query::matching::scope(&filter, &scope, &Default::default())
-                && after.as_ref().is_none_or(|a| key(&scope) > key(a))
-            {
-                items.insert(
-                    key(&scope),
-                    ScopeInfo {
-                        checks: view
-                            .checks
-                            .iter()
-                            .filter(|c| c.target == target.name)
-                            .map(|c| crate::query_projection::check(c.check))
-                            .collect(),
-                        scope,
-                        current: true,
-                    },
-                );
-            }
-        }
-    }
-    let limit = usize::from(filter.limit.unwrap_or(50));
-    let more = items.len() > limit;
-    let items: Vec<_> = items.into_values().take(limit).collect();
-    let next_cursor = if more {
-        items
-            .last()
-            .map(|r| crate::query_cursor::next_scope(&filter, window, r.scope.clone()))
-            .transpose()?
-    } else {
-        None
-    };
-    json(
-        &Page {
-            items,
-            next_cursor,
-            availability,
         },
         app.response_bytes,
     )

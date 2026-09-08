@@ -7,6 +7,7 @@ use tokio_util::sync::CancellationToken;
 pub struct App {
     pub bus: Arc<Bus>,
     pub history: Arc<monitor_history::History>,
+    pub scope_cache: crate::scope_cache::Cache,
     pub costs: monitor_costs::config::Config,
     pub security: Security,
     pub requests: Arc<Semaphore>,
@@ -22,7 +23,7 @@ pub fn router(app: Arc<App>, _config: &Config) -> Router {
         .route("/query/costs/series", get(crate::cost_api::view))
         .route("/query/costs/breakdown", get(crate::cost_api::view))
         .route("/query/costs/sources", get(crate::cost_api::sources))
-        .route("/query/scopes", get(crate::query_api::scopes))
+        .route("/query/scopes", get(crate::scope_api::scopes))
         .route("/query/openapi.json", get(crate::query_openapi::openapi))
         .route(
             "/query/deployment",

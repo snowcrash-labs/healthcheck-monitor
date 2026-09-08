@@ -37,6 +37,10 @@ mod query_tests;
 mod resource_evidence;
 mod resource_rows;
 mod response;
+mod scope_api;
+mod scope_cache;
+#[cfg(test)]
+mod scope_cache_tests;
 mod security;
 mod serve;
 mod static_files;
