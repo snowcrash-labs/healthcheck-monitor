@@ -1,9 +1,22 @@
 import { describe, it, expect } from "vitest";
-import { amount, units, money, difference, colorClass } from "../../src/cost-schema";
+import { amount, costView, units, money, difference, colorClass } from "../../src/cost-schema";
+import { fractionalCosts } from "../cost-fixture";
 describe("billing amounts", () => {
   it("rejects non-decimal, oversized, and lossy values", () => {
-    for (const value of ["NaN", "1e5", "1.0000000000000000001", "100000000000000000000", "customer payload"]) expect(amount.safeParse(value).success).toBe(false);
+    for (const value of ["NaN", "1e5", `1.${"0".repeat(38)}1`, "100000000000000000000", "customer payload"]) expect(amount.safeParse(value).success).toBe(false);
     expect(amount.safeParse("-0.123456789").success).toBe(true);
+  });
+  it("accepts the backend decimal contract across the entire billing view", () => {
+    expect(costView.safeParse(fractionalCosts).success).toBe(true);
+    const smallest = `0.${"0".repeat(37)}1`;
+    expect(amount.safeParse(smallest).success).toBe(true);
+    expect(units(smallest)).toBe(1n);
+    expect(units(`-${smallest}`)).toBe(-1n);
+    expect(units("1.00000000000000000000000000000000000001") - units("1")).toBe(1n);
+    expect(money("12.340000732578337192535", "USD")).toBe("USD 12.34");
+    expect(money("0.00499999999999999999999999999999999999", "USD")).toBe("USD 0.00");
+    expect(money("0.00500000000000000000000000000000000001", "USD")).toBe("USD 0.01");
+    expect(difference(`0.${"0".repeat(37)}2`, smallest)).toBe("+100.0% vs previous period");
   });
   it("keeps nanounits exact and rounds signed display values", () => {
     expect(units("0.1") + units("0.2")).toBe(units("0.3"));

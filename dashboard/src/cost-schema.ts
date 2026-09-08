@@ -1,5 +1,8 @@
 import { z } from "zod";
-export const amount = z.string().regex(/^-?\d{1,20}(?:\.\d{1,18})?$/);
+export const amount = z.string().regex(/^-?\d{1,20}(?:\.\d{1,38})?$/);
+const decimalPlaces = 38;
+const decimalUnits = 10n ** BigInt(decimalPlaces);
+const centUnits = decimalUnits / 100n;
 const date = z.iso.date();
 const contributor = z.object({ key: z.string(), amount, previous: amount.nullable() });
 export const costView = z.object({
@@ -20,14 +23,14 @@ export function units(value: string): bigint {
   if (!parsed.success) return 0n;
   const negative = value.startsWith("-");
   const [whole = "0", fraction = ""] = value.replace(/^-/, "").split(".");
-  const result = BigInt(whole) * 1_000_000_000_000_000_000n + BigInt(fraction.padEnd(18, "0"));
+  const result = BigInt(whole) * decimalUnits + BigInt(fraction.padEnd(decimalPlaces, "0"));
   return negative ? -result : result;
 }
 export function money(value: string | null, currency: string): string {
   if (value === null) return "Not available";
   const raw = units(value);
-  const rounded = (raw < 0n ? -raw : raw) + 5_000_000_000_000_000n;
-  const cents = rounded / 10_000_000_000_000_000n;
+  const rounded = (raw < 0n ? -raw : raw) + centUnits / 2n;
+  const cents = rounded / centUnits;
   const whole = (cents / 100n).toLocaleString("en-US");
   return `${raw < 0n ? "−" : ""}${currency} ${whole}.${(cents % 100n).toString().padStart(2, "0")}`;
 }

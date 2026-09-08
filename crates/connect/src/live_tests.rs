@@ -45,7 +45,19 @@ async fn iap_reader_can_query_billing_while_anonymous_access_is_denied()
         .send()
         .await?;
     let version = response.version();
-    let view: Billing = decode(response, 2 * 1024 * 1024).await?;
+    let raw: serde_json::Value = decode(response, 2 * 1024 * 1024).await?;
+    if let Ok(path) = std::env::var("HEALTHCHECK_BILLING_CAPTURE") {
+        use tokio::io::AsyncWriteExt;
+        let mut file = tokio::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(path)
+            .await?;
+        file.write_all(&serde_json::to_vec(&raw)?).await?;
+        file.sync_all().await?;
+    }
+    let view: Billing = serde_json::from_value(raw)?;
     assert!(view.enabled);
     assert!(
         !view.series.is_empty(),
