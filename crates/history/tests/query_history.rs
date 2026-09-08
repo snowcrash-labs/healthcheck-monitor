@@ -5,6 +5,8 @@ use monitor_query::{
     filter::{Filter, Window},
     record::*,
 };
+#[path = "scope_queries/mod.rs"]
+mod scopes;
 
 fn finding(now: chrono::DateTime<chrono::Utc>) -> Record {
     Record {

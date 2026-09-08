@@ -42,6 +42,7 @@ pub async fn serve(
     let app = Arc::new(App {
         bus: bus.clone(),
         history,
+        scope_cache: Default::default(),
         costs: config.costs.clone(),
         security,
         requests: Arc::new(tokio::sync::Semaphore::new(config.requests)),
