@@ -96,6 +96,22 @@ async fn scope_cache_obeys_byte_budget_and_rejects_oversized_entries() {
     assert!(cache.get(&key("4", 1)).await.is_some());
 }
 
+#[tokio::test(start_paused = true)]
+async fn oversized_replacement_removes_the_previous_cached_value() {
+    let cache = Cache::default();
+    let key = key("replacement", 1);
+    cache
+        .insert(key.clone(), Cached::new(Bytes::from_static(b"old")))
+        .await;
+    cache
+        .insert(
+            key.clone(),
+            Cached::new(Bytes::from(vec![0; 32 * 1024 * 1024 + 1])),
+        )
+        .await;
+    assert!(cache.get(&key).await.is_none());
+}
+
 #[tokio::test]
 async fn identical_misses_share_a_flight_and_cancelled_flights_release_capacity()
 -> Result<(), crate::response::ApiError> {

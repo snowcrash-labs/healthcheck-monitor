@@ -28,6 +28,7 @@ pub struct Cached {
     ttl: Duration,
 }
 impl Cached {
+    /// Timestamp a historical response without sliding its lifetime on subsequent reads.
     pub fn new(body: Bytes) -> Self {
         Self {
             body,
@@ -43,6 +44,7 @@ impl Cached {
             ttl: Duration::from_secs(1),
         }
     }
+    /// Share immutable bytes while reporting their actual cache age.
     pub fn response(&self, hit: bool) -> Result<Response, ApiError> {
         let mut response = (
             [
@@ -92,6 +94,7 @@ pub struct Cache {
     state: Mutex<State>,
 }
 impl Cache {
+    /// Return a fresh entry and promote it in the bounded eviction order.
     pub async fn get(&self, key: &Key) -> Option<Cached> {
         let mut state = self.state.lock().await;
         state.expire();
@@ -101,17 +104,18 @@ impl Cache {
         state.entries.push_back(entry);
         Some(value)
     }
+    /// Supersede an existing value even when its replacement cannot fit the cache.
     pub async fn insert(&self, key: Key, value: Cached) {
         let entry = Entry { key, value };
-        if entry.bytes() > MAX_BYTES {
-            return;
-        }
         let mut state = self.state.lock().await;
         state.expire();
         if let Some(index) = state.entries.iter().position(|old| old.key == entry.key)
             && let Some(old) = state.entries.remove(index)
         {
             state.bytes -= old.bytes();
+        }
+        if entry.bytes() > MAX_BYTES {
+            return;
         }
         while state.entries.len() >= MAX_ENTRIES || state.bytes + entry.bytes() > MAX_BYTES {
             if let Some(old) = state.entries.pop_front() {
@@ -123,6 +127,7 @@ impl Cache {
         state.bytes += entry.bytes();
         state.entries.push_back(entry);
     }
+    /// Share loads for a key without retaining locks after their callers finish.
     pub async fn flight(&self, key: &Key) -> Result<Arc<Mutex<()>>, ApiError> {
         let mut state = self.state.lock().await;
         state.expire();

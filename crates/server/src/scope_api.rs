@@ -40,6 +40,7 @@ pub(super) fn cache_key(app: &App, filter: &Filter) -> Result<Key, ApiError> {
     })
 }
 
+/// Serve a validated scope page under the router's authentication guard.
 pub async fn scopes(
     State(app): State<Arc<App>>,
     Query(mut filter): Query<Filter>,
