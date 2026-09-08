@@ -131,27 +131,6 @@ async fn identical_misses_share_a_flight_and_cancelled_flights_release_capacity(
     Ok(())
 }
 
-#[test]
-fn failed_scope_lookup_invalidates_successful_watermark_availability() {
-    let now = chrono::Utc::now();
-    let availability = monitor_query::response::Availability {
-        requested: monitor_query::filter::Window {
-            from: now - chrono::Duration::minutes(1),
-            to: now,
-        },
-        available_since: Some(now - chrono::Duration::days(1)),
-        persisted_through: Some(now),
-        history_available: true,
-        complete: true,
-        gaps: vec![],
-    };
-    let degraded = crate::scope_api::history_failed(availability, "scope query failed");
-    assert!(!degraded.history_available);
-    assert!(!degraded.complete);
-    assert_eq!(degraded.persisted_through, Some(now));
-    assert_eq!(degraded.gaps, vec!["scope query failed"]);
-}
-
 #[tokio::test]
 async fn cached_scope_response_keeps_its_window_and_cannot_bypass_authentication()
 -> Result<(), Box<dyn std::error::Error>> {
@@ -196,73 +175,5 @@ async fn cached_scope_response_keeps_its_window_and_cannot_bypass_authentication
         .oneshot(request("/api/v1/query/scopes")?)
         .await?;
     assert_eq!(stopped.headers()["x-healthcheck-cache"], "miss");
-    Ok(())
-}
-
-#[tokio::test]
-async fn scope_lookup_failure_after_successful_watermark_keeps_current_scope()
--> Result<(), Box<dyn std::error::Error>> {
-    let (app, _) = crate::test_support::app(&crate::config::Config::default()).await?;
-    let now = chrono::Utc::now();
-    let window = monitor_query::filter::Window {
-        from: now - chrono::Duration::minutes(1),
-        to: now,
-    };
-    let availability = monitor_query::response::Availability {
-        requested: window,
-        available_since: Some(window.from),
-        persisted_through: Some(now),
-        history_available: true,
-        complete: true,
-        gaps: vec![],
-    };
-    let result = crate::scope_api::assemble(&app, &Default::default(), window, None, async {
-        (availability, Err(monitor_history::error::Error::Pool))
-    })
-    .await
-    .map_err(|_| "scope fallback failed")?;
-    assert_eq!(result.items.len(), 1);
-    assert!(result.items[0].current);
-    assert!(!result.availability.history_available);
-    assert!(!result.availability.complete);
-    assert!(
-        result
-            .availability
-            .gaps
-            .iter()
-            .any(|gap| gap.contains("retained scopes may be missing"))
-    );
-    Ok(())
-}
-
-#[tokio::test(start_paused = true)]
-async fn stalled_history_has_a_bounded_current_scope_fallback()
--> Result<(), Box<dyn std::error::Error>> {
-    let (app, _) = crate::test_support::app(&crate::config::Config::default()).await?;
-    let now = chrono::Utc::now();
-    let window = monitor_query::filter::Window {
-        from: now - chrono::Duration::minutes(1),
-        to: now,
-    };
-    let start = tokio::time::Instant::now();
-    let result = crate::scope_api::assemble(
-        &app,
-        &Default::default(),
-        window,
-        None,
-        std::future::pending(),
-    )
-    .await
-    .map_err(|_| "scope fallback failed")?;
-    assert_eq!(start.elapsed(), Duration::from_secs(2));
-    assert_eq!(result.items.len(), 1);
-    assert!(!result.availability.complete);
-    assert!(
-        result
-            .availability
-            .gaps
-            .iter()
-            .any(|gap| gap.contains("timed out"))
-    );
     Ok(())
 }

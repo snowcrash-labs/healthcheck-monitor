@@ -86,15 +86,15 @@ async fn load(
     window: Window,
     after: Option<Scope>,
 ) -> Result<Page<ScopeInfo>, ApiError> {
-    let history = async {
-        let availability = crate::query_api::availability(app, window).await;
-        let scopes = app
-            .history
-            .query_scopes(&filter, window, after.as_ref())
-            .await;
-        (availability, scopes)
-    };
-    assemble(app, &filter, window, after.as_ref(), history).await
+    assemble(
+        app,
+        &filter,
+        window,
+        after.as_ref(),
+        crate::query_api::availability(app, window),
+        app.history.query_scopes(&filter, window, after.as_ref()),
+    )
+    .await
 }
 
 /// Keep historical failure handling testable without weakening the real database contract.
@@ -103,14 +103,36 @@ pub(super) async fn assemble(
     filter: &Filter,
     window: Window,
     after: Option<&Scope>,
-    history: impl std::future::Future<
-        Output = (
-            Availability,
-            Result<Vec<Scope>, monitor_history::error::Error>,
-        ),
-    >,
+    availability: impl std::future::Future<Output = Availability>,
+    scopes: impl std::future::Future<Output = Result<Vec<Scope>, monitor_history::error::Error>>,
 ) -> Result<Page<ScopeInfo>, ApiError> {
-    let history = tokio::time::timeout(Duration::from_secs(2), history).await;
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
+    let history = match tokio::time::timeout_at(deadline, availability).await {
+        Ok(availability) => {
+            let scopes = match tokio::time::timeout_at(deadline, scopes).await {
+                Ok(result) => result,
+                Err(_) => {
+                    tracing::warn!(
+                        reason = "scope_deadline",
+                        "Historical scope discovery unavailable; serving current metadata"
+                    );
+                    return project(
+                        app,
+                        filter,
+                        window,
+                        after,
+                        history_failed(
+                            availability,
+                            "Historical scope lookup timed out; retained scopes may be missing",
+                        ),
+                        vec![],
+                    );
+                }
+            };
+            Ok((availability, scopes))
+        }
+        Err(error) => Err(error),
+    };
     let (availability, retained) = match history {
         Ok((availability, Ok(scopes))) => (availability, scopes),
         Ok((availability, Err(_))) => {
@@ -146,6 +168,18 @@ pub(super) async fn assemble(
             )
         }
     };
+    project(app, filter, window, after, availability, retained)
+}
+
+/// Merge retained and current scope metadata without changing the requested pagination window.
+fn project(
+    app: &App,
+    filter: &Filter,
+    window: Window,
+    after: Option<&Scope>,
+    availability: Availability,
+    retained: Vec<Scope>,
+) -> Result<Page<ScopeInfo>, ApiError> {
     let key = |s: &Scope| (s.target.clone(), s.provider, s.scope.clone());
     let mut items = BTreeMap::new();
     for scope in retained {

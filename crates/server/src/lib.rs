@@ -41,6 +41,8 @@ mod scope_api;
 mod scope_cache;
 #[cfg(test)]
 mod scope_cache_tests;
+#[cfg(test)]
+mod scope_history_tests;
 mod security;
 mod serve;
 mod static_files;
