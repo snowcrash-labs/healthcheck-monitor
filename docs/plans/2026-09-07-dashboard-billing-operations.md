@@ -95,6 +95,8 @@ Startup verification includes an existing production snapshot. Global JSON arbit
 
 Remaining acceptance includes authenticated resource-link checks across configured families, sustained VM load measurements, reconciled imported billing periods, and resolution of provider coverage gaps. AWS Health entitlement, Azure Resource Health authentication despite provider registration, missing metrics, and history persistence gaps remain visible. Inventory and completed authentication alone cannot establish normal client behavior.
 
+The billing frontend subsequently rejected valid 38-place amounts because its validator and integer arithmetic still used eighteen places. Revision `304bda3` corrected both and was deployed on 2026-09-08. Verification compared the protected served asset checksum with the tested bundle and rendered a fresh billing response in Firefox, Chromium, and WebKit. Existing open browser sessions need a reload to acquire the new JavaScript. The [gap-closure roadmap](2026-09-07-monitoring-gap-closure.md) separates this repaired contract regression from remaining import, evidence, and coverage work.
+
 ## References
 
 - [Dashboard experience specification](2026-09-07-dashboard-experience.md).

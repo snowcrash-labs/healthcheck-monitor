@@ -10,6 +10,8 @@ Expose separate counters for response truncation, pagination limits, scan budget
 
 Profile the configured workload before increasing limits again. The current implementation serializes observations to estimate retained bytes, clones cached results and snapshots, and accounts for observations independently across check results. Large quota inventories can occupy state needed by later checks. These are concrete candidates, not a proven single cause of every delay. Compare sampled CPU and allocation profiles with per-stage timings.
 
+Record artifact profile and build flags with measurements. The deployed CI artifact currently uses the development profile; those timings cannot establish optimized production performance. Evaluate an explicitly authorized optimized delivery pipeline separately if required, while honoring the no-release-build constraint for this work. Keep blocking serialization/evaluation off asynchronous I/O workers where profiling confirms starvation, and measure health-check responsiveness during publication.
+
 Code entry points are [scheduling](../../crates/core/src/scheduler.rs), [state retention](../../crates/core/src/state.rs), [byte accounting](../../crates/core/src/bounds.rs), [inventory reuse](../../crates/providers/src/inventory_cache.rs), [endpoint collection](../../crates/providers/src/endpoint_scan.rs), [query publication](../../crates/server/src/query_publish.rs), and the [history journal](../../crates/history/src/journal.rs).
 
 Acceptance: a one-hour capture can attribute every missing check or dropped record to a named stage and distinguish provider delay from local contention. Collection and API telemetry must remain available when the history database is unavailable.
@@ -41,6 +43,8 @@ Align current checks, legacy run summaries, and richer query records. A complete
 For [resource removal](https://linear.app/soundpatrol/issue/SOU-1481), derive candidates from retained findings and authoritative inventory scope, not only membership in the immediately preceding result. Two later complete inventories must retire a missing resource even if the first post-disappearance inventory was interrupted, or the process restored a finding without its prior observation. Failed, stale, and truncated inventories never count as confirmations. Persist removal and close the historical interval; do not fabricate recovery.
 
 Acceptance includes database interruption, queue saturation, record rejection, restart before and after commit acknowledgment, and SIGTERM with pending work. A bounded shutdown can leave explicit unfinished evidence, but cannot acknowledge uncommitted history. Verify persisted check counts and lifecycle intervals against source runs and the current API.
+
+The observed deployment stop exceeded systemd's grace period and required SIGKILL before restart. Reproduce this with the retained dataset, attribute the blocked stage, and test that cancellation reaches collection, publication, and database workers. Atomic snapshots and idempotent journal recovery must survive forced termination; a local readiness response after restart does not erase the missing shutdown interval.
 
 ## Logs that make forward progress
 
