@@ -3,7 +3,7 @@ import { resourcePath } from "../../src/api";
 import { fixture } from "./fixtures";
 
 test("target panels open scoped overviews and expose every configured check", async ({ page }) => {
-  await fixture(page);
+  const diagnostics = await fixture(page);
   await page.goto("/");
   await page.getByRole("link", { name: "dev", exact: true }).click();
   await expect(page).toHaveURL(/\/targets\/dev/);
@@ -24,6 +24,7 @@ test("target panels open scoped overviews and expose every configured check", as
   await expect(page.getByRole("heading", { name: "Release verification" })).toBeVisible();
   await page.goBack();
   await expect(page.getByLabel("Monitoring target")).toHaveValue("dev");
+  diagnostics.assertReactiveDiagnostics();
 });
 
 test("resource problems show what when where and retain multiple evidence sources", async ({ page }, testInfo) => {
