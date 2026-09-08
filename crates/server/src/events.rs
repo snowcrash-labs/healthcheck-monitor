@@ -65,8 +65,10 @@ pub async fn events(
     Ok(Sse::new(events).keep_alive(KeepAlive::new().interval(Duration::from_secs(15))))
 }
 pub async fn health(State(app): State<Arc<App>>) -> Result<Response, ApiError> {
-    // Collector delays affect evidence freshness, not the ability to serve the dashboard.
-    let healthy = app.bus.running.load(Ordering::Acquire) && !app.stop.is_cancelled();
+    // Initial state restoration must succeed before deployment or load-balancer probes pass.
+    let healthy = app.bus.current().is_some()
+        && app.bus.running.load(Ordering::Acquire)
+        && !app.stop.is_cancelled();
     if !healthy {
         return Err(ApiError::Unavailable);
     }

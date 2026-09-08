@@ -12,7 +12,7 @@ use monitor_integrations::{
     transport::{Error, Http},
 };
 use serde::Deserialize;
-use serde_json::{Value, json};
+use serde_json::{json, value::RawValue};
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
@@ -34,7 +34,7 @@ struct Response {
 #[derive(Deserialize)]
 struct Properties {
     columns: Vec<Column>,
-    rows: Vec<Vec<Value>>,
+    rows: Vec<Vec<Box<RawValue>>>,
     #[serde(rename = "nextLink")]
     next: Option<String>,
 }
@@ -90,8 +90,8 @@ impl Reader {
             .json(&body)
             .build()
             .map_err(|_| Error::Malformed)?;
-        let value = self.http.json(request, &self.settings, stop).await?;
-        decode(value, &self.scope)
+        let response = self.http.typed_json(request, &self.settings, stop).await?;
+        project(response, &self.scope)
     }
 }
 pub(crate) fn continuation(root: &url::Url, cursor: &str) -> Result<url::Url, Error> {
@@ -112,8 +112,21 @@ pub(crate) fn continuation(root: &url::Url, cursor: &str) -> Result<url::Url, Er
     }
     Ok(url)
 }
-pub(crate) fn decode(value: Value, scope: &str) -> Result<Page, Error> {
-    let response: Response = serde_json::from_value(value).map_err(|_| Error::Malformed)?;
+#[cfg(test)]
+pub(crate) fn decode(bytes: &[u8], scope: &str) -> Result<Page, Error> {
+    project(
+        serde_json::from_slice(bytes).map_err(|_| Error::Malformed)?,
+        scope,
+    )
+}
+fn token(raw: &RawValue) -> Result<String, Error> {
+    if raw.get().starts_with('"') {
+        serde_json::from_str(raw.get()).map_err(|_| Error::Malformed)
+    } else {
+        Ok(raw.get().to_owned())
+    }
+}
+fn project(response: Response, scope: &str) -> Result<Page, Error> {
     let properties = response.properties;
     if properties.columns.len() > 32 || properties.rows.len() > 5000 {
         return Err(Error::Limit);
@@ -133,27 +146,20 @@ pub(crate) fn decode(value: Value, scope: &str) -> Result<Page, Error> {
     let mut rows = Vec::new();
     for row in properties.rows {
         let get = |index: usize| row.get(index).ok_or(Error::Malformed);
-        let day = get(date)?
-            .as_u64()
-            .map(|d| d.to_string())
-            .or_else(|| get(date).ok()?.as_str().map(str::to_string))
-            .ok_or(Error::Malformed)?;
+        let day = token(get(date)?)?;
         let day = chrono::NaiveDate::parse_from_str(&day, "%Y%m%d")
             .or_else(|_| day.parse())
             .map_err(|_| Error::Malformed)?;
-        let raw = get(cost)?;
-        let amount = Amount::provider(
-            raw.as_str()
-                .map(String::from)
-                .unwrap_or_else(|| raw.to_string())
-                .as_str(),
-        )
-        .map_err(|_| Error::Malformed)?;
-        let text = |index| {
-            get(index)?
-                .as_str()
-                .map(String::from)
-                .ok_or(Error::Malformed)
+        let amount = Amount::provider(&token(get(cost)?)?).map_err(|_| Error::Malformed)?;
+        let text =
+            |index| serde_json::from_str::<String>(get(index)?.get()).map_err(|_| Error::Malformed);
+        let resource_value = get(resource)?;
+        let resource = if resource_value.get() == "null" {
+            None
+        } else {
+            let value: String =
+                serde_json::from_str(resource_value.get()).map_err(|_| Error::Malformed)?;
+            (!value.is_empty()).then(|| value.to_ascii_lowercase())
         };
         let charge = Charge {
             target: None,
@@ -163,10 +169,7 @@ pub(crate) fn decode(value: Value, scope: &str) -> Result<Page, Error> {
             scope: Some(scope.into()),
             region: None,
             product: text(product)?,
-            resource: get(resource)?
-                .as_str()
-                .filter(|s| !s.is_empty())
-                .map(str::to_ascii_lowercase),
+            resource,
             category: None,
             currency: text(currency)?,
             billed: amount,

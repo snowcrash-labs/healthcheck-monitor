@@ -237,3 +237,36 @@ async fn json_response_limits_fail_explicitly() -> Result<(), Box<dyn std::error
     );
     Ok(())
 }
+#[tokio::test]
+async fn readiness_waits_for_restored_state_and_runtime_heartbeat()
+-> Result<(), Box<dyn std::error::Error>> {
+    use monitor_runtime::Observer;
+    let (mut app, _) = crate::test_support::app(&crate::config::Config::default()).await?;
+    let state = std::sync::Arc::get_mut(&mut app).ok_or("app is shared")?;
+    state.bus = crate::bus::Bus::new(state.bus.journal.clone());
+    assert!(
+        crate::events::health(axum::extract::State(app.clone()))
+            .await
+            .is_err()
+    );
+    let (snapshot, effective) = crate::test_support::evidence()?;
+    app.bus.update(&snapshot.snapshot, &effective, &[]);
+    assert!(
+        crate::events::health(axum::extract::State(app.clone()))
+            .await
+            .is_err()
+    );
+    app.bus.heartbeat(chrono::Utc::now(), true);
+    assert!(
+        crate::events::health(axum::extract::State(app.clone()))
+            .await
+            .is_ok()
+    );
+    app.stop.cancel();
+    assert!(
+        crate::events::health(axum::extract::State(app))
+            .await
+            .is_err()
+    );
+    Ok(())
+}

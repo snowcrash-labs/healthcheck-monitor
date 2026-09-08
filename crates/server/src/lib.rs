@@ -60,7 +60,7 @@ pub enum Error {
     Configuration,
     #[error("server I/O failed")]
     Io(#[from] std::io::Error),
-    #[error("monitoring runtime failed")]
+    #[error("monitoring runtime failed: {0}")]
     Runtime(#[from] monitor_core::error::Error),
     #[error("history configuration unavailable")]
     History,

@@ -4,10 +4,8 @@ use serde_json::json;
 #[test]
 fn azure_query_keeps_decimal_lexemes_and_resource_identity()
 -> Result<(), Box<dyn std::error::Error>> {
-    let value = serde_json::from_str(
-        r#"{"properties":{"columns":[{"name":"Cost"},{"name":"UsageDate"},{"name":"ServiceName"},{"name":"ResourceId"},{"name":"Currency"}],"rows":[[0.16677720329728665,20260901,"Compute","/subscriptions/example/resourceGroups/rg/providers/Microsoft.Compute/virtualMachines/vm","USD"]],"nextLink":null}}"#,
-    )?;
-    let page = billing_azure::decode(value, "example")?;
+    let value = r#"{"properties":{"columns":[{"name":"Cost"},{"name":"UsageDate"},{"name":"ServiceName"},{"name":"ResourceId"},{"name":"Currency"}],"rows":[[0.16677720329728665,20260901,"Compute","/subscriptions/example/resourceGroups/rg/providers/Microsoft.Compute/virtualMachines/vm","USD"]],"nextLink":null}}"#;
+    let page = billing_azure::decode(value.as_bytes(), "example")?;
     assert_eq!(
         String::from(page.rows[0].billed.clone()),
         "0.16677720329728665"
@@ -35,7 +33,11 @@ fn azure_pagination_cannot_change_origin_or_subscription() -> Result<(), Box<dyn
     }
     assert!(billing_azure::continuation(&root, "https://management.azure.com/subscriptions/example/providers/Microsoft.CostManagement/Query?api-version=2026-06-01&$skiptoken=next").is_ok());
     assert!(
-        billing_azure::decode(json!({"properties":{"columns":[],"rows":[[]]}}), "example").is_err()
+        billing_azure::decode(
+            &serde_json::to_vec(&json!({"properties":{"columns":[],"rows":[[]]}}))?,
+            "example"
+        )
+        .is_err()
     );
     Ok(())
 }

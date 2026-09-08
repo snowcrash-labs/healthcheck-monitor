@@ -75,10 +75,39 @@ impl Http {
     /// The caller authorizes credentials, but cannot widen the wire-level operation policy.
     pub async fn json(
         &self,
-        mut request: Request,
+        request: Request,
         settings: &Settings,
         cancel: &CancellationToken,
     ) -> Result<Value, Error> {
+        let (bytes, next) = self.response(request, settings, cancel).await?;
+        if bytes.first() == Some(&b'<') {
+            super::xml::decode(&bytes)
+        } else {
+            let mut value: Value = serde_json::from_slice(&bytes).map_err(|_| Error::Malformed)?;
+            if let Some(next) = next
+                && let Some(object) = value.as_object_mut()
+            {
+                object.insert("_monitor_next".into(), Value::String(next));
+            }
+            Ok(value)
+        }
+    }
+    /// Decode raw decimal tokens without changing JSON semantics for stored health evidence.
+    pub async fn typed_json<T: serde::de::DeserializeOwned>(
+        &self,
+        request: Request,
+        settings: &Settings,
+        cancel: &CancellationToken,
+    ) -> Result<T, Error> {
+        let (bytes, _) = self.response(request, settings, cancel).await?;
+        serde_json::from_slice(&bytes).map_err(|_| Error::Malformed)
+    }
+    async fn response(
+        &self,
+        mut request: Request,
+        settings: &Settings,
+        cancel: &CancellationToken,
+    ) -> Result<(Vec<u8>, Option<String>), Error> {
         if !allowed(&request) {
             return Err(Error::Forbidden);
         }
@@ -102,7 +131,11 @@ impl Http {
         }
         Err(Error::Unavailable)
     }
-    async fn once(&self, request: Request, settings: &Settings) -> Result<Value, Error> {
+    async fn once(
+        &self,
+        request: Request,
+        settings: &Settings,
+    ) -> Result<(Vec<u8>, Option<String>), Error> {
         let permit = crate::admission::acquire().await?;
         let registry = request
             .url()
@@ -160,17 +193,7 @@ impl Http {
             None
         };
         let bytes = bounded(response, settings.response_bytes).await?;
-        if bytes.first() == Some(&b'<') {
-            super::xml::decode(&bytes)
-        } else {
-            let mut value: Value = serde_json::from_slice(&bytes).map_err(|_| Error::Malformed)?;
-            if let Some(next) = next
-                && let Some(object) = value.as_object_mut()
-            {
-                object.insert("_monitor_next".into(), Value::String(next));
-            }
-            Ok(value)
-        }
+        Ok((bytes, next))
     }
 }
 pub fn status(status: StatusCode) -> Result<(), Error> {

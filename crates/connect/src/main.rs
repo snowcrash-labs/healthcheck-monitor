@@ -6,6 +6,8 @@ mod credentials;
 mod error;
 mod google;
 mod input;
+#[cfg(test)]
+mod live_tests;
 mod login;
 mod mcp;
 #[cfg(test)]

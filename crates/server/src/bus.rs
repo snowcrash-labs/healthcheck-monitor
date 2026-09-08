@@ -39,7 +39,7 @@ impl Bus {
             changed,
             journal,
             heartbeat: AtomicI64::new(0),
-            running: AtomicBool::new(true),
+            running: AtomicBool::new(false),
         })
     }
     pub fn current(&self) -> Option<Arc<View>> {
