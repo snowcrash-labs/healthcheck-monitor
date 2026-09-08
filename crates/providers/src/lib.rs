@@ -103,3 +103,10 @@ mod routing_github;
 mod runtime_images;
 mod scan_budget;
 mod slo_projection;
+
+mod aws_federation;
+mod azure_federation;
+mod azure_token_transport;
+#[cfg(test)]
+mod federation_tests;
+mod google_assertion;

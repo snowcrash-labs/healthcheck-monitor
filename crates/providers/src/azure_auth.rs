@@ -33,12 +33,18 @@ impl Audience {
 pub struct Credential {
     inner: Arc<dyn TokenCredential>,
     cache: [Mutex<Option<AccessToken>>; 4],
+    timeout: Duration,
 }
 impl Credential {
+    #[cfg(test)]
     pub fn new(inner: Arc<dyn TokenCredential>) -> Self {
+        Self::with_timeout(inner, Duration::from_secs(90))
+    }
+    pub fn with_timeout(inner: Arc<dyn TokenCredential>, timeout: Duration) -> Self {
         Self {
             inner,
             cache: std::array::from_fn(|_| Mutex::new(None)),
+            timeout,
         }
     }
     pub async fn bearer(&self, audience: Audience) -> Result<String, Error> {
@@ -50,11 +56,13 @@ impl Credential {
         {
             return Ok(token.token.secret().into());
         }
-        let token = self
-            .inner
-            .get_token(&[audience.scope()], None)
-            .await
-            .map_err(|_| Error::Authentication)?;
+        let token = tokio::time::timeout(
+            self.timeout,
+            self.inner.get_token(&[audience.scope()], None),
+        )
+        .await
+        .map_err(|_| Error::Timeout)?
+        .map_err(|_| Error::Authentication)?;
         if token.expires_on <= now
             || token.token.secret().is_empty()
             || token.token.secret().len() > 65536

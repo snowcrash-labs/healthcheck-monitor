@@ -3080,6 +3080,7 @@ dependencies = [
  "hmac",
  "http 1.5.0",
  "jiff",
+ "jsonwebtoken",
  "reqwest",
  "rustc_version",
  "rustls",

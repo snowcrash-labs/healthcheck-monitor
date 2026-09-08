@@ -26,6 +26,8 @@ pub struct Config {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Credential {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub google_federation: Option<GoogleFederation>,
     pub credential_file: Option<std::path::PathBuf>,
     pub provider: Provider,
     pub profile: Option<String>,
@@ -33,6 +35,19 @@ pub struct Credential {
     pub role_arn: Option<String>,
     pub expected_identity: Option<String>,
     pub token_env: Option<String>,
+}
+impl Credential {
+    pub fn validate(&self) -> Result<(), crate::error::Error> {
+        super::credentials::validate_credential(self)
+    }
+}
+/// A Google metadata identity is exchanged for short-lived credentials in the target cloud.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GoogleFederation {
+    pub subject: String,
+    pub audience: String,
+    pub client_id: Option<String>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

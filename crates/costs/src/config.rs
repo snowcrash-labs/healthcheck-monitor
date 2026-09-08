@@ -111,6 +111,17 @@ impl Config {
         let mut ids = std::collections::BTreeSet::new();
         let mut scopes = std::collections::BTreeSet::new();
         for source in &self.sources {
+            if let Some(credential) = &source.credential {
+                credential.validate().map_err(|_| Error::Configuration)?;
+                if !matches!(
+                    (source.provider, credential.provider),
+                    (Provider::Gcp, monitor_core::model::Provider::Gcp)
+                        | (Provider::Aws, monitor_core::model::Provider::Aws)
+                        | (Provider::Azure, monitor_core::model::Provider::Azure)
+                ) {
+                    return Err(Error::Configuration);
+                }
+            }
             if !identifier(&source.id)
                 || source.billing_scope.is_empty()
                 || source.billing_scope.len() > 128

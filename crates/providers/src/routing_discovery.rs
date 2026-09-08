@@ -28,6 +28,7 @@ impl Router {
                 .cloned();
             if root.provider == Provider::Azure {
                 let profile = profile.get_or_insert(monitor_core::config::types::Credential {
+                    google_federation: None,
                     provider: Provider::Azure,
                     credential_file: None,
                     profile: None,

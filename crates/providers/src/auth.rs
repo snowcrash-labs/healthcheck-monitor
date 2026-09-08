@@ -35,10 +35,11 @@ impl Auth {
                 Ok(Self::Gcp(credentials))
             }
             Provider::Azure => {
-                let credential: Arc<dyn TokenCredential> = if profile
-                    .and_then(|c| c.profile.as_deref())
-                    == Some("managed_identity")
+                let credential: Arc<dyn TokenCredential> = if let Some(profile) =
+                    profile.filter(|p| p.google_federation.is_some())
                 {
+                    crate::azure_federation::credential(profile, http, settings)?
+                } else if profile.and_then(|c| c.profile.as_deref()) == Some("managed_identity") {
                     azure_identity::ManagedIdentityCredential::new(None)
                         .map_err(|_| Error::Authentication)?
                 } else if profile.and_then(|c| c.profile.as_deref()) == Some("workload_identity") {
@@ -68,7 +69,10 @@ impl Auth {
                     ))
                     .map_err(|_| Error::Authentication)?
                 };
-                let credential = crate::azure_auth::Credential::new(credential);
+                let credential = crate::azure_auth::Credential::with_timeout(
+                    credential,
+                    settings.operation_timeout.duration(),
+                );
                 if let Some(expected) =
                     profile.and_then(|profile| profile.expected_identity.as_deref())
                 {
@@ -80,57 +84,70 @@ impl Auth {
                 Ok(Self::Azure(Box::new(credential)))
             }
             Provider::Aws => {
-                let prepared = crate::aws_process_profiles::load(
-                    profile.and_then(|profile| profile.profile.as_deref()),
-                )
-                .await?;
-                let mut loader = aws_config::defaults(aws_config::BehaviorVersion::latest())
-                    .profile_files(prepared.files.clone())
-                    // Buffered requests allow body caps to apply before transmission.
-                    .disable_request_compression(true)
-                    .http_client(crate::aws_transport::client(http, settings)?)
-                    .region(aws_config::Region::new(
-                        region.unwrap_or("us-east-1").to_string(),
-                    ))
-                    .timeout_config(
-                        aws_config::timeout::TimeoutConfig::builder()
-                            .connect_timeout(settings.connect_timeout.duration())
-                            .operation_timeout(settings.operation_timeout.duration())
-                            .operation_attempt_timeout(settings.attempt_timeout.duration())
-                            .build(),
+                let config = if let Some(profile) =
+                    profile.filter(|p| p.google_federation.is_some())
+                {
+                    crate::aws_federation::config(
+                        profile,
+                        region.unwrap_or("us-east-1"),
+                        http,
+                        settings,
                     )
-                    .retry_config(
-                        aws_config::retry::RetryConfig::standard()
-                            .with_max_attempts(settings.attempts as u32),
-                    );
-                if let Some(name) = profile.and_then(|p| p.profile.as_ref()) {
-                    loader = loader.profile_name(name);
-                }
-                if let Some(provider) = crate::aws_process_chain::build(
-                    &prepared,
-                    region.unwrap_or("us-east-1"),
-                    http,
-                    settings,
-                    processes,
-                )? {
-                    loader = loader.credentials_provider(provider);
-                }
-                let mut config = loader.load().await;
-                if let Some(role) = profile.and_then(|p| p.role_arn.as_ref()) {
-                    let provider = aws_config::sts::AssumeRoleProvider::builder(role)
-                        .session_name("healthcheck-monitor")
-                        .configure(&config)
-                        .build()
-                        .await;
-                    config = config
-                        .to_builder()
-                        .credentials_provider(
-                            aws_credential_types::provider::SharedCredentialsProvider::new(
-                                provider,
-                            ),
+                    .await?
+                } else {
+                    let prepared = crate::aws_process_profiles::load(
+                        profile.and_then(|profile| profile.profile.as_deref()),
+                    )
+                    .await?;
+                    let mut loader = aws_config::defaults(aws_config::BehaviorVersion::latest())
+                        .profile_files(prepared.files.clone())
+                        // Buffered requests allow body caps to apply before transmission.
+                        .disable_request_compression(true)
+                        .http_client(crate::aws_transport::client(http, settings)?)
+                        .region(aws_config::Region::new(
+                            region.unwrap_or("us-east-1").to_string(),
+                        ))
+                        .timeout_config(
+                            aws_config::timeout::TimeoutConfig::builder()
+                                .connect_timeout(settings.connect_timeout.duration())
+                                .operation_timeout(settings.operation_timeout.duration())
+                                .operation_attempt_timeout(settings.attempt_timeout.duration())
+                                .build(),
                         )
-                        .build();
-                }
+                        .retry_config(
+                            aws_config::retry::RetryConfig::standard()
+                                .with_max_attempts(settings.attempts as u32),
+                        );
+                    if let Some(name) = profile.and_then(|p| p.profile.as_ref()) {
+                        loader = loader.profile_name(name);
+                    }
+                    if let Some(provider) = crate::aws_process_chain::build(
+                        &prepared,
+                        region.unwrap_or("us-east-1"),
+                        http,
+                        settings,
+                        processes,
+                    )? {
+                        loader = loader.credentials_provider(provider);
+                    }
+                    let mut config = loader.load().await;
+                    if let Some(role) = profile.and_then(|p| p.role_arn.as_ref()) {
+                        let provider = aws_config::sts::AssumeRoleProvider::builder(role)
+                            .session_name("healthcheck-monitor")
+                            .configure(&config)
+                            .build()
+                            .await;
+                        config = config
+                            .to_builder()
+                            .credentials_provider(
+                                aws_credential_types::provider::SharedCredentialsProvider::new(
+                                    provider,
+                                ),
+                            )
+                            .build();
+                    }
+                    config
+                };
                 let clients = crate::aws_clients::AwsClients::new(config);
                 let identity = clients
                     .sts
