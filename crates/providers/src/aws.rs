@@ -144,6 +144,8 @@ pub fn endpoints(job: &Job) -> Vec<Endpoint> {
         ));
         out.push(endpoint);
     }
+    // Resource inventories across all regions precede supplementary quota catalogs.
+    out.sort_by_key(|endpoint| endpoint.id.starts_with("quota-services/"));
     out
 }
 pub async fn collect(

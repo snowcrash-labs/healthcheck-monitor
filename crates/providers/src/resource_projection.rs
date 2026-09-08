@@ -38,6 +38,10 @@ pub fn project(job: &Job, endpoint: &Endpoint, value: &Value) -> Vec<Observation
     result
 }
 fn project_data(job: &Job, endpoint: &Endpoint, value: &Value) -> Vec<Observation> {
+    // The list of available AWS products is a prerequisite catalog, not deployed resources.
+    if endpoint.id.starts_with("quota-services/") {
+        return vec![];
+    }
     if endpoint.id == "activity" {
         return crate::azure_activity::project(job, endpoint, value);
     }

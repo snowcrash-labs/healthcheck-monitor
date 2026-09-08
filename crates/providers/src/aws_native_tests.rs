@@ -76,6 +76,56 @@ fn job() -> Result<Job, Box<dyn std::error::Error>> {
     job.settings.attempts = 1;
     Ok(job)
 }
+#[test]
+fn native_dispatcher_frame_stays_small_as_service_sdks_grow()
+-> Result<(), Box<dyn std::error::Error>> {
+    let auth = Auth::None;
+    let job = job()?;
+    let endpoint =
+        crate::common::Endpoint::get("fixture", "https://ec2.us-east-1.amazonaws.com", "");
+    let request = crate::aws_native::request(&auth, &endpoint, &job);
+    assert!(std::mem::size_of_val(&request) < 64 * 1024);
+    Ok(())
+}
+#[test]
+fn quota_catalogs_cannot_preempt_resource_inventory() -> Result<(), Box<dyn std::error::Error>> {
+    let mut job = job()?;
+    job.target.regions = vec!["us-east-1".into(), "us-west-2".into()];
+    let endpoints = crate::aws::endpoints(&job);
+    let quota = endpoints
+        .iter()
+        .position(|endpoint| endpoint.id.starts_with("quota-services/"))
+        .ok_or("quota endpoint")?;
+    assert!(
+        endpoints[quota..]
+            .iter()
+            .all(|endpoint| endpoint.id.starts_with("quota-services/"))
+    );
+    let parent = &endpoints[quota];
+    assert!(
+        crate::aws_details::followups(
+            &job,
+            parent,
+            "quota-services",
+            "unmonitored-product",
+            &json!({})
+        )
+        .is_empty()
+    );
+    assert_eq!(
+        crate::aws_details::followups(&job, parent, "quota-services", "ec2", &json!({})).len(),
+        1
+    );
+    assert!(
+        crate::resource_projection::project(
+            &job,
+            parent,
+            &json!({"ServiceCode":"ec2","ServiceName":"EC2"})
+        )
+        .is_empty()
+    );
+    Ok(())
+}
 #[tokio::test]
 async fn every_aws_inventory_family_uses_native_serialization_and_allowed_requests()
 -> Result<(), Box<dyn std::error::Error>> {

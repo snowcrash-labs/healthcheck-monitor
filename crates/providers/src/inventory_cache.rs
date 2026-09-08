@@ -63,13 +63,15 @@ impl InventoryCache {
                     .sum::<usize>(),
             );
             if !crate::scan_budget::claim(bytes) {
+                let mut result = CheckResult::failure(
+                    job.target.name.clone(),
+                    job.check,
+                    job.revision.clone(),
+                    Coverage::Truncated,
+                );
+                result.operations[0].id = endpoint.id.clone();
                 return Fetched {
-                    result: CheckResult::failure(
-                        job.target.name.clone(),
-                        job.check,
-                        job.revision.clone(),
-                        Coverage::Truncated,
-                    ),
+                    result,
                     followups: vec![],
                 };
             }

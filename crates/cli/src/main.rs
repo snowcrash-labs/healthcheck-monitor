@@ -20,6 +20,9 @@ fn main() -> ExitCode {
         None => tracing::error!("Internal task failure"),
     }));
     let runtime = match tokio::runtime::Builder::new_multi_thread()
+        // Generated cloud SDK futures need more stack in development builds than Tokio's default.
+        .thread_stack_size(16 * 1024 * 1024)
+        .max_blocking_threads(16)
         .enable_all()
         .build()
     {

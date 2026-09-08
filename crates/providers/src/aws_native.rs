@@ -10,38 +10,73 @@ pub async fn request(auth: &Auth, endpoint: &Endpoint, job: &Job) -> Option<Resu
     };
     let (service, region, target) = endpoint.aws.as_ref()?;
     let action = target.rsplit(['.', ':']).next().unwrap_or("");
+    // Keep generated service futures off the shared dispatcher frame, especially without optimization.
     Some(match service.as_str() {
         "sqs" | "sns" | "events" => {
-            crate::aws_native_queues::request(clients, endpoint, job, region, action).await
+            Box::pin(crate::aws_native_queues::request(
+                clients, endpoint, job, region, action,
+            ))
+            .await
         }
-        "ecs" => crate::aws_native_ecs::request(clients, endpoint, job, region, action).await,
+        "ecs" => {
+            Box::pin(crate::aws_native_ecs::request(
+                clients, endpoint, job, region, action,
+            ))
+            .await
+        }
         "elasticloadbalancing" | "route53" | "cloudfront" => {
-            crate::aws_native_edge::request(clients, endpoint, job, region, service, action).await
+            Box::pin(crate::aws_native_edge::request(
+                clients, endpoint, job, region, service, action,
+            ))
+            .await
         }
         "s3" | "backup" => {
-            crate::aws_native_storage::request(clients, endpoint, job, region, service).await
+            Box::pin(crate::aws_native_storage::request(
+                clients, endpoint, job, region, service,
+            ))
+            .await
         }
         "health" | "organizations" | "servicequotas" => {
-            crate::aws_native_governance::request(clients, endpoint, job, region, service, action)
-                .await
+            Box::pin(crate::aws_native_governance::request(
+                clients, endpoint, job, region, service, action,
+            ))
+            .await
         }
-        "logs" => crate::aws_native_logs::request(clients, endpoint, job, region, action).await,
-        "lambda" => crate::aws_native_lambda::request(clients, endpoint, job, region).await,
+        "logs" => {
+            Box::pin(crate::aws_native_logs::request(
+                clients, endpoint, job, region, action,
+            ))
+            .await
+        }
+        "lambda" => {
+            Box::pin(crate::aws_native_lambda::request(
+                clients, endpoint, job, region,
+            ))
+            .await
+        }
         "ec2" | "autoscaling" | "eks" => {
-            crate::aws_native_compute::request(clients, endpoint, job, region, service, action)
-                .await
+            Box::pin(crate::aws_native_compute::request(
+                clients, endpoint, job, region, service, action,
+            ))
+            .await
         }
         "rds" | "elasticache" | "dynamodb" => {
-            crate::aws_native_databases::request(clients, endpoint, job, region, service, action)
-                .await
+            Box::pin(crate::aws_native_databases::request(
+                clients, endpoint, job, region, service, action,
+            ))
+            .await
         }
         "kms" | "acm" | "secretsmanager" => {
-            crate::aws_native_security::request(clients, endpoint, job, region, service, action)
-                .await
+            Box::pin(crate::aws_native_security::request(
+                clients, endpoint, job, region, service, action,
+            ))
+            .await
         }
         "ecr" | "codebuild" | "codepipeline" => {
-            crate::aws_native_release::request(clients, endpoint, job, region, service, action)
-                .await
+            Box::pin(crate::aws_native_release::request(
+                clients, endpoint, job, region, service, action,
+            ))
+            .await
         }
         _ => Err(Error::Forbidden),
     })

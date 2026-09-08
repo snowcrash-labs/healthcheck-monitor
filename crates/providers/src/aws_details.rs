@@ -12,6 +12,37 @@ pub fn followups(
     let Some((_, region, _)) = &parent.aws else {
         return vec![];
     };
+    // Query quota details for monitored service families, not every AWS product in the catalog.
+    if family == "quota-services"
+        && ![
+            "ec2",
+            "autoscaling",
+            "eks",
+            "ecs",
+            "lambda",
+            "elasticloadbalancing",
+            "rds",
+            "elasticache",
+            "dynamodb",
+            "s3",
+            "sqs",
+            "sns",
+            "events",
+            "ecr",
+            "codebuild",
+            "codepipeline",
+            "kms",
+            "secretsmanager",
+            "backup",
+            "route53",
+            "cloudfront",
+            "acm",
+            "monitoring",
+        ]
+        .contains(&name)
+    {
+        return vec![];
+    }
     let description = match family {
         "quota-services" => Some((
             "quotas",
