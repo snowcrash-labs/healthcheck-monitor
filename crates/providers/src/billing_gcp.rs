@@ -239,7 +239,7 @@ impl Reader {
     }
 }
 fn decode(row: WireRow) -> Result<Charge, Error> {
-    if row.f.len() != 9 {
+    if row.f.len() != 10 {
         return Err(Error::Malformed);
     }
     let mut cells = row.f.into_iter();
@@ -256,7 +256,7 @@ fn decode(row: WireRow) -> Result<Charge, Error> {
         category: monitor_costs::model::optional(next()?),
         currency: next()?,
         billed: next()?.try_into().map_err(|_| Error::Malformed)?,
-        effective: None,
+        effective: Some(next()?.try_into().map_err(|_| Error::Malformed)?),
     };
     charge.validate().map_err(|_| Error::Malformed)?;
     Ok(charge)

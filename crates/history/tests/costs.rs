@@ -13,6 +13,14 @@ fn charge(
     product: &str,
     amount: &str,
 ) -> Result<Charge, monitor_costs::error::Error> {
+    credited(day, product, amount, None)
+}
+fn credited(
+    day: chrono::NaiveDate,
+    product: &str,
+    amount: &str,
+    effective: Option<&str>,
+) -> Result<Charge, monitor_costs::error::Error> {
     Ok(Charge {
         target: None,
         day,
@@ -25,7 +33,7 @@ fn charge(
         category: Some("usage".into()),
         currency: "USD".into(),
         billed: amount.to_owned().try_into()?,
-        effective: None,
+        effective: effective.map(|v| v.to_owned().try_into()).transpose()?,
     })
 }
 #[tokio::test]
@@ -141,7 +149,7 @@ async fn corrections_partial_imports_cursors_and_signed_totals()
         .cost_stage(
             &resumed,
             vec![
-                charge(period.from, "Compute", "1.2")?,
+                credited(period.from, "Compute", "1.2", Some("0.5"))?,
                 charge(period.from, "Storage", "-0.2")?,
             ],
         )
@@ -149,15 +157,13 @@ async fn corrections_partial_imports_cursors_and_signed_totals()
     history
         .cost_publish(&resumed, 2, config.retention())
         .await?;
-    assert_eq!(
-        history
-            .cost_view(&filter, &config)
-            .await?
-            .total
-            .map(String::from)
-            .as_deref(),
-        Some("1")
-    );
+    let published = history.cost_view(&filter, &config).await?;
+    assert_eq!(published.total.map(String::from).as_deref(), Some("1"));
+    // Storage carries no effective amount, so only Compute's credit is reported.
+    assert_eq!(published.credits.map(String::from).as_deref(), Some("-0.7"));
+    assert_eq!(String::from(published.series[0].credits.clone()), "-0.7");
+    assert_eq!(published.breakdown[0].key, "v:Compute");
+    assert_eq!(String::from(published.breakdown[0].credits.clone()), "-0.7");
     assert!(
         history
             .cost_view(

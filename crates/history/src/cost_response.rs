@@ -45,6 +45,11 @@ impl History {
         } else {
             None
         };
+        let credits = if has_data {
+            Some(monitor_costs::aggregate::credits(&buckets, period).map_err(|_| Error::Record)?)
+        } else {
+            None
+        };
         let previous_total = if previous_complete {
             Some(monitor_costs::aggregate::total(&buckets, previous).map_err(|_| Error::Record)?)
         } else {
@@ -85,6 +90,7 @@ impl History {
             group: filter.group,
             granularity: filter.granularity,
             total,
+            credits,
             previous_total,
             complete: false,
             sources,

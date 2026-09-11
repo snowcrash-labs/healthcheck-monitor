@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { amount, costView, units, money, difference, colorClass } from "../../src/cost-schema";
+import { amount, costView, units, money, difference, colorClass, net, plain, hasCredits } from "../../src/cost-schema";
 import { fractionalCosts } from "../cost-fixture";
 describe("billing amounts", () => {
   it("rejects non-decimal, oversized, and lossy values", () => {
@@ -32,6 +32,18 @@ describe("billing amounts", () => {
     expect(difference("110", "100", true)).toBe("+10.0%");
     expect(difference("10", null, true)).toBe("Not available");
     expect(difference("10", "0", true)).toBe("Not applicable");
+  });
+  it("derives net spend from exact credits without float drift", () => {
+    expect(plain(units("12.340000732578337192535"))).toBe("12.340000732578337192535");
+    expect(plain(0n)).toBe("0");
+    expect(plain(-1n)).toBe(`-0.${"0".repeat(37)}1`);
+    expect(net("1042.73", "-1042.73")).toBe("0");
+    expect(net("0.3", "-0.1")).toBe("0.2");
+    expect(net("10", null)).toBeNull();
+    expect(hasCredits("0")).toBe(false);
+    expect(hasCredits("-0.000000000000000000000000000000000001")).toBe(true);
+    expect(hasCredits(null)).toBe(false);
+    expect(costView.parse(fractionalCosts).credits).toBe("-2.000000000000000000000001");
   });
   it("keeps contributor colors stable across reordering", () => {
     expect(colorClass("Compute")).toBe(colorClass("Compute"));

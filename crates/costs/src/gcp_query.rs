@@ -33,8 +33,10 @@ pub fn configuration(
     } else {
         "''"
     };
+    // Billed is the list-price charge; effective subtracts every credit (promotions, discounts,
+    // committed use). Keeping both lets the dashboard show spend while a promotion covers it.
     let sql = format!(
-        "SELECT CAST(DATE(usage_start_time) AS STRING) AS charge_day, invoice.month AS invoice_month, COALESCE(project.id, '') AS scope, COALESCE(location.region, '') AS region, COALESCE(service.description, service.id, 'Unknown') AS product, {resource} AS resource, cost_type AS category, currency, CAST(SUM(CAST(cost AS NUMERIC) + IFNULL((SELECT SUM(CAST(c.amount AS NUMERIC)) FROM UNNEST(credits) c), 0)) AS STRING) AS billed FROM `{}.{}.{}` WHERE billing_account_id = @billing_scope AND usage_start_time >= TIMESTAMP(@from) AND usage_start_time < TIMESTAMP(@to) AND (_PARTITIONTIME IS NULL OR (_PARTITIONTIME >= TIMESTAMP(@from) AND _PARTITIONTIME < TIMESTAMP(@export_to))) GROUP BY charge_day, invoice_month, scope, region, product, resource, category, currency ORDER BY charge_day, invoice_month, scope, region, product, resource, category, currency LIMIT {}",
+        "SELECT CAST(DATE(usage_start_time) AS STRING) AS charge_day, invoice.month AS invoice_month, COALESCE(project.id, '') AS scope, COALESCE(location.region, '') AS region, COALESCE(service.description, service.id, 'Unknown') AS product, {resource} AS resource, cost_type AS category, currency, CAST(SUM(CAST(cost AS NUMERIC)) AS STRING) AS billed, CAST(SUM(CAST(cost AS NUMERIC) + IFNULL((SELECT SUM(CAST(c.amount AS NUMERIC)) FROM UNNEST(credits) c), 0)) AS STRING) AS effective FROM `{}.{}.{}` WHERE billing_account_id = @billing_scope AND usage_start_time >= TIMESTAMP(@from) AND usage_start_time < TIMESTAMP(@to) AND (_PARTITIONTIME IS NULL OR (_PARTITIONTIME >= TIMESTAMP(@from) AND _PARTITIONTIME < TIMESTAMP(@export_to))) GROUP BY charge_day, invoice_month, scope, region, product, resource, category, currency ORDER BY charge_day, invoice_month, scope, region, product, resource, category, currency LIMIT {}",
         source.project,
         source.dataset,
         source.table,

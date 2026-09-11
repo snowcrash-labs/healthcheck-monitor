@@ -8,6 +8,7 @@ mod cost_response;
 pub mod cost_rows;
 mod cost_schedule;
 pub mod cost_schema;
+mod cost_sql;
 pub mod cost_write;
 pub mod enums;
 pub mod error;

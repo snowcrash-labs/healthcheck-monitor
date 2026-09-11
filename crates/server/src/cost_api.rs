@@ -30,6 +30,7 @@ pub async fn view(
                 group: filter.group,
                 granularity: filter.granularity,
                 total: None,
+                credits: None,
                 previous_total: None,
                 complete: false,
                 sources: vec![],

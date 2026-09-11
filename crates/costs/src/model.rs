@@ -105,7 +105,10 @@ pub struct Charge {
     pub resource: Option<String>,
     pub category: Option<String>,
     pub currency: String,
+    /// List-price spend before credits; the amount a provider would charge without promotions.
     pub billed: Amount,
+    /// Spend after every credit, when the adapter can report it. `None` means credits are unknown
+    /// for this row and the dashboard shows no credit portion rather than a zero credit.
     pub effective: Option<Amount>,
 }
 impl Charge {

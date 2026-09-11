@@ -1,5 +1,6 @@
 //! Server-side billing aggregation keeps charts independent of visible breakdown pages.
 use crate::cost_cursor::{decode_cursor, hex_digest};
+use crate::cost_sql::{credits, group_key, net};
 use crate::{
     History,
     cost_rows::CostProvider,
@@ -125,7 +126,7 @@ impl History {
                 }
                 let query = table!()
                     .group_by($group)
-                    .select(($dimension, diesel::dsl::sum(d::cost_daily_billed)))
+                    .select(($dimension, diesel::dsl::sum(d::cost_daily_billed), diesel::dsl::sum(net())))
                     .into_boxed::<diesel::pg::Pg>();
                 let query = match &boundary {
                     Some(boundary) => query.having(
@@ -137,7 +138,7 @@ impl History {
                     ),
                     None => query,
                 };
-                let rows: Vec<(String, Option<Decimal>)> =
+                let rows: Vec<(String, Option<Decimal>, Option<Decimal>)> =
                     filter_query!(query, period.from, period.to, $dimension, true)
                         .order((
                             diesel::dsl::sum(d::cost_daily_billed).desc(),
@@ -146,9 +147,10 @@ impl History {
                         .limit((limit + 1) as i64)
                         .load(&mut c)
                         .await?;
-                for (key, amount) in rows {
+                for (key, amount, net) in rows {
                     breakdown.push(Contributor {
                         key,
+                        credits: credits(&amount, &net)?,
                         amount: Amount::from_decimal(amount.unwrap_or(Decimal::from(0)))
                             .map_err(|_| Error::Record)?,
                         previous: None,
@@ -193,9 +195,10 @@ impl History {
                         d::cost_daily_day,
                         $dimension,
                         diesel::dsl::sum(d::cost_daily_billed),
+                        diesel::dsl::sum(net()),
                     ))
                     .into_boxed::<diesel::pg::Pg>();
-                let rows: Vec<(NaiveDate, String, Option<Decimal>)> =
+                let rows: Vec<(NaiveDate, String, Option<Decimal>, Option<Decimal>)> =
                     filter_query!(query, previous.from, period.to, $dimension, true)
                         .filter($dimension.eq_any(&keys))
                         .limit(6401)
@@ -204,19 +207,24 @@ impl History {
                 if rows.len() > 6400 {
                     return Err(Error::Record);
                 }
-                for (day, key, amount) in rows {
+                for (day, key, amount, net) in rows {
                     buckets.push(Bucket {
                         day,
                         key,
+                        credits: credits(&amount, &net)?,
                         amount: Amount::from_decimal(amount.unwrap_or(Decimal::from(0)))
                             .map_err(|_| Error::Record)?,
                     });
                 }
                 let query = table!()
                     .group_by(d::cost_daily_day)
-                    .select((d::cost_daily_day, diesel::dsl::sum(d::cost_daily_billed)))
+                    .select((
+                        d::cost_daily_day,
+                        diesel::dsl::sum(d::cost_daily_billed),
+                        diesel::dsl::sum(net()),
+                    ))
                     .into_boxed::<diesel::pg::Pg>();
-                let other: Vec<(NaiveDate, Option<Decimal>)> =
+                let other: Vec<(NaiveDate, Option<Decimal>, Option<Decimal>)> =
                     filter_query!(query, previous.from, period.to, $dimension, true)
                         .filter($dimension.ne_all(&keys))
                         .limit(801)
@@ -225,10 +233,11 @@ impl History {
                 if other.len() > 800 {
                     return Err(Error::Record);
                 }
-                for (day, amount) in other {
+                for (day, amount, net) in other {
                     buckets.push(Bucket {
                         day,
                         key: "__other__".into(),
+                        credits: credits(&amount, &net)?,
                         amount: Amount::from_decimal(amount.unwrap_or(Decimal::from(0)))
                             .map_err(|_| Error::Record)?,
                     });
@@ -276,6 +285,3 @@ impl History {
         .await
     }
 }
-
-// PostgreSQL CONCAT gives null dimensions a distinct opaque API key; no sentinel is stored.
-diesel::define_sql_function! { #[sql_name = "concat"] fn group_key(prefix: diesel::sql_types::Text, value: diesel::sql_types::Nullable<diesel::sql_types::Text>) -> diesel::sql_types::Text; }

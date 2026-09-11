@@ -3,20 +3,21 @@ import type { Page } from "@playwright/test";
 import { fixture } from "./fixtures";
 
 async function billing(page: Page, withOther = false) {
+  // The second day's GCP spend is fully credited, mirroring a promotion that covers the account.
   const points = [
-    { date: "2026-09-05", total: "110", previous: "100", contributors: [{ key: "gcp", amount: "100", previous: null }, { key: "aws", amount: "10", previous: null }] },
-    { date: "2026-09-06", total: "90", previous: "80", contributors: [{ key: "gcp", amount: "100", previous: null }, { key: "aws", amount: "-10", previous: null }] },
+    { date: "2026-09-05", total: "110", credits: "0", previous: "100", contributors: [{ key: "gcp", amount: "100", credits: "0", previous: null }, { key: "aws", amount: "10", credits: "0", previous: null }] },
+    { date: "2026-09-06", total: "90", credits: "-100", previous: "80", contributors: [{ key: "gcp", amount: "100", credits: "-100", previous: null }, { key: "aws", amount: "-10", credits: "0", previous: null }] },
   ];
-  if (withOther) for (const point of points) point.contributors.push({ key: "__other__", amount: "5", previous: null });
+  if (withOther) for (const point of points) point.contributors.push({ key: "__other__", amount: "5", credits: "0", previous: null });
   await page.route("**/api/v1/query/costs/series**", (route) => {
     const url = new URL(route.request().url()); const day = url.searchParams.get("day"); const key = url.searchParams.get("contributor");
     const series = points.filter((p) => !day || p.date === day).map((p) => {
       const contributors = p.contributors.filter((c) => !key || c.key === key).map((c) => key === "__other__" ? { ...c, key: "v:" } : c);
-      return { ...p, contributors, total: String(contributors.reduce((sum, c) => sum + Number(c.amount), 0)) };
+      return { ...p, contributors, total: String(contributors.reduce((sum, c) => sum + Number(c.amount), 0)), credits: String(contributors.reduce((sum, c) => sum + Number(c.credits), 0)) };
     });
-    const totals = new Map<string, number>();
-    for (const point of series) for (const row of point.contributors) totals.set(row.key, (totals.get(row.key) ?? 0) + Number(row.amount));
-    return route.fulfill({ json: { enabled: true, revision: "synthetic", period: { from: "2026-09-01", to: "2026-09-07" }, currency: "USD", measure: "billed", group: "provider", granularity: "daily", total: String(series.reduce((sum, p) => sum + Number(p.total), 0)), previous_total: "180", complete: false, sources: ["gcp", "aws"].map((provider) => ({ id: provider, provider, state: "provisional", imported_at: "2026-09-07T00:00:00Z", from: "2026-08-01", to: "2026-09-07", revision: "synthetic", fault: null })), series, breakdown: [...totals].map(([key, amount]) => ({ key, amount: String(amount), previous: null })), next_cursor: null, contributor_count: totals.size } });
+    const totals = new Map<string, number>(); const credits = new Map<string, number>();
+    for (const point of series) for (const row of point.contributors) { totals.set(row.key, (totals.get(row.key) ?? 0) + Number(row.amount)); credits.set(row.key, (credits.get(row.key) ?? 0) + Number(row.credits)); }
+    return route.fulfill({ json: { enabled: true, revision: "synthetic", period: { from: "2026-09-01", to: "2026-09-07" }, currency: "USD", measure: "billed", group: "provider", granularity: "daily", total: String(series.reduce((sum, p) => sum + Number(p.total), 0)), credits: String(series.reduce((sum, p) => sum + Number(p.credits), 0)), previous_total: "180", complete: false, sources: ["gcp", "aws"].map((provider) => ({ id: provider, provider, state: "provisional", imported_at: "2026-09-07T00:00:00Z", from: "2026-08-01", to: "2026-09-07", revision: "synthetic", fault: null })), series, breakdown: [...totals].map(([key, amount]) => ({ key, amount: String(amount), credits: String(credits.get(key) ?? 0), previous: null })), next_cursor: null, contributor_count: totals.size } });
   });
 }
 
@@ -25,6 +26,9 @@ test("overview puts problems and actual API billing above the target list", asyn
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
   await expect(page.getByText("USD 200.00", { exact: true }).first()).toBeVisible();
+  // Spend stays at full height; the credited GCP day carries one dotted credit band and the headline shows net.
+  await expect(page.locator(".chart-credit-dots")).toHaveCount(1);
+  await expect(page.getByText("Credits −USD 100.00 · Net USD 100.00", { exact: true }).first()).toBeVisible();
   const chart = await page.locator(".cost-chart").boundingBox();
   expect(chart && chart.y + chart.height).toBeLessThan(900);
   await expect(page.locator(".check-grid")).toHaveCount(0);

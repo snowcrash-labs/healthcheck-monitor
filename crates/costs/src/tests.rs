@@ -35,22 +35,32 @@ fn credit_is_applied_once_and_prior_is_not_added() -> Result<(), Box<dyn std::er
             day: from,
             key: "gcp".into(),
             amount: "10.25".to_string().try_into()?,
+            credits: "-10.25".to_string().try_into()?,
         },
         Bucket {
             day: from,
             key: "gcp".into(),
             amount: "-1.5".to_string().try_into()?,
+            credits: Amount::zero(),
         },
         Bucket {
             day: "2026-07-30".parse()?,
             key: "gcp".into(),
             amount: "5".to_string().try_into()?,
+            credits: "-1".to_string().try_into()?,
         },
     ];
     let period = Period { from, to };
     let series = aggregate::series(&rows, period, Granularity::Daily, true)?;
     assert_eq!(String::from(aggregate::total(&rows, period)?), "8.75");
+    // A promotion covering the whole charge keeps spend visible and reports the credit apart.
+    assert_eq!(String::from(aggregate::credits(&rows, period)?), "-10.25");
     assert_eq!(String::from(series[0].total.clone()), "8.75");
+    assert_eq!(String::from(series[0].credits.clone()), "-10.25");
+    assert_eq!(
+        String::from(series[0].contributors[0].credits.clone()),
+        "-10.25"
+    );
     assert_eq!(
         series[0].previous.as_ref().map(|v| String::from(v.clone())),
         Some("5".into())
